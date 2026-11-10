@@ -435,6 +435,27 @@ def motion_activity(path: str | os.PathLike[str], ffmpeg: str | os.PathLike[str]
     return round(float(diffs.mean()), 2)
 
 
+def local_motion_activity(path: str | os.PathLike[str], ffmpeg: str | os.PathLike[str]) -> float:
+    """Largest mean frame difference in an 8x8 region; suppress single-pixel noise."""
+    import numpy as np  # type: ignore[import-not-found]
+
+    width, height = _probe_size(path, ffmpeg)
+    proxy_h = max(2, int(round(height * PROXY_WIDTH / width / 2)) * 2)
+    run = subprocess.run(
+        [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-i", str(path), "-map", "0:v:0",
+         "-vf", f"scale={PROXY_WIDTH}:{proxy_h}:flags=area,format=gray", "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1"],
+        capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False,
+    )
+    frame_bytes = PROXY_WIDTH * proxy_h
+    if run.returncode != 0 or len(run.stdout) < 2 * frame_bytes:
+        raise H3MediaError("video cannot be decoded")
+    count = len(run.stdout) // frame_bytes
+    stack = np.frombuffer(run.stdout[:count * frame_bytes], dtype=np.uint8).reshape(count, proxy_h, PROXY_WIDTH)
+    diff = np.abs(np.diff(stack.astype(np.int16), axis=0)).mean(axis=0)
+    tiles = [tile.mean() for row in np.array_split(diff, 8, axis=0) for tile in np.array_split(row, 8, axis=1) if tile.size]
+    return round(float(max(tiles)), 2)
+
+
 def motion_facts(value: float) -> dict[str, Any]:
     return {"motion_activity": value, "frozen": value < FROZEN_BELOW}
 
@@ -471,17 +492,12 @@ FREEZE_REFERENCE = {"act_frozen": [0.14, 0.63], "act_moving": [2.6, 11.6], "hold
                     "hold_end_moving": [14.0, 58.0]}
 
 
-def freeze_check(act: float, hold: float | None) -> dict[str, Any]:
-    """The take's freeze verdict (fs-cam2 RESULT §3.5): ``act`` below 1.0 is ``frozen``.
-
-    ``hold_end`` is kept as the second signal (how far the shot travelled from
-    its first frame); it does not overrule ``act``.  A frozen take stays listed:
-    the verdict only marks it.
-    """
-    frozen = act < FROZEN_BELOW
-    return {"schema": FREEZE_CHECK_SCHEMA, "act": act, "hold_end": hold, "frozen": frozen,
+def freeze_check(act: float, hold: float | None, local_act: float | None = None) -> dict[str, Any]:
+    """Mark a take frozen only when both global and measured local motion are low."""
+    frozen = act < FROZEN_BELOW and (local_act is None or local_act < FROZEN_BELOW)
+    return {"schema": FREEZE_CHECK_SCHEMA, "act": act, "local_act": local_act, "hold_end": hold, "frozen": frozen,
             "verdict": "frozen" if frozen else "moving", "act_below": FROZEN_BELOW, "reference": dict(FREEZE_REFERENCE),
-            "advice": "The camera did not move: try again with another seed, not other words." if frozen else None}
+            "advice": "Little motion: check the take" if frozen else None}
 
 
 # --------------------------------------------------------------------------- take facts

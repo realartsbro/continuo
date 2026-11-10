@@ -192,6 +192,28 @@ Not installed by this plugin.
 | ComfyUI | optional; only for generating images, video, music and voice. Root: FILM_SUITE_COMFY_ROOT (default Documents\ComfyUI-Easy-Install\ComfyUI), server http://127.0.0.1:8188 (fixed: Continuo talks to a ComfyUI on this machine at this address only). The ComfyUI folder without models, custom nodes and outputs measured 0.27 GB; its Python environment, custom nodes and models need extra space (model sizes above). |
 | optional engines | beat tracking (measured 4.3 GB with its torch environment), scene analysis (0.67 GB), song map (0.16 GB), speech detection (2.3 MB), inpainting. Not installed by this plugin; features that need one show it as unavailable. |
 
+### Optional analysis engines
+
+Run these from the plugin directory. Beat, song and scene create their own Python environments; they never modify the Hermes environment. Sizes below are the existing measurements, not necessarily the total download or disk use of a new installation.
+
+| Engine | Improves | Installer | Measured size |
+|:---|:---|:---|:---|
+| Beat | Beat tracking | `python scripts/install-beat-engine.py` (optional `--cpu-only`) | 4.3 GB, including torch environment |
+| Song | Song-map analysis | `python scripts/install-song-engine.py` (optional `--cpu-only`) | 0.16 GB |
+| Scene | Scene analysis | `python scripts/install-scene-engine.py` (optional `--cpu-only`) | 0.67 GB |
+| LaMa | Inpainting for Remove | `python scripts/install-lama-engine.py --reuse-venv VENV --model BIG_LAMA_PT` | Not measured |
+| Silero VAD | Speech detection for dialogue ducking | `python scripts/install-speech-engine.py` | 2.3 MB |
+
+Song and scene also require their candidate model files; see each installer's `--help`. LaMa downloads nothing and reuses an existing separate environment with torch, numpy and Pillow (for example the scene engine's), rather than creating one; provide the required TorchScript model. Do not use the Hermes environment for LaMa.
+
+Silero installs the model only; dialogue ducking also needs `onnxruntime` importable by the Continuo backend Python process. It does not use a separate engine venv.
+
+**Transcription:** `faster-whisper` is provided by Hermes' local speech-to-text (voice) option. Continuo uses `large-v3` offline only: cache `Systran/faster-whisper-large-v3` beforehand, for example by running `python -c "from huggingface_hub import snapshot_download; snapshot_download('Systran/faster-whisper-large-v3')"` in the same user/cache environment. Without the package or cached model, transcription shows as unavailable.
+
+On Linux/macOS the default engine location is `~/AppData/Local/hermes/film-suite/engines/` unless `LOCALAPPDATA` or the engine lookup override `FILM_SUITE_BEAT_ENGINE_DIR`, `FILM_SUITE_SONG_ENGINE_DIR`, `FILM_SUITE_SCENE_ENGINE_DIR`, or `FILM_SUITE_INPAINT_ENGINE_DIR` is set; the installers do not read these engine-specific overrides, so use their `--engine-dir` flag to match one.
+
+Thanks to @ShawnCRMer for reporting the missing installer (#1).
+
 ## Talk to Hermes
 
 Continuo gives Hermes 209 `continuo_*` tools that cover all pages. Hermes picks the right ones from a plain
@@ -230,6 +252,10 @@ Continuo calls only these hosts:
 | `image.civitai.com` | LoRA preview images of that lookup |
 | `imagecache.civitai.com` | LoRA preview images of that lookup |
 | `optim-images.krea.ai` | style-browser thumbnails of an uncached board |
+| `cloud.cp.jku.at` | Beat This! checkpoint download when the optional beat installer is run |
+| `download.pytorch.org` | PyTorch wheels when optional hash-locked engine installers are run |
+| `pypi.org` | Python packages when optional hash-locked engine installers are run |
+| `raw.githubusercontent.com` | pinned Silero VAD model when its optional installer is run |
 
 Never fetched:
 
@@ -293,7 +319,7 @@ Hermes has no public plugin interface for the caller identity Continuo needs, so
 | The Sample film tile says "ffmpeg not found" | Install ffmpeg and put it on `PATH`, set `FFMPEG_PATH`, or place it in `C:\ffmpeg\bin`; then choose **Sample film** again. No half-made sample is left behind. |
 | "ComfyUI is not running." | Start ComfyUI on this machine at `http://127.0.0.1:8188`. Continuo uses no other address. |
 | A model is missing | Ask Hermes "Which model files am I missing for &lt;workflow&gt;?" (`continuo_models_missing`), which names each file with its folder, size, sha256 and pinned download link; put the file into that ComfyUI folder. |
-| An analysis shows as unavailable | It needs an optional engine (beat tracking, song map, scene analysis, speech detection, inpainting) that this plugin does not install. |
+| An analysis shows as unavailable | It may need an optional engine. See [Optional analysis engines](#optional-analysis-engines). |
 
 ## Roadmap
 

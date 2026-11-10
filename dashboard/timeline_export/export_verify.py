@@ -1,6 +1,6 @@
 """FCPXML verifier that runs inside every export; the export fails closed when it fails.
 
-Port of our archived ``nle-timeline-interchange/scripts/verify_fcpxml_media.py``
+Port of our archived ``nle-timeline-interchange verification tool``
 with the gates of TIMELINE-INPUT.md 6.2:
 
 1. the XML parses and is ``fcpxml`` version 1.9 with one sequence and spine;

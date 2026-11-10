@@ -227,6 +227,18 @@ class ImageProducerCoordinator:
             except Exception:
                 outcome = None
             kind = _outcome_kind(outcome)
+            if kind == "missing":
+                # Every adapter reads history first, then the queue: a prompt that finishes between
+                # the two reads is in neither answer. Ask once more before calling it lost (demo
+                # finding: one picture of a batch ended job_lost although ComfyUI had finished it).
+                try:
+                    outcome = await self.adapter.poll(
+                        prompt_id,
+                        expected_identity=expected_identity,
+                    )
+                except Exception:
+                    outcome = None
+                kind = _outcome_kind(outcome)
             if kind == "transport_error" or outcome is None:
                 return self._public(self.store.get_job(job["image_producer_job_id"]))
             if kind == "queued":

@@ -1,7 +1,7 @@
 """Style boards: bundled, read-only style index, search, style text, thumbnails.
 
 The index (``image_builder/style-boards.v1.json.gz``) is built by
-``scripts/build-style-boards.py`` from the MIT, prompt-only upstream catalog
+``the development style board builder`` from the MIT, prompt-only upstream catalog
 ``Andro-Meta/ComfyUI-Krea-Moodboards`` (no images are bundled). It is loaded
 once per file identity and kept in memory.
 

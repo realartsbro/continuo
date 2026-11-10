@@ -97,7 +97,7 @@ Release requirements met and proven on a real install. Each line states the requ
 
 ### Polished UI: one component per job, every page
 
-- Media column header is one calm row per DESIGN.md: search, one filter/view menu, type filter as one segmented control, the count tells what is shown (no "All media 39" beside an active filter), no framed button next to ghost icons.
+- Media column header is one calm row per DESIGN.md (internal): search, one filter/view menu, type filter as one segmented control, the count tells what is shown (no "All media 39" beside an active filter), no framed button next to ghost icons.
 - Side panels: both sides have the same visible resize handle with remembered width on every page; no dead gutter between the media grid and the canvas.
 
 ### Other
@@ -140,7 +140,7 @@ Planned for the release.
 
 ### Polished UI: one component per job, every page
 
-- A design gate in run-gate measures the inventory parts on every page (size, radius, spacing, label placement, handle presence) against DESIGN.md and fails on a deviation.
+- A design gate in run-gate (internal) measures the inventory parts on every page (size, radius, spacing, label placement, handle presence) against DESIGN.md (internal) and fails on a deviation.
 - Controls follow one size and label rule: square icon buttons, labels outside fields, one primary action per panel, disabled controls say why, empty states and job states use the shared components.
 - Words on screen follow the vocabulary and prose rules on every page (no developer words, one spelling, short labels, truthful counts and times).
 

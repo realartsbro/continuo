@@ -457,7 +457,9 @@ async def _h3_measure_take(row: Any, operation: Any) -> None:
         update = {**_h3m_module.motion_facts(value), "motion_state": "measured"}
         update.update(_h3x_relative_update({**known, **update}))
         # Freeze check (lane w1-h3): act + hold_end, stored once with the take; a frozen take is marked, never hidden.
-        update["freeze_check"] = _h3m_module.freeze_check(value, await asyncio.to_thread(_h3m_module.hold_end, path, FFMPEG_PATH))
+        local = await asyncio.to_thread(_h3m_module.local_motion_activity, path, FFMPEG_PATH)
+        update["freeze_check"] = _h3m_module.freeze_check(value, await asyncio.to_thread(_h3m_module.hold_end, path, FFMPEG_PATH), local)
+        update["frozen"] = update["freeze_check"]["frozen"]
     except Exception:  # noqa: BLE001 - an unreadable take is reported as unmeasured
         update = {"motion_state": "unmeasured", "freeze_check": {"schema": _h3m_module.FREEZE_CHECK_SCHEMA, "verdict": "unmeasured"}}
     try:

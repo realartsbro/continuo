@@ -9,7 +9,7 @@ what is allowed.  Health is decided by what the pinned graph really needs:
   every declared mutable pointer) with its type, the combo values the graph or
   the manifest uses, the numeric range the manifest allows, autogrow members and
   dynamic-combo nesting.  The result is stored in the manifest as
-  ``schema_fingerprint`` (``scripts/h3-schema-fingerprint.py``) and a test
+  ``schema_fingerprint`` (``the development schema fingerprint tool``) and a test
   re-derives it from the captured fixture so it cannot drift silently.
 * ``schema_problem`` compares a live answer with the fingerprint and names the
   first node class + input that drifted.
