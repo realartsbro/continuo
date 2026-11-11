@@ -28,6 +28,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 TAKE_SUFFIX = ".flac"
 POLL_SECONDS = 1.0
 TAKE_TIMEOUT_SECONDS = 1800.0
@@ -51,7 +59,7 @@ def cut_clip(source: Path, start: float, end: float | None, ffmpeg: str | os.Pat
         argv += ["-t", f"{max(0.0, end - start):.3f}"]
     argv += ["-map", "0:a:0", "-c:a", "pcm_s16le", str(out)]
     try:
-        done = subprocess.run(argv, capture_output=True, timeout=120, check=False, shell=False)
+        done = subprocess.run(argv, capture_output=True, timeout=120, check=False, shell=False, env=child_env())
         if done.returncode != 0 or not out.is_file() or out.stat().st_size <= 44:
             raise VoiceRunError("The voice clip could not be read")
         return out.read_bytes()
@@ -67,7 +75,7 @@ def apply_gain(path: Path, gain_db: float, ffmpeg: str | os.PathLike[str], scrat
     out = scratch / f"gain-{uuid.uuid4().hex}.flac"
     argv = [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-y", "-i", str(path), "-af", f"volume={gain_db:.2f}dB", str(out)]
     try:
-        done = subprocess.run(argv, capture_output=True, timeout=120, check=False, shell=False)
+        done = subprocess.run(argv, capture_output=True, timeout=120, check=False, shell=False, env=child_env())
         if done.returncode != 0 or not out.is_file():
             raise VoiceRunError("The take could not be read")
         return out.read_bytes()

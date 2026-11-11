@@ -21,6 +21,14 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 ENGINE_ID = "silero-vad-6.2"
 MODEL_SHA256 = "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3"
 THRESHOLD = 0.40
@@ -110,7 +118,7 @@ def decode(path: str | Path, ffmpeg: str | Path) -> Any:
     argv = [str(ffmpeg), "-v", "error", "-i", str(path), "-map", "0:a:0", "-vn", "-t", str(MAX_SECONDS), "-ac", "1",
             "-ar", str(SAMPLE_RATE), "-f", "f32le", "-acodec", "pcm_f32le", "-"]
     try:
-        done = subprocess.run(argv, capture_output=True, timeout=900, check=False, shell=False)
+        done = subprocess.run(argv, capture_output=True, timeout=900, check=False, shell=False, env=child_env())
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise SpeechError("speech_failed", "The sound could not be read for speech detection.") from exc
     if done.returncode != 0:

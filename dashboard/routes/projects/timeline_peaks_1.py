@@ -41,7 +41,7 @@ def _timeline_peaks_source(project_id: str, ref: str) -> dict[str, Any]:
 def _timeline_peaks_decode(path: str) -> tuple[Any, int, int]:
     """(float32 samples [n, channels], sample rate, channels) of the first sound stream, by ffmpeg."""
     probe = subprocess.run([str(FFPROBE_PATH), "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=sample_rate,channels",
-                            "-of", "json", path], capture_output=True, text=True, encoding="utf-8", timeout=120, check=False, shell=False)
+                            "-of", "json", path], capture_output=True, text=True, encoding="utf-8", timeout=120, check=False, shell=False, env=_child_env())
     streams = json.loads(probe.stdout or "{}").get("streams") or [] if probe.returncode == 0 else []
     if not streams:
         raise studio_core.ProjectError("no_sound", "the source has no sound")
@@ -50,7 +50,7 @@ def _timeline_peaks_decode(path: str) -> tuple[Any, int, int]:
         raise studio_core.ProjectError("no_sound", "the source has no sound")
     argv = [str(FFMPEG_PATH), "-v", "error", "-i", path, "-map", "0:a:0", "-t", str(_TIMELINE_PEAKS_MAX_SECONDS),
             "-f", "f32le", "-acodec", "pcm_f32le", "-"]
-    done = subprocess.run(argv, capture_output=True, timeout=600, check=False, shell=False)
+    done = subprocess.run(argv, capture_output=True, timeout=600, check=False, shell=False, env=_child_env())
     if done.returncode != 0:
         raise studio_core.ProjectError("timeline_unavailable", "the sound could not be decoded")
     numpy = importlib.import_module("numpy")
@@ -61,7 +61,7 @@ def _timeline_peaks_decode(path: str) -> tuple[Any, int, int]:
 def _timeline_peaks_flac(path: str, channels: int) -> dict[str, Any]:
     argv = [str(FFMPEG_PATH), "-v", "error", "-i", path, "-map", "0:a:0", "-vn", "-t", str(_TIMELINE_PEAKS_MAX_SECONDS),
             "-c:a", "flac", "-sample_fmt", "s16", "-compression_level", "0", "-map_metadata", "-1", "-f", "flac", "-"]
-    done = subprocess.run(argv, capture_output=True, timeout=600, check=False, shell=False)
+    done = subprocess.run(argv, capture_output=True, timeout=600, check=False, shell=False, env=_child_env())
     if done.returncode != 0 or done.stdout[:4] != b"fLaC":
         raise studio_core.ProjectError("timeline_unavailable", "the sound could not be prepared for the preview")
     if len(done.stdout) > _TIMELINE_PEAKS_SOUND_MAX_BYTES:

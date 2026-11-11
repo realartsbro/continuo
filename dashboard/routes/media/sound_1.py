@@ -49,7 +49,7 @@ def _media_sound_header(path: Path) -> dict[str, Any]:
     done = subprocess.run(
         [str(FFPROBE_PATH), "-v", "error", "-select_streams", "a:0", "-show_entries",
          "format=duration:stream=codec_name,sample_rate,channels,duration_ts,time_base,duration", "-of", "json", str(path)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False, shell=False,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False, shell=False, env=_child_env(),
     )
     try:
         payload = json.loads(done.stdout or "{}") if done.returncode == 0 else {}

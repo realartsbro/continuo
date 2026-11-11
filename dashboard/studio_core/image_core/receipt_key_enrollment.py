@@ -26,6 +26,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+try:
+    from hermes_constants import get_hermes_home
+except ImportError:  # pragma: no cover - repository tests install Hermes' root
+    def get_hermes_home() -> Path:
+        return Path.home() / "AppData" / "Local" / "hermes"
 # These owner modules can also be loaded as isolated top-level packages.
 _migration_spec = importlib.util.spec_from_file_location(
     "film_suite_owner_migration", Path(__file__).resolve().parents[2] / "generation" / "legacy_plugin_migration.py"
@@ -280,9 +286,7 @@ def _valid_timestamp(value: Any) -> bool:
 
 def _paths(hermes_home: os.PathLike[str] | str | None) -> _Paths:
     if hermes_home is None:
-        hermes_home = os.environ.get("HERMES_HOME") or (
-            Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "hermes"
-        )
+        hermes_home = get_hermes_home()
     try:
         home, data_dir, key_path = path_boundary._unprepared_profile_paths(hermes_home)
         home = Path(home)

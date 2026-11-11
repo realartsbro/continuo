@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
 from .errors import ExportError
+from .ffmpeg_run import child_env  # w39-env: one minimal environment for every child process
 
 STILL_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"})
 MOVING_SUFFIXES = frozenset({".mp4", ".mov", ".m4v", ".mkv", ".webm"})
@@ -121,7 +122,7 @@ def _ffprobe_json(ffprobe: Path, path: Path) -> dict[str, Any]:
             [str(ffprobe), "-v", "error", "-show_entries",
              "format=duration:stream=index,codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,nb_frames,duration,sample_rate,channels,color_primaries,color_transfer,color_space",
              "-of", "json", str(path)],
-            capture_output=True, text=True, encoding="utf-8", timeout=120, check=True,
+            capture_output=True, text=True, encoding="utf-8", timeout=120, check=True, env=child_env(),
         )
         return json.loads(proc.stdout)
     except FileNotFoundError as exc:
@@ -139,7 +140,7 @@ def count_frames(ffprobe: Path, path: Path, should_cancel: Any = None) -> int:
             "-show_entries", "stream=nb_read_frames", "-of", "default=nw=1:nk=1", str(path)]
     if should_cancel is None:
         try:
-            proc = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", timeout=600, check=True)
+            proc = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", timeout=600, check=True, env=child_env())
         except FileNotFoundError as exc:
             raise ExportError("ffmpeg_unavailable", "ffprobe is not available at the configured path.") from exc
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
@@ -148,7 +149,7 @@ def count_frames(ffprobe: Path, path: Path, should_cancel: Any = None) -> int:
     else:
         try:
             proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
-                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), env=child_env())
         except FileNotFoundError as exc:
             raise ExportError("ffmpeg_unavailable", "ffprobe is not available at the configured path.") from exc
         deadline = time.monotonic() + 600
@@ -248,7 +249,7 @@ def probe_sound(ffprobe: Path, path: Path) -> SoundInfo:
     try:
         proc = subprocess.run([str(ffmpeg), "-hide_banner", "-nostats", "-i", str(path), "-map", "0:a:0", "-af",
                                "astats=measure_perchannel=none:measure_overall=Number_of_samples", "-f", "null", "-"],
-                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600, check=True)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600, check=True, env=child_env())
     except FileNotFoundError as exc:
         raise ExportError("ffmpeg_unavailable", "ffmpeg is not available next to ffprobe.") from exc
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:

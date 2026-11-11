@@ -5,9 +5,29 @@ from __future__ import annotations
 async def projects_recent() -> dict[str, Any]:
     """Read-only recent-project projection; no repair is attempted here."""
     try:
-        return await asyncio.to_thread(lambda: _recent_project_store_factory().list_recent())  # BCK-227
+        return await asyncio.to_thread(_projects_recent_sync)  # BCK-227
     except studio_core.ProjectError as exc:
         return _project_error_response(exc)
+
+
+def _projects_recent_sync() -> dict[str, Any]:
+    store = _recent_project_store_factory()
+    result = store.list_recent()
+    try:  # read-only projection: a missing or corrupt registry answers exactly as list_recent does
+        entries, _snapshot = store._read_entries()
+    except (studio_core.ProjectError, OSError, ValueError, TypeError, UnicodeError):
+        entries = None
+    directories = {e.get("project_id"): e.get("directory") for e in entries or []}
+    for project in result.get("projects", []):
+        directory = directories.get(project.get("project_id"))
+        if isinstance(directory, str) and (Path(directory) / ".continuo-building").is_file():
+            project.update(available=False, state="incomplete")
+    return result
+
+
+def _refuse_incomplete(directory: str) -> None:
+    if (Path(directory) / ".continuo-building").is_file():
+        raise studio_core.ProjectError("project_incomplete", "This project was not finished being created.")
 
 
 # Lane w24-models item 3: opening a project never depends on a module's state.  Resolve and Premiere open a
@@ -58,10 +78,12 @@ async def projects_create(request: ProjectCreateRequest) -> dict[str, Any]:
     return await asyncio.to_thread(_projects_create_sync, request)  # BCK-227: the whole create off the event loop
 
 
-def _projects_create_sync(request: ProjectCreateRequest) -> dict[str, Any]:
+def _projects_create_sync(request: ProjectCreateRequest, *, allow_building_marker: bool = False) -> dict[str, Any]:
     try:
         root, modules = _module_root_or_state()
         create_kwargs: dict[str, Any] = {}
+        if allow_building_marker:
+            create_kwargs["allow_building_marker"] = True
         if request.copy_state is not None:
             if _film_caller() == "hermes" and request.copy_state.get("approvedRoots"):
                 return _folder_refusal()  # lane p5-prj (HER-012): a Hermes-made project approves no folder
@@ -92,6 +114,7 @@ async def projects_open(request: ProjectOpenRequest) -> dict[str, Any]:
 
 def _projects_open_sync(request: ProjectOpenRequest) -> dict[str, Any]:
     try:
+        _refuse_incomplete(request.directory)
         root, modules = _module_root_or_state()
         opened = _recent_project_store_factory().open_project(request.directory)
         if isinstance(opened.get("moved_from"), str):
@@ -128,10 +151,11 @@ async def projects_open_recent(request: ProjectOpenRecentRequest) -> dict[str, A
 
 def _projects_open_recent_sync(request: ProjectOpenRecentRequest) -> dict[str, Any]:
     try:
-        root, modules = _module_root_or_state()
         store = _recent_project_store_factory()
-        opened = store.open_recent(request.project_id)
         directory = _recent_directory(store, request.project_id)
+        _refuse_incomplete(directory)
+        root, modules = _module_root_or_state()
+        opened = store.open_recent(request.project_id)
         modules = _module_open(root, directory, opened["project_id"]) or modules
         shoot = store.project_store.read_shoot_state(directory, project_id=request.project_id)
         result: dict[str, Any] = {

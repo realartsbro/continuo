@@ -43,6 +43,14 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 FILE_REF_RE = re.compile(r"^file:[0-9a-f]{64}$")
 STILL_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"})
 MOVING_SUFFIXES = frozenset({".mp4", ".mov", ".m4v", ".mkv", ".webm"})
@@ -99,7 +107,7 @@ def probe_footage(path: str | Path, *, ffprobe: str | Path, timeout: float = 120
     argv = [str(ffprobe), "-v", "error", *(["-count_packets"] if suffix in MOVING_SUFFIXES else []), "-show_entries",
             "stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate,nb_frames,nb_read_packets", "-of", "json", str(path)]
     try:
-        done = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", timeout=timeout, check=False, shell=False)
+        done = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", timeout=timeout, check=False, shell=False, env=child_env())
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise FootageError("unreadable", "ffprobe could not read the file.") from exc
     if done.returncode != 0:
@@ -155,7 +163,7 @@ def measure_loudness(path: str | Path, *, ffmpeg: str | Path, timeout: float = 6
             "-f", "null", "-"]
     try:
         done = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
-                              check=False, shell=False)
+                              check=False, shell=False, env=child_env())
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise FootageError("unreadable", "ffmpeg could not read the sound.") from exc
     text = done.stderr or ""
@@ -180,7 +188,7 @@ def probe_audio(path: str | Path, *, ffprobe: str | Path, ffmpeg: str | Path | N
     argv = [str(ffprobe), "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_name,sample_rate,channels",
             "-of", "json", str(path)]
     try:
-        done = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", timeout=120, check=False, shell=False)
+        done = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", timeout=120, check=False, shell=False, env=child_env())
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise FootageError("unreadable", "ffprobe could not read the file.") from exc
     streams = json.loads(done.stdout or "{}").get("streams") or [] if done.returncode == 0 else []

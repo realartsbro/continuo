@@ -25,6 +25,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+try:
+    from hermes_constants import get_hermes_home
+except ImportError:  # pragma: no cover - repository tests install Hermes' root
+    def get_hermes_home() -> Path:
+        return Path.home() / "AppData" / "Local" / "hermes"
+
 # ``bounded_download`` lives in the generation package, which the synthetic
 # loader registers before ``studio_core``; import it through that documented
 # synthetic name to keep the package boundary acyclic (studio_core never
@@ -334,7 +340,7 @@ class PrivateOperations:
             raise PrivateOperationError("profile identity key is unavailable")
         if private_root is None:
             if hermes_home is None:
-                hermes_home = os.environ.get("HERMES_HOME") or Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "hermes"
+                hermes_home = get_hermes_home()
             private_root = state_root(Path(hermes_home) / "plugin-data") / "v4-private"
         root = Path(private_root)
         if not root.is_absolute():

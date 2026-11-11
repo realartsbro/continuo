@@ -330,9 +330,10 @@ async def projects_timeline_apply(request: TimelineApplyRequest) -> dict[str, An
         # Lane p12-cutb (CUT-043): the music ducks under the edited dialogue in this same revision (one Undo).
         ducking = await asyncio.to_thread(_timeline_reduck, before, after, ops, project_id)
         summary = _timeline_module("document").summarize(before, after)
-        verbs = ", ".join(dict.fromkeys(op["op"] for op in ops))
         by = _caller_by(request.by)  # lane w34-sec (finding 18): a Hermes call is Hermes' revision, labelled so
-        label = request.label or (("Hermes: " if by == "hermes" else "") + verbs)[:_TIMELINE_LABEL_MAX]
+        # Lane w39-words: a label the caller passes is kept as written; without one, the editor's phrases of the ops
+        # (timeline/words.py: "Hermes: Fit to fill, Freeze frame, Detach sound +3"), whole phrases only.
+        label = request.label or _timeline_module("words").label_for(ops, by)
         extra = {"ducking": ducking} if ducking is not None else {}
         if request.dry_run:
             return {"dry_run": True, "revision": revision, "label": label, "results": results, **summary, **extra}

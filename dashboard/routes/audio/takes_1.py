@@ -189,7 +189,7 @@ def _voice_take_recut(request: VoiceTakeRecutRequest) -> dict[str, Any]:
     rate, channels = int(measured["sample_rate"]), int(measured["channels"])
     started = time.monotonic()
     done = subprocess.run([str(FFMPEG_PATH), "-hide_banner", "-loglevel", "error", "-i", str(path), "-f", "s16le", "-acodec", "pcm_s16le",
-                           "-ar", str(rate), "-ac", str(channels), "-"], capture_output=True, timeout=120, check=False, shell=False)
+                           "-ar", str(rate), "-ac", str(channels), "-"], capture_output=True, timeout=120, check=False, shell=False, env=_child_env())
     if done.returncode != 0 or not done.stdout:
         raise _voice_runner_module.VoiceRunError("The take could not be read")
     pcm = _voice_takecut_module.splice(done.stdout, rate, channels, plan["pieces"])
@@ -199,7 +199,7 @@ def _voice_take_recut(request: VoiceTakeRecutRequest) -> dict[str, Any]:
     target = path.parent / name
     temporary = target.with_name(f".{name}.{uuid.uuid4().hex}.tmp.flac")
     encoded = subprocess.run([str(FFMPEG_PATH), "-hide_banner", "-loglevel", "error", "-y", "-f", "s16le", "-ar", str(rate), "-ac", str(channels),
-                              "-i", "-", str(temporary)], input=pcm, capture_output=True, timeout=120, check=False, shell=False)
+                              "-i", "-", str(temporary)], input=pcm, capture_output=True, timeout=120, check=False, shell=False, env=_child_env())
     if encoded.returncode != 0 or not temporary.is_file():
         temporary.unlink(missing_ok=True)
         raise _voice_runner_module.VoiceRunError("The re-cut take could not be written")

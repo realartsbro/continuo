@@ -5,6 +5,12 @@ _ffmpeg_locate = importlib.util.module_from_spec(_ffmpeg_locate_spec)
 _ffmpeg_locate_spec.loader.exec_module(_ffmpeg_locate)
 FFMPEG_PATH = Path(_ffmpeg_locate.locate("ffmpeg"))
 FFPROBE_PATH = Path(_ffmpeg_locate.locate("ffprobe"))
+# w39-env: one minimal environment for every child process (dashboard/engine_process): ffmpeg, ffprobe, nvidia-smi and
+# the file manager never inherit the backend's environment (provider keys, HERMES_*).
+_engine_process_spec = importlib.util.spec_from_file_location("film_suite_engine_process", Path(__file__).with_name("engine_process") / "__init__.py")
+_engine_process = importlib.util.module_from_spec(_engine_process_spec)
+_engine_process_spec.loader.exec_module(_engine_process)
+_child_env = _engine_process.child_env
 MEDIA_PROBE_CACHE: dict[tuple[str, int, int], dict[str, Any]] = {}
 MEDIA_EXTENSIONS = {".png": "image", ".jpg": "image", ".jpeg": "image", ".webp": "image", ".mp4": "video"}
 # Sound files (lane fs-msnd): kind "audio" for exactly the suffixes /projects/timeline/audio/add takes

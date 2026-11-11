@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .errors import ExportError
+from .ffmpeg_run import child_env  # w39-env: one minimal environment for every child process
 
 # w22-dlv (BCK-215): the one ComfyUI origin of the plugin (generation/comfyui_client.py is fixed to it too); no
 # environment override, so the README names exactly what runs.
@@ -94,7 +95,7 @@ def interpolate(ffmpeg: Path, src: Path, size: tuple[int, int], frames: int, mul
     pngs.mkdir(parents=True, exist_ok=True)
     subprocess.run([str(ffmpeg), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{width}x{height}",
                     "-i", str(src), "-start_number", "0", str(pngs / "f%06d.png")], check=True, timeout=1800,
-                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), env=child_env())
     _get("/queue", timeout=10)  # read the queue first; the prompt waits behind the artist's
     prompt = workflow(pngs, frames, mult, "film-suite-rife")
     answer = _post("/prompt", {"prompt": prompt, "client_id": "film-suite-" + uuid.uuid4().hex[:12]})
@@ -125,7 +126,7 @@ def interpolate(ffmpeg: Path, src: Path, size: tuple[int, int], frames: int, mul
     got = min(len(images), want)
     subprocess.run([str(ffmpeg), "-v", "error", "-y", "-start_number", "0", "-i", str(rife_out / "r%06d.png"),
                     "-frames:v", str(got), "-vf", f"scale={width}:{height},format=yuv420p", "-f", "rawvideo", str(out)],
-                   check=True, timeout=1800, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                   check=True, timeout=1800, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), env=child_env())
     if got != want:
         raise ExportError("ai_frames_failed", f"RIFE answered {got} frames, expected {want}.")
     return got

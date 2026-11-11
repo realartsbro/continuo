@@ -38,6 +38,14 @@ import time
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 SCHEMA_VERIFIED = "schema_verified"
 EXACT_TESTED = "exact_tested_version_required"
 POLICIES = frozenset({SCHEMA_VERIFIED, EXACT_TESTED})
@@ -477,7 +485,7 @@ def verify_take_output(path: str | os.PathLike[str], *, manifest: Mapping[str, A
     try:
         probe = subprocess.run([str(ffprobe), "-v", "error", "-count_frames", "-show_entries",
                                 "stream=codec_type,nb_read_frames,avg_frame_rate", "-of", "json", str(path)],
-                               capture_output=True, timeout=300, check=False)
+                               capture_output=True, timeout=300, check=False, env=child_env())
         streams = json.loads(probe.stdout.decode("utf-8", "replace")).get("streams", []) if probe.returncode == 0 else []
     except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
         return "unreadable"
@@ -499,7 +507,7 @@ def verify_take_output(path: str | os.PathLike[str], *, manifest: Mapping[str, A
         return "no_audio"
     try:
         poster = subprocess.run([str(ffmpeg), "-hide_banner", "-loglevel", "error", "-i", str(path), "-frames:v", "1",
-                                 "-f", "image2pipe", "-vcodec", "png", "pipe:1"], capture_output=True, timeout=120, check=False)
+                                 "-f", "image2pipe", "-vcodec", "png", "pipe:1"], capture_output=True, timeout=120, check=False, env=child_env())
     except (OSError, subprocess.SubprocessError):
         return "poster"
     if poster.returncode != 0 or not poster.stdout.startswith(b"\x89PNG"):

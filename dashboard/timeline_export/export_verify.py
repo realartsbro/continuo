@@ -37,6 +37,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from .resolver import MOVING_SUFFIXES, count_frames
+from .ffmpeg_run import child_env  # w39-env: one minimal environment for every child process
 from .timebase import parse_fcpx_time
 
 
@@ -55,7 +56,7 @@ def uri_to_path(uri: str) -> Path:
 def _has_audio_stream(ffprobe: Path, path: Path) -> bool:
     proc = subprocess.run(
         [str(ffprobe), "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True, encoding="utf-8", timeout=120,
+        capture_output=True, text=True, encoding="utf-8", timeout=120, env=child_env(),
     )
     return bool(proc.stdout.strip())
 

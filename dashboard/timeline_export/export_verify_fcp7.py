@@ -24,6 +24,7 @@ from urllib.parse import unquote, urlparse
 
 from .export_fcp7 import timebase
 from .resolver import STILL_SUFFIXES, count_frames
+from .ffmpeg_run import child_env  # w39-env: one minimal environment for every child process
 
 
 def pathurl_to_path(url: str) -> Path:
@@ -49,7 +50,7 @@ def _int(node: ET.Element, tag: str, failures: list[str], where: str) -> int | N
 
 def _has_audio(ffprobe: Path, path: Path) -> bool:
     proc = subprocess.run([str(ffprobe), "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
-                           "-of", "csv=p=0", str(path)], capture_output=True, text=True, encoding="utf-8", timeout=120)
+                           "-of", "csv=p=0", str(path)], capture_output=True, text=True, encoding="utf-8", timeout=120, env=child_env())
     return bool(proc.stdout.strip())
 
 

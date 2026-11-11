@@ -35,6 +35,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 COMFY_ORIGIN = "http://127.0.0.1:8188"
 FROZEN_BELOW = 1.0
 PROXY_WIDTH = 640
@@ -98,7 +106,7 @@ def count_frames(path: str | os.PathLike[str], ffmpeg: str | os.PathLike[str]) -
     out = subprocess.run(
         [_ffprobe_for(ffmpeg), "-v", "error", "-select_streams", "v:0", "-count_frames",
          "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT, check=False,
+        capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT, check=False, env=child_env(),
     )
     try:
         return int(out.stdout.strip().split(",")[0])
@@ -139,7 +147,7 @@ def prefit_clip(
             [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-y", "-i", str(path), "-vf", vf,
              "-frames:v", str(frames), *audio, "-c:v", "libx264", "-preset", "veryfast", "-crf", "12",
              "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(target)],
-            capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False,
+            capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False, env=child_env(),
         )
         if run.returncode != 0 or not target.is_file():
             raise H3MediaError("clip cannot be converted")
@@ -156,7 +164,7 @@ def prefit_clip(
 def audio_streams(path: str | os.PathLike[str], ffmpeg: str | os.PathLike[str]) -> int:
     out = subprocess.run(
         [_ffprobe_for(ffmpeg), "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT, check=False,
+        capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT, check=False, env=child_env(),
     )
     return len([line for line in out.stdout.splitlines() if line.strip()])
 
@@ -166,7 +174,7 @@ def audio_seconds(path: str | os.PathLike[str], ffmpeg: str | os.PathLike[str]) 
     out = subprocess.run(
         [_ffprobe_for(ffmpeg), "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=duration:format=duration",
          "-of", "json", str(path)],
-        capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT, check=False,
+        capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT, check=False, env=child_env(),
     )
     try:
         payload = json.loads(out.stdout or "{}")
@@ -221,7 +229,7 @@ def prefit_audio(path: str | os.PathLike[str], start: float, end: float, *, ffmp
         run = subprocess.run(
             [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-y", "-i", str(path), "-map", "0:a:0",
              "-ss", f"{start:.6f}", "-t", f"{end - start:.6f}", "-vn", "-c:a", "pcm_s16le", "-f", "wav", str(target)],
-            capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False,
+            capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False, env=child_env(),
         )
         if run.returncode != 0 or not target.is_file() or target.stat().st_size <= 44:
             raise H3MediaError("sound file cannot be converted")
@@ -401,7 +409,7 @@ def _probe_size(path: str | os.PathLike[str], ffmpeg: str | os.PathLike[str]) ->
     out = subprocess.run(
         [_ffprobe_for(ffmpeg), "-v", "error", "-select_streams", "v:0", "-show_entries",
          "stream=width,height", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT, check=False,
+        capture_output=True, text=True, timeout=_FFMPEG_TIMEOUT, check=False, env=child_env(),
     )
     try:
         width, height = (int(v) for v in out.stdout.strip().split(",")[:2])
@@ -421,7 +429,7 @@ def motion_activity(path: str | os.PathLike[str], ffmpeg: str | os.PathLike[str]
     run = subprocess.run(
         [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-i", str(path), "-map", "0:v:0",
          "-vf", f"scale={PROXY_WIDTH}:{proxy_h}:flags=area,format=gray", "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1"],
-        capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False,
+        capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False, env=child_env(),
     )
     frame_bytes = PROXY_WIDTH * proxy_h
     if run.returncode != 0 or len(run.stdout) < 2 * frame_bytes:
@@ -444,7 +452,7 @@ def local_motion_activity(path: str | os.PathLike[str], ffmpeg: str | os.PathLik
     run = subprocess.run(
         [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-i", str(path), "-map", "0:v:0",
          "-vf", f"scale={PROXY_WIDTH}:{proxy_h}:flags=area,format=gray", "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1"],
-        capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False,
+        capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False, env=child_env(),
     )
     frame_bytes = PROXY_WIDTH * proxy_h
     if run.returncode != 0 or len(run.stdout) < 2 * frame_bytes:
@@ -475,7 +483,7 @@ def hold_end(path: str | os.PathLike[str], ffmpeg: str | os.PathLike[str]) -> fl
     run = subprocess.run(
         [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-i", str(path), "-map", "0:v:0",
          "-vf", f"scale={PROXY_WIDTH}:{proxy_h}:flags=area,format=rgb24", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
-        capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False,
+        capture_output=True, timeout=_FFMPEG_TIMEOUT, check=False, env=child_env(),
     )
     frame_bytes = PROXY_WIDTH * proxy_h * 3
     if run.returncode != 0 or len(run.stdout) < 2 * frame_bytes:

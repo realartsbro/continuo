@@ -875,7 +875,7 @@ _TOOLS = (
 _IMAGE_ACTION_DESCRIPTION = (
     "Operate the visible Image workbench pane exactly as a click would; returns the pane's acknowledgement "
     "(ok/applied/message/revision), never a guess. Payloads: select_tile {axis, key} (lora toggles, max 4) · "
-    "clear_axis {axis} · set_intent {text} · set_manual_prompt {text} (switches to manual) · set_mode {mode: builder|manual} · "
+    "clear_axis {axis} · set_intent {text} · set_manual_prompt {text} (switches to manual; load the skill film-suite:image-prompts before writing it) · set_mode {mode: builder|manual} · "
     "set_sampling {profile?, steps?, cfg?, sampler?, scheduler?, negative?} (negative only on raw) · "
     "set_lora_strength {file, strength 0..2} (card strength; raw applies x0.6) · set_seed {seed} · "
     "set_seed_mode {mode: fixed|increment|decrement|random} (Generate > Seed: what the seed does after each run) · "
@@ -1098,7 +1098,8 @@ _SUITE_TOOLS = (
         "revision, title, scene list number + heading + act (the author's act mark the scene belongs to, e.g. AKT 1)), and on Image, Video, Audio and Cut the Media column: media {visible, bin all|kept|cut|uncut, "
         "types (image|video|audio shown), query, sort, min_rating, count (items shown), total (in the bin), selected (item id or null)}; media is null "
         "on other pages. On Video (page shoot) video {take: {take_id, barely_moves, motion_activity} | null}: the take on the stage; "
-        "barely_moves true = it barely moves (the stage does not say so): re-roll it with continuo_video_submit, seed + 1, same args. "
+        "barely_moves true = little motion was measured (the stage does not say so): check the take, a locked shot with a small moving subject is right; "
+        "re-roll (continuo_video_submit, seed + 1, same args) only when the prompt asked for motion. "
         "On Start (page start) start {recent: [{project_id, name, available}], busy: ''|restore|open} lists its Recent tiles, "
         "also before any project is chosen. Only connected windows are listed. page_labels maps ids to the bar's names. Path-free.",
         {"max_age_seconds": {"type": "number", "minimum": 0.5, "maximum": 60, "default": 20}},
@@ -1214,7 +1215,12 @@ def register(ctx: Any) -> None:
 # Lane w19-g7hermes item 1 (HER-063; Hermes plugin guide "Bundle skills"): the Continuo skill routes intent to the tool
 # families above; Hermes loads it as film-suite:continuo. Hosts without plugin skills keep the tools only.
 _SKILLS_DIR = Path(__file__).with_name("skills")
-_SKILLS = (("continuo", "Use when the artist works on a film, script, shot, cut or song in Continuo."),)
+_SKILLS = (
+    ("continuo", "Use when the artist works on a film, script, shot, cut or song in Continuo."),
+    # Lane w39-skill: how to write prompts for the models the package ships (loaded as film-suite:<name>).
+    ("video-prompts", "Use when writing or repairing a MiniMax H3 video prompt for a Continuo video take."),
+    ("image-prompts", "Use when writing or repairing a prompt for a Continuo image model (create or edit)."),
+)
 
 
 def _register_skills(ctx: Any) -> None:

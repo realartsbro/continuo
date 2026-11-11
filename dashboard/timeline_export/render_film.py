@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .errors import ExportError
-from .ffmpeg_run import CancelFn, run_ffmpeg
+from .ffmpeg_run import CancelFn, child_env, run_ffmpeg
 from .model import Plan, PlanClip
 from .resolver import count_frames
 from .timebase import ffmpeg_rate, ffmpeg_seconds, seconds
@@ -320,7 +320,7 @@ def run_mapped(command: list[str], plan: Plan, *, on_frame=None, should_cancel=N
                            should_cancel=should_cancel, what=f"Segment {clip.id} in-betweens")
         encoder = subprocess.Popen([ffmpeg, "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{plan.width}x{plan.height}",
                                     "-framerate", ffmpeg_rate(rate), "-i", "-", "-frames:v", str(count), *_SEGMENT_CODEC, "-an", str(out)],
-                                   stdin=subprocess.PIPE, stderr=subprocess.DEVNULL, **quiet)
+                                   stdin=subprocess.PIPE, stderr=subprocess.DEVNULL, **quiet, env=child_env())
         try:
             with src.open("rb") as fs, (dense.open("rb") if dense is not None else open(src, "rb")) as fd:
                 def read(handle, index: int, total: int) -> bytes:
@@ -664,7 +664,7 @@ def probe_streams(ffprobe: Path, path: Path) -> list[dict[str, Any]]:
     entries = "stream=codec_type,codec_name,profile,pix_fmt,sample_rate,channels,duration,duration_ts"
     try:
         done = subprocess.run([str(ffprobe), "-v", "error", "-show_entries", entries, "-of", "json", str(path)],
-                              capture_output=True, text=True, encoding="utf-8", timeout=600, check=True)
+                              capture_output=True, text=True, encoding="utf-8", timeout=600, check=True, env=child_env())
         return json.loads(done.stdout).get("streams") or []
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         raise ExportError("render_mismatch", f"ffprobe could not read {path.name}.") from exc

@@ -2186,8 +2186,10 @@ class ProjectStore:
         name: str,
         approved_roots: list[str] | None = None,
         copy_state: Mapping[str, Any] | None = None,
+        *,
+        allow_building_marker: bool = False,
     ) -> dict[str, Any]:
-        project_dir = self._directory(directory, create=True)
+        project_dir = self._directory(directory, create=not allow_building_marker)
         clean_name = _name(name.strip() if isinstance(name, str) else name)
         roots = _normalize_roots(self.boundary, approved_roots if approved_roots is not None else [])
         project_identity = self.boundary.pin_directory(project_dir)
@@ -2207,7 +2209,17 @@ class ProjectStore:
         published_state_identity: Any = None
         try:
             with lock:
-                if _members(project_dir):
+                members = _members(project_dir)
+                marker_names: set[str] = set()
+                if members == {".continuo-building"} and allow_building_marker:
+                    marker_path = project_dir / ".continuo-building"
+                    try:
+                        marker = _loads_bounded(_read_regular(self.boundary, marker_path, max_bytes=4096))
+                        if isinstance(marker, dict) and marker.get("sample") is True and type(marker.get("started_ns")) is int:
+                            marker_names = {marker_path.name}
+                    except (ProjectError, OSError, ValueError, TypeError, UnicodeError):
+                        pass
+                if members != marker_names:
                     raise ProjectError("project_not_empty", "project directory is not empty")
                 self.boundary.revalidate_directory(project_dir, project_identity)
                 state_dir = self._create_state_dir(project_dir)
@@ -2241,7 +2253,7 @@ class ProjectStore:
                 state_temp_identity = self.boundary.pin_file(state_temp)
                 self.boundary.revalidate_directory(project_dir, project_identity)
                 self.boundary.revalidate_directory(state_dir, state_identity)
-                if _members(project_dir) != {root_temp.name, "state"} or _members(state_dir) != {state_temp.name}:
+                if _members(project_dir) != {root_temp.name, "state"} | marker_names or _members(state_dir) != {state_temp.name}:
                     _invalid("project directory changed during create")
                 _replace_temp(root_temp, project_dir / "project.json", no_replace=True)
                 root_published = True
@@ -2262,7 +2274,7 @@ class ProjectStore:
                 project_members = _members(project_dir)
                 if (
                     not {"project.json", "state"}.issubset(project_members)
-                    or project_members - {"project.json", "state", root_temp.name}
+                    or project_members - ({"project.json", "state", root_temp.name} | marker_names)
                     or _members(state_dir) != {state_temp.name}
                 ):
                     _invalid("project directory changed during create")
@@ -2271,7 +2283,7 @@ class ProjectStore:
                 project_members = _members(project_dir)
                 if (
                     not {"project.json", "state"}.issubset(project_members)
-                    or project_members - {"project.json", "state", root_temp.name}
+                    or project_members - ({"project.json", "state", root_temp.name} | marker_names)
                     or _members(state_dir) != {state_temp.name}
                 ):
                     _invalid("project directory changed during create")
@@ -2295,7 +2307,7 @@ class ProjectStore:
                 state_members = _members(state_dir)
                 if (
                     not {"project.json", "state"}.issubset(project_members)
-                    or project_members - {"project.json", "state", root_temp.name}
+                    or project_members - ({"project.json", "state", root_temp.name} | marker_names)
                     or "shoot.json" not in state_members
                     or state_members - {"shoot.json", state_temp.name}
                 ):
@@ -4081,6 +4093,15 @@ class RecentProjectStore:
                         entry["directory"], expected_project_id=project_id
                     )
                 except (ProjectError, OSError, ValueError, TypeError, UnicodeError) as exc:
+                    # Distinguish a truly absent manifest from an offline folder,
+                    # malformed project, permission failure or unsafe path.
+                    try:
+                        directory = self.boundary.validate_project_directory(entry["directory"], operation="open")
+                        (directory / "project.json").lstat()
+                    except FileNotFoundError:
+                        raise ProjectError("project_manifest_missing", "project manifest is missing") from exc
+                    except (ProjectError, OSError, ValueError, TypeError, UnicodeError):
+                        pass
                     raise ProjectError("project_unavailable", "recent project is unavailable") from exc
                 if manifest["name"] != entry["name"]:
                     raise ProjectError("project_unavailable", "recent project is unavailable")

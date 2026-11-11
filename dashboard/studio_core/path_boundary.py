@@ -36,6 +36,12 @@ import weakref
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
+
+try:
+    from hermes_constants import get_hermes_home
+except ImportError:  # pragma: no cover - repository tests install Hermes' root
+    def get_hermes_home() -> Path:
+        return Path.home() / "AppData" / "Local" / "hermes"
 # Native stores also load this stdlib module directly, outside a package.
 import importlib.util as _migration_import
 _migration_spec = _migration_import.spec_from_file_location(
@@ -52,6 +58,13 @@ _local_path_spec = _migration_import.spec_from_file_location(
 )
 _local_path = _migration_import.module_from_spec(_local_path_spec)
 _local_path_spec.loader.exec_module(_local_path)
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
 
 
 WINDOWS_JUNCTION_PRIVILEGE_UNAVAILABLE = "WINDOWS_JUNCTION_PRIVILEGE_UNAVAILABLE"
@@ -2713,10 +2726,7 @@ def profile_identity_key(
     """Load or exclusively publish the profile's 32-byte HMAC key."""
 
     if hermes_home is None:
-        hermes_home = os.environ.get("HERMES_HOME") or (
-            Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-            / "hermes"
-        )
+        hermes_home = get_hermes_home()
     if os.name == "nt":
         profile_home, data_dir, key_path = _unprepared_profile_paths(hermes_home)
     else:
@@ -2803,10 +2813,7 @@ class PathBoundary:
 
     def __init__(self, hermes_home: os.PathLike[str] | str | None = None) -> None:
         if hermes_home is None:
-            hermes_home = os.environ.get("HERMES_HOME") or (
-                Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-                / "hermes"
-            )
+            hermes_home = get_hermes_home()
         self.hermes_home = _normalise_text_path(_path_text(hermes_home))
         _reject_reparse_components(self.hermes_home)
         self._key: bytes | None = None
@@ -3494,7 +3501,7 @@ def create_junction(link: os.PathLike[str] | str, target: os.PathLike[str] | str
             ["cmd.exe", "/d", "/c", "mklink", "/J", link_text, target_text],
             capture_output=True,
             text=True,
-            check=False,
+            check=False, env=child_env(),
         )
     except OSError as exc:
         if getattr(exc, "winerror", None) == 1314 or getattr(exc, "errno", None) == 1314:

@@ -4,6 +4,8 @@ from __future__ import annotations
 _PROJECT_ERROR_MESSAGES = {
     "invalid_project": "Project request is invalid",
     "project_not_found": "Project not found",
+    "project_manifest_missing": "The project folder no longer has its project file",
+    "project_incomplete": "This project was not finished being created.",
     "project_exists": "Project already exists",
     "project_not_empty": "Project directory must be empty",
     "project_conflict": "Project changed since this revision",

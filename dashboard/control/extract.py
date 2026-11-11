@@ -40,6 +40,14 @@ from . import camera as camera_solve
 
 # Lane w34-sec (scan finding 4): the one lexical guard against UNC / device paths (studio_core/local_path.py, stdlib).
 import importlib.util as _import_util
+
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
 _local_path_spec = _import_util.spec_from_file_location(
     "film_suite_control_local_path", Path(__file__).resolve().parents[1] / "studio_core" / "local_path.py")
 _local_path = _import_util.module_from_spec(_local_path_spec)
@@ -247,7 +255,7 @@ class Store:
 def probe(path: Path, ffprobe: Path) -> dict[str, Any]:
     done = subprocess.run([str(ffprobe), "-v", "error", "-select_streams", "v:0", "-show_entries",
                            "stream=width,height,r_frame_rate,nb_frames,duration:format=duration", "-of", "json", str(path)],
-                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, check=False)
+                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, check=False, env=child_env())
     try:
         payload = json.loads(done.stdout or "{}")
     except json.JSONDecodeError:
@@ -264,7 +272,7 @@ def probe(path: Path, ffprobe: Path) -> dict[str, Any]:
 
 
 def _run(args: list[str], timeout: float = 600) -> None:
-    done = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, check=False)
+    done = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, check=False, env=child_env())
     if done.returncode:
         raise RuntimeError((done.stderr or "ffmpeg failed").strip()[-300:])
 
@@ -283,7 +291,7 @@ def read_gray_frames(path: Path, ffmpeg: Path, width: int, height: int, *, fps: 
     """Gray frames of a clip (or a picture) at width x height, as float arrays."""
     vf = f"scale={width}:{height}:flags=area,format=gray" + (f",fps={fps}" if fps else "")
     done = subprocess.run([str(ffmpeg), "-v", "error", *_range_args(range_in, range_out), "-i", str(path), "-vf", vf,
-                           "-f", "rawvideo", "-pix_fmt", "gray", "-"], capture_output=True, timeout=600, check=False)
+                           "-f", "rawvideo", "-pix_fmt", "gray", "-"], capture_output=True, timeout=600, check=False, env=child_env())
     if done.returncode:
         raise ControlError("no_frames", kind="clip")
     size = width * height
@@ -297,7 +305,7 @@ def encode_gray(frames: list[np.ndarray], target: Path, ffmpeg: Path, fps: float
     part = target.with_name(target.stem + ".part" + target.suffix)
     process = subprocess.Popen([str(ffmpeg), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", f"{width}x{height}",
                                 "-r", f"{fps:.6f}", "-i", "-", "-c:v", "libx264", "-crf", "14", "-pix_fmt", "yuv420p",
-                                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", str(part)], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+                                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", str(part)], stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=child_env())
     try:
         for frame in frames:
             process.stdin.write(np.clip(frame, 0, 255).astype(np.uint8).tobytes())

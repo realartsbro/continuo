@@ -27,6 +27,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 TAKE_SUFFIX = ".flac"
 POLL_SECONDS = 1.0
 IDLE_POLL_SECONDS = 60.0
@@ -67,7 +75,7 @@ def wait_for_idle(comfy: Any, *, clock: Callable[[], float], sleep: Callable[[fl
 
 def measure_samples(path: Path, ffmpeg: str | os.PathLike[str]) -> dict[str, Any]:
     """Decoded float samples of the stored file: samples per channel, sample rate, channels, peak, clipped."""
-    probe = subprocess.run([str(ffmpeg), "-hide_banner", "-i", str(path)], capture_output=True, text=True, timeout=120, check=False)
+    probe = subprocess.run([str(ffmpeg), "-hide_banner", "-i", str(path)], capture_output=True, text=True, timeout=120, check=False, env=child_env())
     rate = channels = 0
     for line in probe.stderr.splitlines():
         if "Audio:" in line:
@@ -81,7 +89,7 @@ def measure_samples(path: Path, ffmpeg: str | os.PathLike[str]) -> dict[str, Any
     if rate < 1000 or channels < 1:
         raise MusicRunError("unreadable", "The take has no sample rate")
     argv = [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-i", str(path), "-map", "0:a:0", "-f", "f32le", "-acodec", "pcm_f32le", "-"]
-    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=child_env())
     total = 0
     peak = 0.0
     clipped = 0

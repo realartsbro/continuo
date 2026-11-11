@@ -27,6 +27,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 try:
     from hermes_constants import get_hermes_home
 except ImportError:  # pragma: no cover - repository tests install Hermes' root
@@ -262,7 +270,7 @@ def probe_media(
                 str(path),
             ],
             capture_output=True,
-            timeout=60,
+            timeout=60, env=child_env(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise PublishingError("output_invalid", "ffprobe could not run") from exc

@@ -112,18 +112,26 @@ def subject_colour(np: Any, src: Any, dist: Any, allowed: Any, radius: int = 3) 
     sail colour, not the mast highlight on the far side."""
     H, W = dist.shape
     best = np.where(allowed, dist, -1.0)
-    col = src.copy()
-    pad_d = np.pad(np.where(allowed, dist, -1.0), radius, constant_values=-1.0)
+    pad_d = np.pad(best, radius, constant_values=-1.0)
     pad_c = np.pad(src, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
+    # Which offset won per pixel (0 = none: the pixel's own colour); the colours are read once at the end. Copying
+    # the whole picture for each of the 29 / 49 offsets cost 5.5 s of a 2912^2 stitch (same result, bit for bit:
+    # tests/backend/test_w39_sky_subject_colour.py).
+    offsets = [(0, 0)]
+    won = np.zeros((H, W), np.intp)
     for dy in range(-radius, radius + 1):
         for dx in range(-radius, radius + 1):
             if dy * dy + dx * dx > radius * radius:
                 continue
             d = pad_d[radius + dy:radius + dy + H, radius + dx:radius + dx + W]
             better = d > best
-            best = np.where(better, d, best)
-            col = np.where(better[..., None], pad_c[radius + dy:radius + dy + H, radius + dx:radius + dx + W], col)
-    return col, best
+            np.copyto(best, d, where=better)
+            offsets.append((dy, dx))
+            won[better] = len(offsets) - 1
+    off = np.asarray(offsets, np.intp)
+    rows = np.arange(radius, radius + H, dtype=np.intp)[:, None] + off[:, 0][won]
+    cols = np.arange(radius, radius + W, dtype=np.intp)[None, :] + off[:, 1][won]
+    return pad_c[rows, cols], best
 
 
 def composite(svc: Any, source: Any, full: Any, alpha: Any, sky: Mapping[str, Any], crop: list[int]) -> tuple[Any, Any, dict[str, Any]]:

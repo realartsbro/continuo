@@ -37,6 +37,14 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 from urllib.parse import quote
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 
 
 def _take_id_re() -> re.Pattern[str]:
@@ -77,7 +85,7 @@ def ffprobe_facts(path: str | Path, *, ffprobe: str | Path, timeout: float = 30.
     """frames, rate, width, height, has_audio of one file (exact frame count via -count_packets)."""
     argv = [str(ffprobe), "-v", "error", "-count_packets", "-show_entries",
             "stream=codec_type,width,height,avg_frame_rate,r_frame_rate,nb_frames,nb_read_packets", "-of", "json", str(path)]
-    done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False, shell=False)
+    done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False, shell=False, env=child_env())
     if done.returncode != 0:
         raise ValueError("ffprobe could not read the file")
     streams = json.loads(done.stdout or "{}").get("streams") or []

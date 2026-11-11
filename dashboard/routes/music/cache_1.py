@@ -122,7 +122,7 @@ def _ensure_music_proxy(source: Path, proxy_file: Path) -> Path:
         str(temporary),
     ]
     try:
-        subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=True, timeout=600)
+        subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=True, timeout=600, env=_child_env())
         if not temporary.is_file() or temporary.stat().st_size < 44:
             raise RecipeError("The playback proxy was not created.")
         os.replace(temporary, proxy_file)

@@ -2,7 +2,7 @@
 
 ``state/timeline.json`` is ``{schema, project_id, revision, updated_at, label, by,
 state}``: the project envelope of ``state/shoot.json`` plus the label and author of
-the revision (an undo step reads "Hermes: split" in the history). Older revisions
+the revision (an undo step reads "Hermes: Blade" in the history; lane w39-words: timeline/words.py). Older revisions
 are kept beside it as ``timeline.json.r<revision>`` (last ``KEEP_REVISIONS``).
 
 Since lane w8-agent an envelope also holds ``changes`` (``changes_of``: the created,

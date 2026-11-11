@@ -21,6 +21,14 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 KIND = "motion_guide"
 NORMAL_CONVENTION = "view-space normals, +x right, +y up, +z toward the camera; rgb = n * 0.5 + 0.5 (three.js MeshNormalMaterial)"
 MAX_FRAMES = 1201
@@ -51,7 +59,7 @@ def probe(path: Path, ffmpeg: str) -> dict[str, Any]:
     ffprobe = str(Path(ffmpeg).with_name("ffprobe" + Path(ffmpeg).suffix))
     out = subprocess.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
                           "stream=width,height,nb_read_frames,r_frame_rate,codec_name,pix_fmt", "-of", "json", str(path)],
-                         capture_output=True, text=True, timeout=300, check=True)
+                         capture_output=True, text=True, timeout=300, check=True, env=child_env())
     s = json.loads(out.stdout)["streams"][0]
     return {"width": int(s["width"]), "height": int(s["height"]), "frames": int(s["nb_read_frames"]), "rate": s["r_frame_rate"],
             "codec": s["codec_name"], "pix_fmt": s["pix_fmt"]}
@@ -77,7 +85,7 @@ def encode(folder: Path, shot: str, width: int, height: int, fps_num: int, fps_d
         done = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-framerate", f"{fps_num}/{fps_den}",
                                "-start_number", "0", "-i", str(Path(tmp) / "%05d.png"), "-frames:v", str(len(frames)),
                                "-c:v", "ffv1", "-level", "3", "-pix_fmt", "rgb24", "-r", f"{fps_num}/{fps_den}", str(target)],
-                              capture_output=True, text=True, timeout=600)
+                              capture_output=True, text=True, timeout=600, env=child_env())
         if done.returncode != 0:
             raise ClipRefusal("encode_failed", (done.stderr or "ffmpeg failed").strip()[-300:])
     facts = probe(target, ffmpeg)

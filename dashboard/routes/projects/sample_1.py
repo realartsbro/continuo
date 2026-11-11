@@ -48,7 +48,7 @@ _FFMPEG_FIX = {"setting": "FFMPEG_PATH", "download": "https://ffmpeg.org/downloa
 
 def _tool_runs(path: Path) -> bool:
     try:
-        return subprocess.run([str(path), "-version"], capture_output=True, timeout=15, check=False).returncode == 0
+        return subprocess.run([str(path), "-version"], capture_output=True, timeout=15, check=False, env=_child_env()).returncode == 0
     except (OSError, subprocess.SubprocessError, ValueError):
         return False
 
@@ -66,7 +66,7 @@ def _sample_tools_error(missing: list[str]) -> dict[str, Any]:
 # visible while the build runs, so the artist can put a file into it. Rollback removes only what the build made: a
 # sample copy still byte-equal to the shipped file, and the project's own documents (project.json, script/, state/ by
 # their store names) written since the build started. Anything else stays, and so does the folder that holds it.
-_SAMPLE_OWN_NAMES = re.compile(r"^(project\.json|script/script\.(fountain|json)|state/[a-z0-9][a-z0-9-]*\.json)(\.r\d+)?$"
+_SAMPLE_OWN_NAMES = re.compile(r"^(\.continuo-building|project\.json|script/script\.(fountain|json)|state/[a-z0-9][a-z0-9-]*\.json)(\.r\d+)?$"
                                r"|(^|/)\.studio-[0-9a-f]{32}\.tmp$")
 
 
@@ -76,7 +76,7 @@ def _sample_owned(target: Path, path: Path, since_ns: int) -> bool:
         info = path.lstat()
         if not path.is_file() or path.is_symlink() or info.st_mtime_ns < since_ns:
             return False
-        if _SAMPLE_OWN_NAMES.match(rel):
+        if _SAMPLE_OWN_NAMES.search(rel):  # search: the .studio-*.tmp alternative also matches nested (state/...)
             return True
         source = _SAMPLE_DIR / rel
         return (rel != "sample.json" and source.is_file() and source.stat().st_size == info.st_size
@@ -97,12 +97,17 @@ def _sample_rollback(target: Path, project_id: str | None, since_ns: int = 0) ->
                 if entries is not None and any(e["project_id"] == project_id for e in entries):
                     store._write_registry([e for e in entries if e["project_id"] != project_id])
         except (studio_core.ProjectError, OSError, ValueError, TypeError, UnicodeError):
-            pass
+            # A retained Recent entry must not point at a project we deleted.
+            # Preserve the entire folder when its removal cannot be confirmed.
+            return True
     try:
         entries = sorted(target.rglob("*"), key=lambda p: len(p.parts), reverse=True)
     except OSError:
         return target.exists()
+    marker = target / ".continuo-building"
     for path in entries:
+        if path == marker:
+            continue  # removed last: a folder that keeps any leftover keeps its marker, so a later create repairs it
         try:
             if path.is_dir() and not path.is_symlink():
                 path.rmdir()  # only an empty folder; a folder with a kept file stays
@@ -110,6 +115,11 @@ def _sample_rollback(target: Path, project_id: str | None, since_ns: int = 0) ->
                 path.unlink()
         except OSError:
             pass
+    try:
+        if [p.name for p in target.iterdir()] == [marker.name]:
+            marker.unlink()
+    except OSError:
+        pass
     try:
         target.rmdir()
     except OSError:
@@ -122,7 +132,7 @@ def _sample_kept_answer(answer: dict[str, Any], target: Path) -> dict[str, Any]:
     error = dict(answer.get("error") or {}) if isinstance(answer, dict) and isinstance(answer.get("error"), dict) else {
         "code": "sample_unavailable", "message": "The sample film could not be built.", "retryable": False, "next": None}
     error["message"] = (f"{error.get('message') or 'The sample film could not be built.'} The folder {target.name} was kept:"
-                        " it holds files the sample did not make.")
+                        " it holds files the sample did not make, or Recent could not be updated safely.")
     error["kept_folder"] = target.name
     return {**(answer if isinstance(answer, dict) else {}), "error": error}
 
@@ -141,19 +151,63 @@ def _sample_copy(target: Path, manifest: dict[str, Any], keys: tuple[str, ...] =
     return copied
 
 
+def _sample_repair_interrupted(parent: str | None) -> None:
+    store = _recent_project_store_factory()
+    entries, _snapshot = store._read_entries()
+    registered = {str(Path(e['directory']).resolve()): e['project_id'] for e in entries or []
+                  if isinstance(e.get('directory'), str) and isinstance(e.get('project_id'), str)}
+    candidates = {Path(e['directory']) for e in entries or [] if isinstance(e.get('directory'), str)}
+    base = Path(parent) if parent else Path.home() / 'Documents' / 'Continuo'
+    try:
+        candidates.update(p for p in base.iterdir() if p.is_dir() and not p.is_symlink())
+    except OSError:
+        pass
+    for target in candidates:
+        if not re.fullmatch(r"Sample film(?: \d+)?", target.name) or target.is_symlink():
+            continue
+        try:
+            marker = json.loads((target / '.continuo-building').read_text(encoding='utf-8'))
+            if not isinstance(marker, dict) or marker.get('sample') is not True:
+                continue
+            project_id = marker.get('project_id')
+            recent_id = registered.get(str(target.resolve()))
+            if recent_id and project_id is not None and project_id != recent_id:
+                continue
+            if project_id is not None and not isinstance(project_id, str):
+                continue
+            _sample_rollback(target, recent_id or project_id, since_ns=0)
+        except (OSError, ValueError, TypeError, UnicodeError):
+            continue
+
+
+def _sample_write_marker(target: Path, project_id: str | None = None) -> None:
+    data = {'sample': True, 'started_ns': time.time_ns()}
+    if project_id is not None:
+        data['project_id'] = project_id
+    temp = target / ('.studio-' + uuid.uuid4().hex + '.tmp')
+    temp.write_text(json.dumps(data), encoding='utf-8')
+    temp.replace(target / '.continuo-building')
+
+
 @project_router.post("/projects/sample/open")
 async def projects_sample_open(request: ProjectSampleOpenRequest) -> dict[str, Any]:
     try:
         manifest = _sample_manifest()
     except (OSError, ValueError):
         return _sample_error("sample_unavailable", "The sample film is not part of this install.")
+    try:
+        from PIL import Image, ImageOps, UnidentifiedImageError  # noqa: F401 - required by image import
+    except (ImportError, OSError):
+        return {"error": {"code": "dependencies_preparing", "message": "Continuo's picture import is still being set up", "retryable": True, "next": None}}
     missing = await asyncio.to_thread(_missing_media_tools)
     if missing:
         return _sample_tools_error(missing)
     since_ns = time.time_ns() - 2_000_000_000  # file times can lag the clock by up to the FAT/SMB granularity
     try:
+        await asyncio.to_thread(_sample_repair_interrupted, request.parent)
         target = await asyncio.to_thread(_sample_target, request.parent)
         await asyncio.to_thread(target.mkdir, parents=True)
+        await asyncio.to_thread(_sample_write_marker, target)
     except studio_core.ProjectError as exc:
         return _project_error_response(exc)
     except OSError:
@@ -182,11 +236,14 @@ async def projects_sample_open(request: ProjectSampleOpenRequest) -> dict[str, A
 async def _sample_build(target: Path, manifest: dict[str, Any], holder: dict[str, str]) -> dict[str, Any]:
     # w25-cutfix (PRJ-063; Resolve / Final Cut name a duplicated project after its copy): a sample copy takes its
     # folder's name ("Sample film 2"), so Recent never shows two samples under one name.
-    created = await projects_create(ProjectCreateRequest(directory=str(target), name=target.name))
+    created = await asyncio.to_thread(_projects_create_sync, ProjectCreateRequest(directory=str(target), name=target.name),
+                                      allow_building_marker=True)
     if not isinstance(created, dict) or created.get("error") or not created.get("project"):
         return created
     project_id = created["project"]["project_id"]
     holder["project_id"] = project_id
+    marker = target / ".continuo-building"
+    await asyncio.to_thread(_sample_write_marker, target, project_id)
     ref = ProjectReference(project_id=project_id)
     by = "hermes" if _film_caller() == "hermes" else "artist"
     try:
@@ -229,6 +286,7 @@ async def _sample_build(target: Path, manifest: dict[str, Any], holder: dict[str
     planned = await _sample_plan(ref, target, manifest)
     if planned.get("error"):
         return planned
+    marker.unlink()
     return {**created, "sample": {"scenes": len(script.get("order") or []), "clips": len(manifest["shots"]),
                                   "music": 1, "timeline_revision": music["placed"].get("revision"), **planned}}
 
@@ -244,6 +302,8 @@ async def _sample_plan(ref: ProjectReference, target: Path, manifest: dict[str, 
     if len(shots) != len(manifest["shots"]):
         return _sample_error("sample_unavailable", "The sample script and its shots do not match.")
     pictures = await _sample_pictures(ref, target, manifest)
+    if len(pictures) != len(manifest["shots"]) or not all(pictures):
+        return _sample_error("sample_unavailable", "The sample storyboard pictures could not be imported.")
     changes = [{"shot": row["id"], "details": dict(shot.get("details") or {}),
                 **({"pictures": [{"item": pictures[n], "role": "storyboard"}]} if pictures[n] else {})}
                for n, (row, shot) in enumerate(zip(shots, manifest["shots"]))]

@@ -260,11 +260,11 @@ class TimelineExportRevealRequest(_ProjectRequest):
 def _timeline_export_open_folder(folder: Path) -> None:
     """Show the package folder in the system file manager (the artist's "Show in folder")."""
     if sys.platform == "win32":
-        subprocess.Popen(["explorer", str(folder)])  # noqa: S603,S607 - fixed program, path from our own job
+        subprocess.Popen(["explorer", str(folder)], env=_child_env(desktop=True))  # noqa: S603,S607 - fixed program, path from our own job
     elif sys.platform == "darwin":
-        subprocess.Popen(["open", str(folder)])  # noqa: S603,S607
+        subprocess.Popen(["open", str(folder)], env=_child_env(desktop=True))  # noqa: S603,S607
     else:
-        subprocess.Popen(["xdg-open", str(folder)])  # noqa: S603,S607
+        subprocess.Popen(["xdg-open", str(folder)], env=_child_env(desktop=True))  # noqa: S603,S607
 
 
 def _timeline_export_answer(state: dict[str, Any], project_dir: Path | None = None) -> dict[str, Any]:

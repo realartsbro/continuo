@@ -60,6 +60,14 @@ from typing import Any
 
 import numpy as np
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parent / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 # v6 makes uncertainty and provenance first-class. Tempo and meter now carry
 # fixed/variable/mixed/ambiguous/none status plus candidates and source;
 # frame-wise tempo is retained separately from its octave-continuous public
@@ -257,7 +265,7 @@ def _probe_duration(path: Path) -> float:
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=60,
+            timeout=60, env=child_env(),
         )
     except (OSError, subprocess.SubprocessError) as e:
         raise MusicAnalysisError(f"ffprobe failed to run: {e}") from e
@@ -304,7 +312,7 @@ def _decode_to_wav(path: Path) -> tuple[np.ndarray, int]:
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=600,
+            timeout=600, env=child_env(),
         )
     except (OSError, subprocess.SubprocessError) as e:
         raise MusicAnalysisError(f"ffmpeg failed to run: {e}") from e

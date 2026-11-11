@@ -93,7 +93,7 @@ def gpu_memory_used_mb() -> int | None:
     try:
         out = subprocess.run([exe, "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
                              capture_output=True, text=True, timeout=10,
-                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), env=engine_process.child_env())
         return int(out.stdout.strip().splitlines()[0])
     except Exception:  # noqa: BLE001
         return None

@@ -18,6 +18,14 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 SCHEMA = "studio.file-qc/1"
 OFFSET_MAX_FRAMES = 0.5  # |audio start - video start| above half a frame is a finding (0 frames is the pass)
 FREEZE_NOISE_DB = -60.0  # freezedetect noise tolerance
@@ -84,7 +92,7 @@ class QcError(Exception):
 
 def _run(argv: list[str]) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT_S, check=False)
+        return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT_S, check=False, env=child_env())
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise QcError("qc_failed", "ffmpeg could not read the file.") from exc
 

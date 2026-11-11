@@ -13,8 +13,9 @@ adapter; this module adds, without touching any pinned manifest or graph:
   (the Krea browser's family filter, as a rule).
 
 Per target the LoRA support is ``rendered`` (offered: rendered for real with a matching LoRA,
-see LORA_EVIDENCE), ``untested`` (the graph takes a chain, nothing proven: refused with the
-reason) or ``unsupported`` (refused with the reason).  A request without LoRAs keeps the exact
+see LORA_EVIDENCE), ``wired`` (offered: the graph takes a chain, no render record yet; lane w39-face 6,
+the artist's decision "Alle Models akzeptieren theoretisch LoRAs") or ``unsupported`` (refused
+with the reason).  A request without LoRAs keeps the exact
 historical request bytes (no ``loras`` key), so every persisted job validates unchanged.
 """
 from __future__ import annotations
@@ -65,7 +66,7 @@ FAMILY_LABELS: dict[str, str] = {
     "p_h3_image": "MiniMax H3",  # w24-h3img: H3 LoRAs (lora_library names them MiniMax H3) fit the FL2VA transformer
 }
 # Real renders with one matching LoRA through the Suite (lane w1-imgout, 2026-10-21; seconds = route time).
-# Only these are offered; the same family's other targets stay "untested" until rendered.
+# w39-face 6: every LORA_ROOTS target is offered; a render record only changes the reason (the tooltip), not the offer.
 # w27-catalog: the rows name no LoRA file (the renders used the artist's private LoRAs; the published tree and the
 # agent catalog name none of them). The reason says which family was rendered, never which file.
 LORA_EVIDENCE: dict[str, dict[str, Any]] = {
@@ -90,11 +91,10 @@ def lora_support(target_id: str, family_id: str) -> dict[str, Any]:
     if target_id not in LORA_ROOTS:
         return {"state": "unsupported", "available": False, "family": label, "reason": "This model's workflow takes no LoRA"}
     proof = LORA_EVIDENCE.get(target_id)
+    offered = {"available": True, "family": label, "max": LORA_MAX, "strength": {"min": STRENGTH_MIN, "max": STRENGTH_MAX}, "roles": list(ROLES)}
     if proof is None:
-        return {"state": "untested", "available": False, "family": label, "max": LORA_MAX,
-                "reason": f"Not proven: never rendered with a {label} LoRA through the Suite"}
-    return {"state": "rendered", "available": True, "family": label, "max": LORA_MAX,
-            "strength": {"min": STRENGTH_MIN, "max": STRENGTH_MAX}, "roles": list(ROLES),
+        return {"state": "wired", **offered, "reason": f"No render with {'an' if label[:1].upper() in 'AEIOU' else 'a'} {label} LoRA on record"}
+    return {"state": "rendered", **offered,
             "reason": f"Rendered with {'an' if label[:1].upper() in 'AEIOU' else 'a'} {label} LoRA on {proof['date']}"}
 
 
@@ -142,7 +142,7 @@ def check_batch(value: Any) -> int:
 
 def admit_loras(target_id: str, family_id: str, loras: list[dict[str, Any]], live_names: list[str] | None,
                 base_of: Any) -> None:
-    """Refuse what this target cannot take: unsupported/untested, not listed, another family."""
+    """Refuse what this target cannot take: unsupported, not listed, another family."""
     if not loras:
         return
     support = lora_support(target_id, family_id)

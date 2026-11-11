@@ -133,6 +133,10 @@ Built; being proven on a real install or finished.
 
 Planned for the release.
 
+### Nothing gets lost, nothing crashes
+
+- User feedback: Windows desktop ComfyUI defaults to port 8000; remote ComfyUI hosts are common.
+
 ### Song to cut (Audio, Music, Cut)
 
 - Audio is a demo page and still reads as bolted-on parts; one approved coherent layout is needed.
@@ -146,4 +150,4 @@ Planned for the release.
 
 ---
 
-164 release musts in the plan; 78 of them are internal working notes and are not listed here.
+165 release musts in the plan; 78 of them are internal working notes and are not listed here.

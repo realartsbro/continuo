@@ -21,7 +21,7 @@ def _gpu_run(argv: list[str], timeout: float) -> str | None:
     if not exe:
         return None
     try:
-        done = subprocess.run([exe, *argv[1:]], capture_output=True, text=True, encoding="utf-8", timeout=timeout, check=False)  # noqa: S603 - fixed program and arguments
+        done = subprocess.run([exe, *argv[1:]], capture_output=True, text=True, encoding="utf-8", timeout=timeout, check=False, env=_child_env())  # noqa: S603 - fixed program and arguments
     except (OSError, subprocess.SubprocessError):
         return None
     return done.stdout if done.returncode == 0 else None

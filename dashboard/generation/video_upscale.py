@@ -33,6 +33,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Mapping
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 TARGET_ID = "relayvsr-video-upscale-v1"
 PROVIDER_ID = "comfyui-local"
 _PINS = {"manifest_sha256": "98069892c6b04d79d7e91497cb589a1b4ee23743fbe732c11bb307f536b897dd", "api_sha256": "47444ecc2521288789c285a9badb9eb5cbce5d6e273994e9037ded9830c082c2", "node_count": 12}
@@ -348,7 +356,7 @@ def probe(path: str | Path, ffprobe: str | Path) -> dict[str, Any]:
     """Width, height, decoded frame count, fps and whether the take has sound (ffprobe, counted packets)."""
     result = subprocess.run([str(ffprobe), "-v", "error", "-count_packets", "-show_entries",
                              "stream=codec_type,width,height,avg_frame_rate,r_frame_rate,nb_read_packets", "-of", "json", str(path)],
-                            capture_output=True, text=True, timeout=120, check=False)
+                            capture_output=True, text=True, timeout=120, check=False, env=child_env())
     try:
         streams = json.loads(result.stdout or "{}").get("streams") or []
     except ValueError:

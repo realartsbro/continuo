@@ -19,6 +19,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 
 
 class _LazyNumpy:
@@ -94,12 +102,12 @@ def decode(path: Path, ffmpeg: str | os.PathLike[str], rate: int | None = None, 
     """Float32 samples (frames x channels) of a sound file, optionally resampled / remixed by ffmpeg."""
     probe = [str(ffmpeg), "-v", "error", "-i", str(path)]
     args = probe + (["-ar", str(rate)] if rate else []) + (["-ac", str(channels)] if channels else []) + ["-f", "f32le", "-acodec", "pcm_f32le", "-"]
-    done = subprocess.run(args, capture_output=True, timeout=600, check=False)
+    done = subprocess.run(args, capture_output=True, timeout=600, check=False, env=child_env())
     if done.returncode != 0:
         raise StemsError("stems_decode_failed", "A sound file could not be decoded")
     if rate is None or channels is None:
         info = subprocess.run([str(Path(ffmpeg).with_name("ffprobe" + Path(ffmpeg).suffix)), "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=sample_rate,channels", "-of", "json", str(path)],
-                              capture_output=True, text=True, timeout=60, check=False)
+                              capture_output=True, text=True, timeout=60, check=False, env=child_env())
         stream = (json.loads(info.stdout or "{}").get("streams") or [{}])[0]
         rate, channels = rate or int(stream.get("sample_rate") or 44100), channels or int(stream.get("channels") or 2)
     data = np.frombuffer(done.stdout, dtype="<f4")
@@ -131,7 +139,7 @@ def write_flac(path: Path, samples: np.ndarray, rate: int, ffmpeg: str | os.Path
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp.flac")
     done = subprocess.run([str(ffmpeg), "-v", "error", "-y", "-f", "f32le", "-ar", str(rate), "-ac", str(samples.shape[1]), "-i", "-", "-c:a", "flac", "-sample_fmt", "s32", str(temporary)],
-                          input=np.ascontiguousarray(samples, dtype="<f4").tobytes(), capture_output=True, timeout=600, check=False)
+                          input=np.ascontiguousarray(samples, dtype="<f4").tobytes(), capture_output=True, timeout=600, check=False, env=child_env())
     if done.returncode != 0:
         temporary.unlink(missing_ok=True)
         raise StemsError("stems_write_failed", "A stem could not be written")

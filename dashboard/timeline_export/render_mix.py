@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .errors import ExportError
-from .ffmpeg_run import CancelFn, run_ffmpeg
+from .ffmpeg_run import CancelFn, child_env, run_ffmpeg
 from .model import Plan
 
 AUDIO_RATE = 48000
@@ -297,7 +297,7 @@ def normalization_type(stderr: str) -> str | None:
 def _stderr(ffmpeg: Path, path: Path, chain: str) -> str:
     try:
         done = subprocess.run([str(ffmpeg), "-hide_banner", "-nostats", "-i", str(path), "-map", "0:a:0", "-af", chain, "-f", "null", "-"],
-                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800, check=False)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800, check=False, env=child_env())
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ExportError("loudness_failed", "ffmpeg could not measure the sound.") from exc
     if done.returncode != 0:

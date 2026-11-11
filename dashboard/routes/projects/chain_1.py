@@ -141,7 +141,7 @@ def _chain_env(project_id: str, directory: str, manifest: dict[str, Any]) -> dic
         try:
             run = subprocess.run([str(FFMPEG_PATH), "-hide_banner", "-loglevel", "error", "-y", "-i", str(stored),
                                   "-vf", f"select=eq(n\\,{int(frame)})", "-vsync", "0", "-frames:v", "1", name],
-                                 capture_output=True, timeout=300, check=False)
+                                 capture_output=True, timeout=300, check=False, env=_child_env())
             data = Path(name).read_bytes() if run.returncode == 0 else b""
         finally:
             with contextlib.suppress(OSError):

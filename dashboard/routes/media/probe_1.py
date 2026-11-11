@@ -14,7 +14,7 @@ def _local_path(path: str) -> Path:
 
 def _run(command: list[str], *, failure_message: str = "Media command failed.") -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=True, timeout=120)
+        return subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=True, timeout=120, env=_child_env())
     except FileNotFoundError as exc:
         raise RecipeError("ffmpeg/ffprobe is not available at the configured path.") from exc
     except subprocess.CalledProcessError as exc:

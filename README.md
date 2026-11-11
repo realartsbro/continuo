@@ -1,47 +1,96 @@
 # Continuo
 
-Write the script, generate images and video takes, cut them to music and deliver the film: a film workstation that you and your AI agent use together.
+**A film studio inside Hermes.** You write the script, make pictures and video takes on your own GPU, cut them to
+music and render the film. Hermes works in the same project, on the page you have open.
 
-Continuo is a plugin for [Hermes Agent](https://hermes-agent.nousresearch.com), the open-source AI agent by Nous Research.
+![Continuo in Hermes Desktop](docs/media/hero.png)
 
-![License: MIT](https://img.shields.io/badge/License-MIT-0969da)
-![Tested on Windows 11](https://img.shields.io/badge/Tested%20on-Windows%2011-0969da)
-![Hermes Agent >=0.22.7](https://img.shields.io/badge/Hermes%20Agent-%3E%3D0.22.7-0969da)
+**Start without any model.** Open the Sample film, change the cut and render an MP4. Only ffmpeg is needed for that.
+Script, Cut, beat analysis and Deliver run on the CPU.
 
-<!-- HERO IMAGE: one screenshot or short GIF of the Cut page with the Sample film goes here (not yet recorded). -->
+**You and Hermes work on the same film.** Hermes gets 209 tools that cover every page, and the open page shows
+what Hermes did. On Script and Cut you can undo each of its changes. Only you can approve a folder for Continuo.
 
-- **Write** a screenplay in industry format, with Hermes writing in the same script.
-- **Generate** images and video takes with local models through ComfyUI, then edit a selection or continue a take.
-- **Cut** to music: analyse a song's beats and parts, place it under the cut and fit clips to the beats.
-- **Deliver** an MP4, a Film master (MOV, Apple ProRes), subtitles, or the timeline as FCPXML, FCP 7 XML, OpenTimelineIO or EDL.
+```
+hermes plugins install https://github.com/realartsbro/continuo
+hermes plugins enable film-suite
+```
 
-**Hermes and you work on the same project.** Hermes can do the same things you do by hand: write a scene, place a song,
-trim a clip, start a render. It sees your changes immediately, and its own changes appear live on the open page as a
-"Hermes did …" entry with before and after; <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes them.
+Then restart Hermes, open **Capabilities > Plugins** and turn the **Continuo** switch on. Continuo appears in the
+sidebar at once. Details are under [Install](#install).
 
-**You stay in control of your files.** Hermes cannot give itself access to a folder; you approve each one.
+Continuo is a plugin for [Hermes Agent](https://hermes-agent.nousresearch.com), the open-source AI agent by Nous
+Research. It needs Hermes Agent `>=0.22.7` with the desktop app. MIT licence.
 
+[Pages](#cut-and-deliver) ·
 [Install](#install) ·
-[First success](#first-success-no-models-needed) ·
-[Pages](#pages) ·
 [Models](#models-optional) ·
 [Talk to Hermes](#talk-to-hermes) ·
-[Transparency](#what-this-plugin-does-on-your-machine)
+[What it does on your machine](#what-this-plugin-does-on-your-machine)
 
-## Quick start
+## Cut and deliver
+
+![The Cut page](docs/media/01-cut.png)
+
+One timeline with picture tracks, sound tracks and a music lane. Continuo finds the beats of the song, and
+**Fit to beats** moves the cuts onto them. With the optional speech detector (Silero VAD), the music drops under
+dialogue by itself.
+
+**Deliver** renders an MP4 or a film master (Apple ProRes in a MOV), with SRT and VTT subtitles. It also writes the
+timeline as FCPXML 1.9, FCP 7 XML, OpenTimelineIO and EDL, the exchange formats of Premiere, Resolve and Final Cut.
+**Check before render** stops a render while a clip is offline. The render queue keeps its jobs across a restart.
+
+## Image
+
+![The Image page](docs/media/02-image.png)
+
+**Create** pictures from a prompt with a local model through ComfyUI, then **Edit** a selection or a mask. Each picture
+keeps the prompt, seed and settings that made it; **Use these settings** puts them back into the controls.
+
+## Video
+
+![The Video page](docs/media/03-video.png)
+
+Make video takes with MiniMax H3 on your own GPU, from a prompt, from keyframes or from reference pictures. Continue
+a take from a frame you choose, compare two takes A/B, upscale the one you keep and send it to Cut.
+
+## Script
+
+![The Script page](docs/media/04-script.png)
+
+Write in screenplay format with a scene list. Enter and Tab pick the next element; `int.` or `ext.` starts a scene
+heading. Hermes writes in the same script, and you can undo what it changed.
+
+## Audio
+
+![The Audio page](docs/media/05-audio.png)
+
+Play a song, set IN and OUT and analyse it. The built-in analysis finds beats, bars and the song's sections; the
+optional song engine names them (Intro, Verse, Chorus). **Use in Cut** places the song or the IN-OUT range under the
+cut.
+
+## Hermes works beside you
+
+![A change Hermes made, shown on the page with Undo](docs/media/06-hermes.png)
+
+Hermes uses the same project and the same job list as you. When it rewrites a scene or moves a clip, the open page
+shows the change with before and after, and Undo takes it back. Each edit from Hermes names the revision it read. If
+you changed the scene or the cut since then, the edit is refused and nothing is saved.
+
+## Install
 
 ### Requirements
 
 | Part | Requirement | Notes |
 |:---|:---|:---|
-| Platform | Windows 11 (tested) | Linux is supported in the code but not yet tested. macOS is not supported yet: some safe-save steps use Linux-only system calls. Reports are welcome, see [Feedback](#feedback). |
+| Platform | Windows 11 | Tested on Windows 11. The code is written to run on Linux too, not yet tested; reports are welcome, see [Feedback](#feedback). macOS is on the roadmap. |
 | Hermes&nbsp;Agent | `>=0.22.7` | With the Hermes desktop app. |
 | ffmpeg | Required | For Cut, Deliver and Audio; tested with 7.1.1. Looked up in `FFMPEG_PATH`, then `PATH`, then `C:\ffmpeg\bin`. |
-| ComfyUI | Optional | Generates images, video, music and voice. Continuo talks to it at `http://127.0.0.1:8188`. |
-| GPU | Optional | Script, Cut, Audio analysis and Deliver run on the CPU; a GPU is optional for them. Generating images, video or audio needs one. |
+| ComfyUI | For generation | Generates pictures, video, music and voice on your machine at `http://127.0.0.1:8188`. |
+| GPU | For generation | Script, Cut, Audio analysis and Deliver run on the CPU, so a GPU is optional for them. Generation uses your GPU. |
 | Disk | 15&nbsp;MB&nbsp;+&nbsp;511&nbsp;MB | Measured: the plugin 15 MB; its Python packages 511 MB, set up by Hermes. Models need extra space, see [Models](#models-optional). |
 
-### Install
+### Steps
 
 ```
 hermes plugins install https://github.com/realartsbro/continuo
@@ -50,21 +99,22 @@ hermes plugins enable film-suite
 
 No GitHub login is needed. The plugin's id in Hermes is `film-suite`; Continuo is its name in the app.
 
-> [!NOTE]
-> Hermes scans every plugin before it installs it. Continuo starts programs (ffmpeg) and talks to ComfyUI on your own
-> machine (`127.0.0.1`), so the scan rates it **caution** and asks you to confirm. This is expected; answer `y` to
-> continue. Details are under [Install scan](#install-scan).
+> **The install scan says "caution".** Hermes scans every plugin before it installs it. Continuo runs ffmpeg and talks
+> to your local ComfyUI (`127.0.0.1`), so the scan asks you to confirm. Answer `y`. The reasons are listed under
+> [Install scan](#install-scan). The installer then asks whether to enable the plugin and whether to set up its Python
+> packages (numpy, librosa, soundfile, httpx, Pillow; 511 MB). Answer `y` to both.
 
-1. Restart Hermes. On the first start Hermes sets up the plugin's Python packages (numpy, librosa, soundfile, httpx,
-   Pillow), which takes about 2.5 minutes on a new Hermes installation.
-2. Restart Hermes once more to load them. This is a one-time setup step.
-3. Open **Continuo** from the Hermes desktop sidebar. Hermes also gets the skill `film-suite:continuo`, so it knows
-   which tool does what.
+1. Restart Hermes.
+2. Open **Capabilities > Plugins**, find **Continuo** and turn its switch on. Continuo appears in the sidebar at once.
+   Hermes installs a plugin's window switched off, and `hermes plugins enable` turns on only the agent's tools. A
+   restart does not turn the window on.
+3. Open **Continuo** from the sidebar. Hermes also gets three skills: `film-suite:continuo` (which tool does what),
+   `film-suite:video-prompts` and `film-suite:image-prompts` (how to prompt the video and image models).
 
-### First success (no models needed)
+### Your first film, no models needed
 
-After the install, the Sample film needs only ffmpeg. It holds three scenes, six drawn pictures, a music pad and a cut,
-all CC0 (free to reuse).
+The Sample film needs only ffmpeg. It holds three scenes, six drawn pictures, a music pad and a cut, all CC0 (free to
+reuse).
 
 1. On **Start**, choose **Sample film**. Continuo copies it into a new project folder,
    `Documents\Continuo\Sample film`, and opens it on **Cut**.
@@ -73,13 +123,13 @@ all CC0 (free to reuse).
 4. The file is saved to the project's output folder: `output/` inside the project folder, unless you chose another
    folder in the project settings.
 
-Or ask Hermes to do it in one sentence:
+Or ask Hermes in one sentence:
 
 ```text
 Open the sample film in Continuo, swap the first two shots and export an MP4.
 ```
 
-## Pages
+## All pages
 
 The bar at the bottom of Continuo holds the pages in working order.
 
@@ -87,24 +137,26 @@ The bar at the bottom of Continuo holds the pages in working order.
 |:---|:---|
 | **Script** | Write in screenplay format with a scene list; Hermes writes in the same script, and you can undo its changes. |
 | **Audio** | Play a song, set IN and OUT, analyse beats and song parts, and **Use in Cut**. |
-| **Image** | **Create** images from a prompt and **Edit** a selection or mask; **Use these settings** restores any result. |
-| **Video** | Generate MiniMax H3 takes locally, continue a take, compare A/B, upscale and send to **Cut**. |
-| **Cut** | Edit one timeline with music, song parts and beats; **Fit to beats**, with music lowered under dialogue. |
+| **Image** | **Create** pictures from a prompt and **Edit** a selection or mask; **Use these settings** restores any result. |
+| **Video** | Make MiniMax H3 takes locally, continue a take, compare A/B, upscale and send to **Cut**. |
+| **Cut** | Edit one timeline with music, song parts and beats; **Fit to beats**, and music lowered under dialogue with the speech detector. |
 | **Deliver** | Render MP4 or Film master, export FCPXML, FCP 7 XML, OTIO, EDL and subtitles, after **Check before render**. |
 | **Media** | Browse the project's media on every page, with bins, filters, ratings and compare. |
 | **Jobs** | See and stop every running job in one list, the same list Hermes works with. |
 
+**More on each page**
+
 <details>
-<summary>More on each page</summary>
+<summary>Show</summary>
 
 - **Script**: Enter and Tab pick the next element, `int.` or `ext.` starts a scene heading, Fountain bold and italic
-  show while you type. A strip of the whole script shows act markers. Hermes' changes are marked.
-- **Audio**: waveform, playback, IN and OUT, markers. Analysis runs only when you ask: beats, bars and named song parts
-  (Intro, Verse, Chorus). Lyrics are transcribed from the vocals or taken from text you paste. **Use in Cut** places the whole song or
-  the IN-OUT range.
-- **Image**: several images in one run with a local model. Edit with selection tools, numbered boxes and **Remove**. Every
-  image keeps the prompt and settings that made it.
-- **Video**: takes from keyframes or reference images, run on your machine. Continue a take from a chosen frame, keep
+  show while you type. Hermes' changes are marked.
+- **Audio**: waveform, playback, IN and OUT, markers. Analysis runs only when you ask: beats, bars and sections with
+  the built-in engine, named song parts (Intro, Verse, Chorus) with the optional song engine. Lyrics are transcribed from the vocals
+  or taken from text you paste. **Use in Cut** places the whole song or the IN-OUT range.
+- **Image**: several pictures in one run with a local model. Edit with selection tools, numbered boxes and **Remove**.
+  Every picture keeps the prompt and settings that made it.
+- **Video**: takes from keyframes or reference pictures, run on your machine. Continue a take from a chosen frame, keep
   the best one.
 - **Cut**: a large viewer (Timeline and Source), tracks V1, V2, A1 to A3 and Music. Clips come from your folders
   through Source IN/OUT. Each cut of the project is its own item in **Media**.
@@ -121,7 +173,8 @@ No model ships with Continuo, and the Sample film needs none.
 
 - **Without any model**: Script, Cut, Deliver, Media and Jobs, plus Audio playback, IN and OUT, markers, beat analysis
   with the built-in librosa engine, and **Use in Cut**.
-- **With ComfyUI and models**: Image **Create** and **Edit**, Video takes and upscaling, stems, music and voice generation.
+- **With ComfyUI and models**: Image **Create** and **Edit**, Video takes and upscaling, stems and music generation.
+  Voice and song generation are in progress.
 
 Each generation feature runs a ComfyUI workflow. Install only the models of the workflows you want to use:
 
@@ -132,8 +185,10 @@ Each generation feature runs a ComfyUI workflow. Install only the models of the 
 | **Video** | 8 | 4.5–45.6 GB |
 | **Audio** (5 in progress) | 7 | 0.5–40.1 GB |
 
+**All workflows and model sizes**
+
 <details>
-<summary>All workflows and model sizes</summary>
+<summary>Show the table</summary>
 
 Sizes come from the plugin's own source list (`dashboard/workflows/model-sources.json`); files shared between
 workflows count once per row. Rows marked "in progress" are wired but not yet proven in the app. Repos are on Hugging
@@ -142,45 +197,45 @@ Face, custom nodes on GitHub.
 | Workflow | For | Size | Files | Hugging Face repos, custom nodes |
 |:---|:---|:---|:---|:---|
 | yue2-song-v1 | Audio: a song with lyrics (in progress) | 3.96 GB | 1 | Comfy-Org/YuE2 |
-| omnivoice-design-v1 | Audio: a voice from a description (in progress) | 2.45 GB | 1 | Bgeorge/OmniVoice<br>Nodes: Saganaki22/ComfyUI-OmniVoice-TTS |
-| drama3-clone-v1 | Audio: a voice from a reference recording (in progress) | 40.14 GB | 2 | PedroMarinhoDev/Drama-3-ComfyUI<br>Nodes: PedroMarinhoDev/ComfyUI-Drama3 |
-| omnivoice-clone-v1 | Audio: a voice from a reference recording (in progress) | 2.45 GB | 1 | Bgeorge/OmniVoice<br>Nodes: Saganaki22/ComfyUI-OmniVoice-TTS |
-| foundation1-loop-v1 | Audio: loops and keybeds (in progress) | 5.75 GB | 3 | RoyalCities/Foundation-1<br>google-t5/t5-base |
+| omnivoice-design-v1 | Audio: a voice from a description (in progress) | 2.45 GB | 1 | Bgeorge/OmniVoice; Nodes: Saganaki22/ComfyUI-OmniVoice-TTS |
+| drama3-clone-v1 | Audio: a voice from a reference recording (in progress) | 40.14 GB | 2 | PedroMarinhoDev/Drama-3-ComfyUI; Nodes: PedroMarinhoDev/ComfyUI-Drama3 |
+| omnivoice-clone-v1 | Audio: a voice from a reference recording (in progress) | 2.45 GB | 1 | Bgeorge/OmniVoice; Nodes: Saganaki22/ComfyUI-OmniVoice-TTS |
+| foundation1-loop-v1 | Audio: loops and keybeds (in progress) | 5.75 GB | 3 | RoyalCities/Foundation-1; google-t5/t5-base |
 | sa3-small-music-v1 | Audio: music from a prompt (Stable Audio 3 Small) | 3.46 GB | 2 | Comfy-Org/stable-audio-3 |
 | audio-stems-v1 | Audio: split a song into stems | 0.46 GB | 1 | Kijai/MelBandRoFormer_comfy |
-| flux3-klein-sd-create-v1 | Image › Create | 20.77 GB | 4 | Comfy-Org/Flux-2-Dev<br>Comfy-Org/Krea-2<br>KoalaNation/FLUX-3-KLEIN-MODELS<br>black-forest-labs/flux-3-image-klein-comfy |
-| anima-turbo-create-v1 | Image › Create (Anima Turbo) | 5.63 GB | 3 | Comfy-Org/Qwen-Image<br>circlestone-labs/Anima |
-| flux2-klein-9b-t2i-v1 | Image › Create (FLUX.2 Klein 9B) | 18.82 GB | 3 | Comfy-Org/Flux-2-Dev<br>Comfy-Org/Flux-2-Klein-9B<br>black-forest-labs/FLUX.2-klein-9b-kv-fp8 |
-| ideogram4-create-v1 | Image › Create (Ideogram 4) | 30.09 GB | 4 | Comfy-Org/Flux-2-Dev<br>Comfy-Org/Ideogram-4<br>Comfy-Org/Qwen3-VL |
-| krea2-raw-t2i-create | Image › Create (Krea 2 Raw) | 18.99 GB | 3 | Comfy-Org/Krea-2<br>Comfy-Org/Qwen-Image<br>Comfy-Org/Qwen3-VL |
-| krea2-turbo-t2i-create | Image › Create (Krea 2 Turbo) | 18.99 GB | 3 | Comfy-Org/Krea-2<br>Comfy-Org/Qwen-Image<br>Comfy-Org/Qwen3-VL |
-| moss-image-sft-create-v1 | Image › Create (MOSS-Image) | 20.25 GB | 3 | Comfy-Org/Flux-2-Dev<br>Comfy-Org/MOSS-Image |
-| p-h3-image-lora-t2i-v1 | Image › Create (P-H3-Image) | 31.19 GB | 4 | Comfy-Org/MiniMax-H3<br>PrunaAI/P-H3-Image-Comfy |
-| qwen-image-2.1-create-pe-v3-v2 | Image › Create (Qwen-Image 2.1) | 27.09 GB | 5 | Comfy-Org/Qwen-Image-2.1<br>Comfy-Org/Qwen3-VL<br>PrunaAI/Pruna-Q-Image-2.1 |
-| flux3-klein-sd-edit-v1 | Image › Edit | 20.77 GB | 4 | Comfy-Org/Flux-2-Dev<br>Comfy-Org/Krea-2<br>KoalaNation/FLUX-3-KLEIN-MODELS<br>black-forest-labs/flux-3-image-klein-comfy |
-| flux2-klein-9b-kv-edit-v1 | Image › Edit (FLUX.2 Klein 9B) | 18.82 GB | 3 | Comfy-Org/Flux-2-Dev<br>Comfy-Org/Flux-2-Klein-9B<br>black-forest-labs/FLUX.2-klein-9b-kv-fp8 |
-| krea2-edit-turbo-v1 | Image › Edit (Krea 2 Turbo) | 20.82 GB | 4 | Comfy-Org/Krea-2<br>Comfy-Org/Qwen-Image<br>Comfy-Org/Qwen3-VL<br>conradlocke/krea2-identity-edit |
-| krea2-general-edit-v2 | Image › Edit (Krea 2 with the general edit LoRA) | 20.82 GB | 4 | Comfy-Org/Krea-2<br>Comfy-Org/Qwen-Image<br>Comfy-Org/Qwen3-VL<br>conradlocke/krea2-identity-edit |
-| krea2-edit-kroma-v1 | Image › Edit (Krea 2, Kroma) | 21.46 GB | 4 | Comfy-Org/Qwen-Image<br>Comfy-Org/Qwen3-VL<br>conradlocke/krea2-identity-edit<br>silveroxides/Kroma-Quant |
-| p-h3-image-lora-edit-v1 | Image › Edit (P-H3-Image) | 31.19 GB | 4 | Comfy-Org/MiniMax-H3<br>PrunaAI/P-H3-Image-Comfy |
-| qwen-image-2.1-edit-pe-v3-v2 | Image › Edit (Qwen-Image 2.1) | 27.09 GB | 5 | Comfy-Org/Qwen-Image-2.1<br>Comfy-Org/Qwen3-VL<br>PrunaAI/Pruna-Q-Image-2.1 |
-| qwen-image-2.1-edit-pe-v3 | Image › Edit (Qwen-Image 2.1, earlier pin) | 27.09 GB | 5 | Comfy-Org/Qwen-Image-2.1<br>Comfy-Org/Qwen3-VL<br>PrunaAI/Pruna-Q-Image-2.1 |
-| krea2-identity-edit-v2 | Image › Edit that keeps a person's identity (Krea 2 with the identity edit LoRA) | 20.82 GB | 4 | Comfy-Org/Krea-2<br>Comfy-Org/Qwen-Image<br>Comfy-Org/Qwen3-VL<br>conradlocke/krea2-identity-edit |
-| flux3-klein-box-edit-v1 | Image › Edit: the Box tool | 11.02 GB | 3 | Comfy-Org/Flux-2-Dev<br>Comfy-Org/Krea-2<br>KoalaNation/FLUX-3-KLEIN-MODELS |
-| minimax-h3-t2v | Video: a take from a prompt | 42.47 GB | 4 | Comfy-Org/MiniMax-H3<br>Nodes: chanon/comfyui-obvpm-timeline<br>kijai/ComfyUI-KJNodes<br>ComfyUI core ResolutionSelector (ComfyUI >= 0.25.0) |
-| minimax-h3-frames-v1 | Video: a take from keyframes | 41.05 GB | 5 | Comfy-Org/MiniMax-H3<br>Kijai/MiniMax-H3-experimental<br>Momoking/MiniMax-H3-Turbo-Lora-ComfyUI<br>Nodes: chanon/comfyui-obvpm-timeline |
-| minimax-h3-references-v1 | Video: a take from reference pictures, clips and sound | 45.59 GB | 6 | Comfy-Org/MiniMax-H3<br>Kijai/MiniMax-H3-experimental<br>Momoking/MiniMax-H3-Turbo-Lora-ComfyUI<br>Nodes: chanon/comfyui-obvpm-timeline |
-| minimax-h3-extend-mctx-v1 | Video: continue a take | 40.43 GB | 4 | Comfy-Org/MiniMax-H3<br>Kijai/MiniMax-H3-experimental<br>Nodes: chanon/comfyui-obvpm-timeline |
-| minimax-h3-bridge-mctx-v1 | Video: fill the gap between two takes | 40.43 GB | 4 | Comfy-Org/MiniMax-H3<br>Kijai/MiniMax-H3-experimental<br>Nodes: chanon/comfyui-obvpm-timeline |
-| minimax-h3-finish-v1 | Video: finishing pass (latent upscale, frame interpolation) | 4.49 GB | 4 | Comfy-Org/Frame-Interpolation<br>Comfy-Org/MiniMax-H3<br>KENIC-1/minimax_h3_latent_upscaler_3d_fp16_V2<br>Kijai/MiniMax-H3-experimental<br>Nodes: chanon/comfyui-obvpm-timeline<br>LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler |
-| minimax-h3-prepend-mctx-v1 | Video: lead into a take | 40.43 GB | 4 | Comfy-Org/MiniMax-H3<br>Kijai/MiniMax-H3-experimental<br>Nodes: chanon/comfyui-obvpm-timeline |
+| flux3-klein-sd-create-v1 | Image › Create | 20.77 GB | 4 | Comfy-Org/Flux-2-Dev; Comfy-Org/Krea-2; KoalaNation/FLUX-3-KLEIN-MODELS; black-forest-labs/flux-3-image-klein-comfy |
+| anima-turbo-create-v1 | Image › Create (Anima Turbo) | 5.63 GB | 3 | Comfy-Org/Qwen-Image; circlestone-labs/Anima |
+| flux2-klein-9b-t2i-v1 | Image › Create (FLUX.2 Klein 9B) | 18.82 GB | 3 | Comfy-Org/Flux-2-Dev; Comfy-Org/Flux-2-Klein-9B; black-forest-labs/FLUX.2-klein-9b-kv-fp8 |
+| ideogram4-create-v1 | Image › Create (Ideogram 4) | 30.09 GB | 4 | Comfy-Org/Flux-2-Dev; Comfy-Org/Ideogram-4; Comfy-Org/Qwen3-VL |
+| krea2-raw-t2i-create | Image › Create (Krea 2 Raw) | 18.99 GB | 3 | Comfy-Org/Krea-2; Comfy-Org/Qwen-Image; Comfy-Org/Qwen3-VL |
+| krea2-turbo-t2i-create | Image › Create (Krea 2 Turbo) | 18.99 GB | 3 | Comfy-Org/Krea-2; Comfy-Org/Qwen-Image; Comfy-Org/Qwen3-VL |
+| moss-image-sft-create-v1 | Image › Create (MOSS-Image) | 20.25 GB | 3 | Comfy-Org/Flux-2-Dev; Comfy-Org/MOSS-Image |
+| p-h3-image-lora-t2i-v1 | Image › Create (P-H3-Image) | 31.19 GB | 4 | Comfy-Org/MiniMax-H3; PrunaAI/P-H3-Image-Comfy |
+| qwen-image-2.1-create-pe-v3-v2 | Image › Create (Qwen-Image 2.1) | 27.09 GB | 5 | Comfy-Org/Qwen-Image-2.1; Comfy-Org/Qwen3-VL; PrunaAI/Pruna-Q-Image-2.1 |
+| flux3-klein-sd-edit-v1 | Image › Edit | 20.77 GB | 4 | Comfy-Org/Flux-2-Dev; Comfy-Org/Krea-2; KoalaNation/FLUX-3-KLEIN-MODELS; black-forest-labs/flux-3-image-klein-comfy |
+| flux2-klein-9b-kv-edit-v1 | Image › Edit (FLUX.2 Klein 9B) | 18.82 GB | 3 | Comfy-Org/Flux-2-Dev; Comfy-Org/Flux-2-Klein-9B; black-forest-labs/FLUX.2-klein-9b-kv-fp8 |
+| krea2-edit-turbo-v1 | Image › Edit (Krea 2 Turbo) | 20.82 GB | 4 | Comfy-Org/Krea-2; Comfy-Org/Qwen-Image; Comfy-Org/Qwen3-VL; conradlocke/krea2-identity-edit |
+| krea2-general-edit-v2 | Image › Edit (Krea 2 with the general edit LoRA) | 20.82 GB | 4 | Comfy-Org/Krea-2; Comfy-Org/Qwen-Image; Comfy-Org/Qwen3-VL; conradlocke/krea2-identity-edit |
+| krea2-edit-kroma-v1 | Image › Edit (Krea 2, Kroma) | 21.46 GB | 4 | Comfy-Org/Qwen-Image; Comfy-Org/Qwen3-VL; conradlocke/krea2-identity-edit; silveroxides/Kroma-Quant |
+| p-h3-image-lora-edit-v1 | Image › Edit (P-H3-Image) | 31.19 GB | 4 | Comfy-Org/MiniMax-H3; PrunaAI/P-H3-Image-Comfy |
+| qwen-image-2.1-edit-pe-v3-v2 | Image › Edit (Qwen-Image 2.1) | 27.09 GB | 5 | Comfy-Org/Qwen-Image-2.1; Comfy-Org/Qwen3-VL; PrunaAI/Pruna-Q-Image-2.1 |
+| qwen-image-2.1-edit-pe-v3 | Image › Edit (Qwen-Image 2.1, earlier pin) | 27.09 GB | 5 | Comfy-Org/Qwen-Image-2.1; Comfy-Org/Qwen3-VL; PrunaAI/Pruna-Q-Image-2.1 |
+| krea2-identity-edit-v2 | Image › Edit that keeps a person's identity (Krea 2 with the identity edit LoRA) | 20.82 GB | 4 | Comfy-Org/Krea-2; Comfy-Org/Qwen-Image; Comfy-Org/Qwen3-VL; conradlocke/krea2-identity-edit |
+| flux3-klein-box-edit-v1 | Image › Edit: the Box tool | 11.02 GB | 3 | Comfy-Org/Flux-2-Dev; Comfy-Org/Krea-2; KoalaNation/FLUX-3-KLEIN-MODELS |
+| minimax-h3-t2v | Video: a take from a prompt | 42.47 GB | 4 | Comfy-Org/MiniMax-H3; Nodes: chanon/comfyui-obvpm-timeline, kijai/ComfyUI-KJNodes, ComfyUI core ResolutionSelector (ComfyUI >= 0.25.0) |
+| minimax-h3-frames-v1 | Video: a take from keyframes | 41.05 GB | 5 | Comfy-Org/MiniMax-H3; Kijai/MiniMax-H3-experimental; Momoking/MiniMax-H3-Turbo-Lora-ComfyUI; Nodes: chanon/comfyui-obvpm-timeline |
+| minimax-h3-references-v1 | Video: a take from reference pictures, clips and sound | 45.59 GB | 6 | Comfy-Org/MiniMax-H3; Kijai/MiniMax-H3-experimental; Momoking/MiniMax-H3-Turbo-Lora-ComfyUI; Nodes: chanon/comfyui-obvpm-timeline |
+| minimax-h3-extend-mctx-v1 | Video: continue a take | 40.43 GB | 4 | Comfy-Org/MiniMax-H3; Kijai/MiniMax-H3-experimental; Nodes: chanon/comfyui-obvpm-timeline |
+| minimax-h3-bridge-mctx-v1 | Video: fill the gap between two takes | 40.43 GB | 4 | Comfy-Org/MiniMax-H3; Kijai/MiniMax-H3-experimental; Nodes: chanon/comfyui-obvpm-timeline |
+| minimax-h3-finish-v1 | Video: finishing pass (latent upscale, frame interpolation) | 4.49 GB | 4 | Comfy-Org/Frame-Interpolation; Comfy-Org/MiniMax-H3; KENIC-1/minimax_h3_latent_upscaler_3d_fp16_V2; Kijai/MiniMax-H3-experimental; Nodes: chanon/comfyui-obvpm-timeline, LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler |
+| minimax-h3-prepend-mctx-v1 | Video: lead into a take | 40.43 GB | 4 | Comfy-Org/MiniMax-H3; Kijai/MiniMax-H3-experimental; Nodes: chanon/comfyui-obvpm-timeline |
 | relayvsr-video-upscale-v1 | Video: upscale ×2 or ×4 (RelayVSR) | 10.58 GB | 4 | Comfy-Org/RelayVSR |
 
 </details>
 
 To see what a workflow needs, ask Hermes: "Which model files am I missing for &lt;workflow&gt;?" The tool
-`continuo_models_missing` compares the list with your ComfyUI folders and names each missing file with its folder, size, sha256, license and
-pinned download link. It never downloads anything.
+`continuo_models_missing` compares the list with your ComfyUI folders and names each missing file with its folder,
+size, sha256, license and pinned download link. It never downloads anything.
 
 ### Other external parts
 
@@ -193,6 +248,13 @@ Not installed by this plugin.
 | optional engines | beat tracking (measured 4.3 GB with its torch environment), scene analysis (0.67 GB), song map (0.16 GB), speech detection (2.3 MB), inpainting. Not installed by this plugin; features that need one show it as unavailable. |
 
 ### Optional analysis engines
+
+Better beat tracking, song maps, scene analysis, object removal and dialogue detection, each a one-line install.
+
+**Engines and how to install them**
+
+<details>
+<summary>Show</summary>
 
 Run these from the plugin directory. Beat, song and scene create their own Python environments; they never modify the Hermes environment. Sizes below are the existing measurements, not necessarily the total download or disk use of a new installation.
 
@@ -214,6 +276,8 @@ On Linux/macOS the default engine location is `~/AppData/Local/hermes/film-suite
 
 Thanks to @ShawnCRMer for reporting the missing installer (#1).
 
+</details>
+
 ## Talk to Hermes
 
 Continuo gives Hermes 209 `continuo_*` tools that cover all pages. Hermes picks the right ones from a plain
@@ -230,7 +294,7 @@ sentence, and the page you have open shows the result live.
 
 ## What this plugin does on your machine
 
-Everything Continuo does outside its own window: the install scan, the network, programs, background work, data and private Hermes access.
+Everything Continuo does outside its own window is listed here: the install scan, the network, the programs it starts, background work, where it keeps data and the Hermes internals it uses.
 
 ### Install scan
 
@@ -301,30 +365,27 @@ Hermes has no public plugin interface for the caller identity Continuo needs, so
   verifier for a yes or no. Hermes' tool calls reach the same routes in-process, and they work only after your desktop
   app has been verified once. The desktop app does this automatically when Continuo opens.
 
-<details>
-<summary>The internals by name</summary>
+The internals by name:
 
 - `hermes_cli.web_server._has_valid_session_token (caller_scope.py)`
 - `hermes_cli.dashboard_auth.base.Session (caller_scope.py)`
-
-</details>
 
 ## Troubleshooting
 
 | You see | Do this |
 |:---|:---|
 | The install asks about a **caution** rating | Expected for this plugin (see [Install](#install)). Answer `y`, or run the install again with `--force`. |
-| Continuo is not in the sidebar | Restart Hermes after `hermes plugins enable film-suite`. |
+| Continuo is not in the sidebar | Open **Capabilities > Plugins**, find **Continuo** and turn its switch on. A restart does not do this. |
 | "Preparing the Audio engine, or restart Hermes" or "Preparing picture import, or restart Hermes" | A Python package is unavailable in this process. Hermes may still be setting it up, or may need a restart after setup. Hermes can check with `continuo_dependencies`. |
 | The Sample film tile says "ffmpeg not found" | Install ffmpeg and put it on `PATH`, set `FFMPEG_PATH`, or place it in `C:\ffmpeg\bin`; then choose **Sample film** again. No half-made sample is left behind. |
+| A recent project is unavailable or its project file is missing | Restore `project.json` and the project folder from the original or a backup, or open another project folder. If the missing project was a Sample film, choose the Sample film tile to create a new copy. |
 | "ComfyUI is not running." | Start ComfyUI on this machine at `http://127.0.0.1:8188`. Continuo uses no other address. |
 | A model is missing | Ask Hermes "Which model files am I missing for &lt;workflow&gt;?" (`continuo_models_missing`), which names each file with its folder, size, sha256 and pinned download link; put the file into that ComfyUI folder. |
 | An analysis shows as unavailable | It may need an optional engine. See [Optional analysis engines](#optional-analysis-engines). |
 
 ## Roadmap
 
-Next: script import and export (FDX, Fountain, PDF), voice, song and loop generation on **Audio**, color on clips, and
-a final pass over the shared UI components. Details are in `ROADMAP.md`.
+What comes next is listed in `ROADMAP.md`.
 
 ## Feedback
 

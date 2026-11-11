@@ -40,12 +40,26 @@ page open: say so, or use the route tools (they work on the project files withou
 
 Load a tool's schema before the first call (`tool_describe`); the description names its payload and refusals.
 
+Before writing a prompt, load the matching skill: `film-suite:video-prompts` for a video take, `film-suite:image-prompts`
+for a picture or an edit. Each model reads its own prompt format.
+
+## Image page
+
+- `continuo_image_action` takes the `window_id` that `continuo_image_state` lists, not the one from
+  `continuo_suite_state`; leave it out when one Image pane is open.
+- A batch shows as one job in `continuo_image_state` and `continuo_jobs_list`; `continuo_media_feed` (kind image)
+  lists every picture of it with its id and seed.
+- To look at a picture, write a small copy with `continuo_image_export` (jpeg, size long_edge 768; the answer's file
+  lies under `project_folder`) and open that file; `continuo_image_picture` returns the full picture as base64,
+  megabytes per call.
+
 ## Budget: read once, change once, check once
 
 - Read the state you need once (suite state, then the one read of that family, e.g. `continuo_timeline_read` detail
   `summary`). Do not re-read to be sure.
 - Change with one call that carries the whole change (`continuo_timeline_apply` takes many verbs at once; script
-  writes take the revision you read).
+  writes take the revision you read). Pass `label` to `continuo_timeline_apply`: one short sentence in the artist's
+  words saying what the change does; the artist reads it next to Undo and in History.
 - Check once: the change's own answer is the check. Read again only when the answer says pending or asks you to.
 - A refusal names a reason code and usually the fix: apply the fix once; after two refusals of the same kind stop and
   tell the artist what was refused.
@@ -60,4 +74,12 @@ Generation (video, image, music, voice) runs on the artist's local GPU: submit o
 ## Consent
 
 The artist picks folders, files, ratings, keeps and names. Never approve a folder, choose a file, rate or keep on the
-artist's behalf, and never claim an export was imported into another program.
+artist's behalf, and never claim an export was imported into another program. The one exception: when the artist asks
+you to pick ("keep the best one"), do it: look at the pictures, keep one under a short name that describes it, and
+say which one and why, so the artist can change it.
+
+A folder is always the artist's to approve. A file the artist names in chat is the artist's choice: copy that one file
+with your own file tools into the project's media folder (`project_folder` from `continuo_project_state`, then
+`media/`), add it with the matching tool (`continuo_image_import`, `continuo_timeline_footage_add`,
+`continuo_timeline_audio_add`, `continuo_music_open`) and say where you put it. Never ask the artist to move files by
+hand, never pick a file the artist did not name, and never copy a whole folder.

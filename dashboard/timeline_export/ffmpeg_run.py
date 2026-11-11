@@ -10,6 +10,14 @@ from typing import Callable, Sequence
 
 from .errors import ExportError
 
+# One minimal environment for every child process (lane w39-env): dashboard/engine_process, loaded by path.
+import importlib.util as _child_env_import
+_child_env_spec = _child_env_import.spec_from_file_location(
+    "film_suite_engine_process", Path(__file__).resolve().parents[1] / "engine_process" / "__init__.py")
+_child_env_module = _child_env_import.module_from_spec(_child_env_spec)
+_child_env_spec.loader.exec_module(_child_env_module)
+child_env = _child_env_module.child_env
+
 ProgressFn = Callable[[int], None]
 CancelFn = Callable[[], bool]
 
@@ -54,7 +62,7 @@ def run_ffmpeg(
     try:
         proc = subprocess.Popen(
             args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), env=child_env(),
         )
     except FileNotFoundError as exc:
         raise ExportError("ffmpeg_unavailable", "ffmpeg is not available at the configured path.") from exc
@@ -117,7 +125,7 @@ def run_ffmpeg(
 
 def ffmpeg_version(ffmpeg: Path) -> str:
     try:
-        proc = subprocess.run([str(ffmpeg), "-version"], capture_output=True, text=True, encoding="utf-8", timeout=30)
+        proc = subprocess.run([str(ffmpeg), "-version"], capture_output=True, text=True, encoding="utf-8", timeout=30, env=child_env())
     except (OSError, subprocess.TimeoutExpired):
         return "unknown"
     first = proc.stdout.splitlines()[0] if proc.stdout else ""
