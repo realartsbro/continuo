@@ -11,7 +11,7 @@ Release requirements met and proven on a real install. Each line states the requ
 - A backend package missing from the baseline list ships dead in the installed plugin; packaging must be complete.
 - A new user needs a first success before downloading 40+ GB of models.
 - API keys must never appear in logs, recipes or jobs; a leak would fail catalog rules.
-- Catalog README and tool texts tell the truth: ComfyUI origin is fixed to 127.0.0.1:8188, exports land in the project output folder, BUILD-INFO counts the real tree.
+- Catalog README and tool texts tell the truth: ComfyUI is asked at 127.0.0.1:8188, then 127.0.0.1:8000, or at the address in FILM_SUITE_COMFY_URL, exports land in the project output folder, BUILD-INFO counts the real tree.
 - Ctrl+K 'Continuo' finds nothing and the sidebar may need a restart after install: a first-minutes break on a fresh marketplace install.
 - Extra files under hermes/film-suite make state_root refuse, which breaks the plugin at load.
 - Fresh install needs two restarts before audio analysis works; new users install on a fresh machine.
@@ -20,7 +20,7 @@ Release requirements met and proven on a real install. Each line states the requ
 - No credentials or provider calls in the UI is a catalog/security rule.
 - Project creation fails on some Windows homes.
 - Public catalog data must never contain credentials, private paths or workflows.
-- The Sample film opens on Cut (its playable cut) and shows the integration: shot records, a previz set and the song in Audio, honestly labelled as illustrated.
+- The Sample film opens on Cut (its playable cut) and shows the integration: shot records, a previz set and the song in Audio; its six pictures are named as AI-generated.
 - The catalog PR needs a public repo anyway; a clean repo with a roadmap lets invited people review and help.
 - The installer must not overwrite local files or silently restart Hermes and must allow rollback; that decides catalog acceptance.
 - Waveform and transport must appear even when an analysis dependency is missing; otherwise the page is blank for a fresh user.

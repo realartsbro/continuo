@@ -19,6 +19,6 @@
   "license": "MIT",
   "requires_hermes": ">=0.22.7",
   "schema": "film-suite.catalog-build/1",
-  "source_commit": "b60c92e4a403613f47b3c0254f28bcaf2086f768",
+  "source_commit": "ad8c65dcea8c29b929b9e03732da01064c99bcc3",
   "tools": 209
 }
