@@ -110,7 +110,9 @@ async def image_workflow_health(request: ImageWorkflowHealthRequest) -> Any:
     except ValueError:
         return _edit_error(422, "invalid_image_request", "The Image controls do not match the descriptor")
     except Exception:
-        return {"state": "unreachable", "inference_tested": False, "target_id": request.target_id}
+        engine = _comfy_endpoint_module.engine_state()  # w39-p2-tester item 2: say why, with the address
+        return {"state": "unreachable", "inference_tested": False, "target_id": request.target_id, "engine": engine,
+                **({"reason": engine["reason"]} if engine.get("reason") else {})}
 
 
 

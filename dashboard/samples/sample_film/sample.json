@@ -1,7 +1,7 @@
 {
  "schema": "film-suite.sample-project/1",
  "name": "Sample film",
- "licence": "CC0-1.0 (made by catalog/make-sample-film.py)",
+ "licence": "CC0-1.0 (script, music). Pictures: AI-generated with Krea 2 Turbo.",
  "rate": {
   "num": 24,
   "den": 1
@@ -13,7 +13,7 @@
  "script": "script.fountain",
  "shots": [
   {
-   "picture": "pictures/shot-01.png",
+   "picture": "pictures/shot-01.jpg",
    "clip": "clips/shot-01.mp4",
    "label": "Harbour, wide",
    "duration_frames": 96,
@@ -28,7 +28,7 @@
    }
   },
   {
-   "picture": "pictures/shot-02.png",
+   "picture": "pictures/shot-02.jpg",
    "clip": "clips/shot-02.mp4",
    "label": "Ines on her suitcase",
    "duration_frames": 96,
@@ -43,7 +43,7 @@
    }
   },
   {
-   "picture": "pictures/shot-03.png",
+   "picture": "pictures/shot-03.jpg",
    "clip": "clips/shot-03.mp4",
    "label": "Ferryman",
    "duration_frames": 96,
@@ -58,7 +58,7 @@
    }
   },
   {
-   "picture": "pictures/shot-04.png",
+   "picture": "pictures/shot-04.jpg",
    "clip": "clips/shot-04.mp4",
    "label": "Lighthouse beam",
    "duration_frames": 96,
@@ -73,7 +73,7 @@
    }
   },
   {
-   "picture": "pictures/shot-05.png",
+   "picture": "pictures/shot-05.jpg",
    "clip": "clips/shot-05.mp4",
    "label": "Cabin lamp",
    "duration_frames": 96,
@@ -88,7 +88,7 @@
    }
   },
   {
-   "picture": "pictures/shot-06.png",
+   "picture": "pictures/shot-06.jpg",
    "clip": "clips/shot-06.mp4",
    "label": "Ferry leaves",
    "duration_frames": 96,
@@ -103,6 +103,5 @@
    }
   }
  ],
- "music": "sound/harbour-pad.mp3",
- "illustrated": true
+ "music": "sound/harbour-pad.mp3"
 }

@@ -3597,7 +3597,7 @@
             "min_px": null,
             "max_px": null,
             "multiple": 32,
-            "default_megapixels": 2.0
+            "default_megapixels": 8.0
           },
           "stages": [],
           "notes": [
@@ -3606,7 +3606,7 @@
           ],
           "suite_targets": [],
           "workflow": {
-            "manifest_sha256": "9cc637ab7c16583f39239f6cf4ad09cbaf6b8ae52abf99e479e2105d06972bb6",
+            "manifest_sha256": "913756539b15796d44c697aa94857c654f82444a8e7913fd233b4217fdb683c8",
             "api_sha256": "8c817d5e1fc371777ac7028c471eb4fb3ad9d341e8e6deb98b910c3557a49c51",
             "descriptor": {
               "availability": "backend_only",
@@ -3644,7 +3644,7 @@
                   ]
                 },
                 {
-                  "default": 2.0,
+                  "default": 8.0,
                   "id": "megapixels",
                   "kind": "number",
                   "label": "Megapixels",
@@ -3750,7 +3750,7 @@
                 "kind": "image",
                 "size_policy": "explicit"
               },
-              "reason": "P-H3-Image: the PrunaAI LoRA on the MiniMax H3 FL2VA transformer, 8 sigmas by default (Steps resamples the card's grid) without CFG, starts at 16:9 about 2 MP like the other local models, best at 8 MP (offered up to 16); the request reaches the model as written (no prompt upsampler).",
+              "reason": "P-H3-Image: the PrunaAI LoRA on the MiniMax H3 FL2VA transformer, 8 sigmas by default (Steps resamples the card's grid) without CFG, starts at 16:9 at 8 MP, the card's best size (below it faces and hands break more often; offered 1 to 16); the request reaches the model as written (no prompt upsampler).",
               "request_schema": "studio.image-workflow-request/1",
               "target_id": "p-h3-image-lora-t2i-v1"
             }

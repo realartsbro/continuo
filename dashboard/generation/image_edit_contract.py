@@ -495,14 +495,15 @@ def _edit_evidence() -> dict[str, Any]:
 
 
 def _apply_evidence(value: dict[str, Any], evidence: Mapping[str, Any]) -> None:
-    """An operation is offered only when its target rendered for real and that operation did not fail."""
+    """Every wired operation is offered; a target without a render record carries that fact (``unrendered``,
+    the tooltip and Hermes' warning), never a refusal (w39-p2-open). An operation that failed for real is refused."""
     for family in value["families"]:
         for op, declared in (family.get("operations") or {}).items():
             if not isinstance(declared, dict) or not declared.get("available"):
                 continue
             entry = evidence.get(declared.get("target_id"))
             if not isinstance(entry, Mapping) or entry.get("state") != "rendered":
-                declared.update(available=False, reason="Not proven: never rendered through the Suite")
+                declared["unrendered"] = "No render through the Suite on record"
             elif (entry.get("operations") or {}).get(op) == "failed" and declared.get("warning"):
                 declared["verified"] = entry.get("date")  # w24-edit2: measured bad, offered with that measured warning
             elif (entry.get("operations") or {}).get(op) == "failed":
@@ -584,6 +585,8 @@ def normalize_request(raw: Mapping[str, Any]) -> dict[str, Any]:
     # w24-edit2 (owner rule "keine Bevormundung", decision 4): a cell the matrix measured bad is offered and runs; its
     # measured reason travels with the edit as a warning for the hand (tooltip) and Hermes (the answer), never a refusal.
     measured = [f"model_warning: {label}: {capability['warning']}"] if capability.get("warning") else []
+    if capability.get("unrendered"):  # w39-p2-open: offered and run; the fact travels with the edit
+        measured.append(f"model_note: {label}: {capability['unrendered']}")
     boxes, box_mode, prompt_in, mode_in = None, None, raw.get("prompt"), None
     if raw.get("boxes") is not None and operation != "box":
         raise EditRequestError("invalid_edit_request", "Boxes go with the box operation")
@@ -591,7 +594,7 @@ def normalize_request(raw: Mapping[str, Any]) -> dict[str, Any]:
         boxes = _boxes(lambda m: m.normalize_boxes, raw.get("boxes"))
         box_mode = "native" if capability.get("method") == "native_boxes" else "mask"
         # Box intents per model (owner decision, wave 3): a family offers only the intents it was measured
-        # good at, and Move only once the carry is proven (capability ``move``).
+        # good at, and Move where the model can carry (capability ``move``: native boxes; a mask cannot carry).
         offered = capability.get("intents")
         for box in boxes:
             if box["intent"] == "move" and not capability.get("move"):

@@ -29,7 +29,13 @@ from .ffmpeg_run import child_env  # w39-env: one minimal environment for every 
 
 # w22-dlv (BCK-215): the one ComfyUI origin of the plugin (generation/comfyui_client.py is fixed to it too); no
 # environment override, so the README names exactly what runs.
-COMFY_URL = "http://127.0.0.1:8188"
+# w39-p2-tester item 4: the one configured ComfyUI address (generation/comfy_endpoint.py, loaded by path).
+import importlib.util as _endpoint_util
+from pathlib import Path as _EndpointPath
+_endpoint_spec = _endpoint_util.spec_from_file_location("film_suite_comfy_endpoint", _EndpointPath(__file__).resolve().parents[1] / "generation" / "comfy_endpoint.py")
+_endpoint = _endpoint_util.module_from_spec(_endpoint_spec)
+_endpoint_spec.loader.exec_module(_endpoint)
+COMFY_URL = _endpoint.DEFAULT_ORIGIN  # the default; every call reads _endpoint.comfy_origin()
 NODE = "FrameInterpolate"
 MODEL_LOADER = "FrameInterpolationModelLoader"
 LOADER = "VHS_LoadImagesPath"
@@ -38,13 +44,13 @@ TIMEOUT_S = 3600
 
 
 def _get(path: str, timeout: float = 30) -> Any:
-    with urllib.request.urlopen(COMFY_URL + path, timeout=timeout) as response:  # noqa: S310 (local ComfyUI only)
+    with urllib.request.urlopen(_endpoint.comfy_origin() + path, timeout=timeout) as response:  # noqa: S310 (local ComfyUI only)
         body = response.read()
     return json.loads(body) if body[:1] in (b"{", b"[") else body
 
 
 def _post(path: str, payload: dict[str, Any], timeout: float = 30) -> Any:
-    request = urllib.request.Request(COMFY_URL + path, data=json.dumps(payload).encode("utf-8"),
+    request = urllib.request.Request(_endpoint.comfy_origin() + path, data=json.dumps(payload).encode("utf-8"),
                                      headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
         body = response.read()
@@ -58,7 +64,7 @@ def available() -> tuple[bool, str]:
         loader = _get("/object_info/" + LOADER, timeout=10)
         models = _get("/object_info/" + MODEL_LOADER, timeout=10)
     except OSError as exc:
-        return False, f"ComfyUI does not answer at {COMFY_URL} ({exc.__class__.__name__})"
+        return False, f"ComfyUI does not answer at {_endpoint.comfy_origin()} ({exc.__class__.__name__})"
     if NODE not in (info or {}) or MODEL_LOADER not in (models or {}):
         return False, f"ComfyUI has no {NODE} / {MODEL_LOADER} node"
     if LOADER not in (loader or {}):

@@ -19,7 +19,12 @@ from typing import Any, Callable, Mapping
 
 SCHEMA = "studio.video-step/1"
 SUPPORT_SCHEMA_KEYS = ("supported", "reasons", "effective")
-_LOCAL_ENDPOINT = "127.0.0.1:8188"
+# w39-p2-tester item 4: the one configured ComfyUI address (generation/comfy_endpoint.py, loaded by path).
+import importlib.util as _endpoint_util
+from pathlib import Path as _EndpointPath
+_endpoint_spec = _endpoint_util.spec_from_file_location("film_suite_comfy_endpoint", _EndpointPath(__file__).resolve().parents[1] / "generation" / "comfy_endpoint.py")
+_endpoint = _endpoint_util.module_from_spec(_endpoint_spec)
+_endpoint_spec.loader.exec_module(_endpoint)
 
 
 class StepSource:
@@ -101,12 +106,12 @@ def read_evidence(path: Path) -> dict[str, Any] | None:
 
 
 def _billing(provider: Mapping[str, Any]) -> str:
-    return "local" if provider.get("endpoint_label") == _LOCAL_ENDPOINT else "metered"
+    return "local" if _endpoint.is_engine_label(provider.get("endpoint_label")) else "metered"
 
 
 def _platforms(provider: Mapping[str, Any]) -> list[str]:
     # A local engine target is proven on the artist's Windows machine only.
-    return ["windows"] if provider.get("endpoint_label") == _LOCAL_ENDPOINT else ["windows", "macos", "linux"]
+    return ["windows"] if _endpoint.is_engine_label(provider.get("endpoint_label")) else ["windows", "macos", "linux"]
 
 
 def _agent_note(mapping: str, guide: bool) -> str:

@@ -226,8 +226,15 @@ def _previz_block(request: PrevizBlockRequest) -> dict[str, Any]:
     if request.scene not in state["scenes"]:
         raise _planning_module("previz").PrevizRefusal("scene_unknown", "No such scene (continuo_script_read).")
     heading = next((line.strip() for line in state["scenes"][request.scene]["text"].split("\n") if line.strip()), "")
+    scene_text = state["scenes"][request.scene]["text"]
+    # w39-p2-previz: a character the scene's action names in its own words is in the scene too ("Ines smiles")
     people = [{"name": c["name"]} for c in derived.get("characters") or []
-              if request.scene in (c.get("speaks") or []) or c.get("introduced") == request.scene]
+              if request.scene in (c.get("speaks") or []) or c.get("introduced") == request.scene
+              or _planning_module("previz").names_in(c["name"], scene_text)]
+    # w39-p2-previz (agent run on a new script: "MARA sits on a crate" gave no figure): people the action introduces in
+    # capitals who never speak are people of the scene too
+    known = {p["name"].casefold() for p in people} | {c["name"].casefold() for c in derived.get("characters") or []}
+    people += [{"name": n} for n in _planning_module("previz").introduced_names(scene_text) if n.casefold() not in known]
     # The script's characters are elements once read (seeded, contract 4 tombstones respected): the same read as the page.
     catalogue = _elements_read(ElementsReadRequest(project_ref=request.project_ref))
     with _planning_open(request.project_ref, directory) as tx:
@@ -240,7 +247,7 @@ def _previz_block(request: PrevizBlockRequest) -> dict[str, Any]:
                 for s in derived.get("shots") or [] if s["scene"] == request.scene]
         cams_now = _previz_cameras(shots, [r["id"] for r in rows])
         before = doc["scenes"].get(request.scene)
-        new_set, cams = pv.block(pv.scene_of(doc, request.scene), heading, people, rows, cams_now)
+        new_set, cams = pv.block(pv.scene_of(doc, request.scene), heading, people, rows, cams_now, scene_text)
         new_set = pv.apply_set({"scenes": {request.scene: new_set}}, request.scene, {})
         if cams:
             plan.apply(shots, [{"shot": s, "camera": c} for s, c in cams.items()], None, _film_caller(), _previz_now())

@@ -43,7 +43,13 @@ _child_env_module = _child_env_import.module_from_spec(_child_env_spec)
 _child_env_spec.loader.exec_module(_child_env_module)
 child_env = _child_env_module.child_env
 
-COMFY_ORIGIN = "http://127.0.0.1:8188"
+# w39-p2-tester item 4: the one configured ComfyUI address (generation/comfy_endpoint.py, loaded by path).
+import importlib.util as _endpoint_util
+from pathlib import Path as _EndpointPath
+_endpoint_spec = _endpoint_util.spec_from_file_location("film_suite_comfy_endpoint", _EndpointPath(__file__).resolve().parents[1] / "generation" / "comfy_endpoint.py")
+_endpoint = _endpoint_util.module_from_spec(_endpoint_spec)
+_endpoint_spec.loader.exec_module(_endpoint)
+COMFY_ORIGIN = _endpoint.DEFAULT_ORIGIN  # the default; every request reads _endpoint.comfy_origin()
 FROZEN_BELOW = 1.0
 PROXY_WIDTH = 640
 MIN_CLIP_FRAMES = 5
@@ -337,7 +343,7 @@ def upload_temp(data: bytes, filename: str, *, opener: Callable[..., Any] | None
     """Upload bytes to ComfyUI ``temp/``; return the graph name ``"<name> [temp]"``."""
     body, boundary = _multipart({"type": "temp", "overwrite": "true"}, "image", filename, data)
     request = urllib.request.Request(
-        COMFY_ORIGIN + "/upload/image", data=body, method="POST",
+        _endpoint.comfy_origin() + "/upload/image", data=body, method="POST",
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
     open_ = opener or urllib.request.urlopen

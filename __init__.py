@@ -501,8 +501,9 @@ def _render_spec_choices() -> dict[str, Any]:
 def _image_model_rows() -> list[dict[str, Any]]:
     """The Image models with the picker's availability (the same projection /models/catalog answers).
 
-    ``availability`` is ``runnable`` only for what rendered for real through the Suite with its
-    files present; ``unavailable`` rows carry the plain reason the picker shows.
+    ``availability`` is ``runnable`` for every wired model with its files present (a model without a
+    render record says so in ``reason``; w39-p2-open); ``unavailable`` rows (missing files, a render that
+    failed, a subscription not connected) carry the plain reason the picker shows.
     """
     spec = importlib.util.spec_from_file_location("film_suite_agent_model_catalog", _MODEL_CATALOG_PATH)
     if spec is None or spec.loader is None:
@@ -571,7 +572,7 @@ def _handle_image_catalog(args: dict[str, Any], **_kwargs: Any) -> str:
                 f"Pick with continuo_image_action select_tile {{axis, key}}. LoRA is multi-select (max {choices.get('lora_max', 32)}); selecting a picked LoRA again removes it.",
                 "Size and batch: set_size {format, mp | width, height, batch}; sampling.size and sampling.batch are the renderer bounds.",
                 "Character has no None tile; clear_axis on character is rejected.",
-                "models: availability runnable = rendered for real through the Suite; unavailable models are not in the picker (reason says why).",
+                "models: availability runnable = in the picker and usable (reason says whether a render through the Suite is on record; no record is no reason to avoid it); unavailable models are not in the picker (reason says why: missing files, a failed render, not connected).",
                 "models[].run (catalog targets): batch {min, max} for continuo_image_workflow_submit batch (seed + index per picture); loras.available with loras [{file, strength, role?}] from that model's family, else loras.reason says why it is refused.",
                 "Options with written_for_nous_girl=true use she/her and hair wording; the pane warns when another character is picked.",
             ],
@@ -996,7 +997,7 @@ _IMAGE_TOOLS = (
         "continuo_image_catalog",
         "List the Image builder options (axis, key, label, LoRA file and default strength, Nous-Girl wording flag) plus "
         "allowed samplers/schedulers, so tiles can be chosen by name, plus the Image models with the picker's availability "
-        "(runnable only when rendered for real through the Suite).",
+        "(runnable = wired with its files present; the reason says whether a render is on record).",
         {
             "axis": {"type": "string", "enum": list(image_bridge.AXES)},
             "query": {"type": "string", "maxLength": 80, "description": "Case-insensitive match on key, label or group."},

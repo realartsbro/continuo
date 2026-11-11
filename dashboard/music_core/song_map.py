@@ -56,7 +56,13 @@ SCHEMA = "studio.song-map/1"
 ENGINE_SCHEMA = "studio.song-engine/1"
 REQUEST_SCHEMA = "studio.song-runner-request/1"
 RESULT_SCHEMA = "studio.song-runner-result/1"
-COMFY_QUEUE_URL = "http://127.0.0.1:8188/queue"
+# w39-p2-tester item 4: the one configured ComfyUI address (generation/comfy_endpoint.py, loaded by path).
+import importlib.util as _endpoint_util
+from pathlib import Path as _EndpointPath
+_endpoint_spec = _endpoint_util.spec_from_file_location("film_suite_comfy_endpoint", _EndpointPath(__file__).resolve().parents[1] / "generation" / "comfy_endpoint.py")
+_endpoint = _endpoint_util.module_from_spec(_endpoint_spec)
+_endpoint_spec.loader.exec_module(_endpoint)
+COMFY_QUEUE_URL = _endpoint.DEFAULT_ORIGIN + "/queue"  # the default; the probe reads the configured address
 RUN_TIMEOUT_S = 1800
 TASKS = ("drums", "melody", "words", "sections", "novelty", "loudness", "events")
 
@@ -125,7 +131,7 @@ def locate() -> tuple[dict[str, Any] | None, str | None]:
 
 def comfy_queue_state() -> str:
     try:
-        with urllib.request.urlopen(COMFY_QUEUE_URL, timeout=1.5) as response:  # noqa: S310 - fixed loopback URL
+        with urllib.request.urlopen(_endpoint.comfy_origin() + "/queue", timeout=1.5) as response:  # noqa: S310 - configured ComfyUI address
             body = json.loads(response.read().decode("utf-8"))
     except Exception:  # noqa: BLE001 - unreachable means "do not assume it is idle"
         return "unreachable"

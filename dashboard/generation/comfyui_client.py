@@ -1,10 +1,9 @@
 """Loopback-only ComfyUI REST client.
 
 Bounded, read-mostly client for the local ComfyUI service.  The v1 endpoint
-is the exact fixed origin ``http://127.0.0.1:8188``; anything else — a
-hostname, userinfo, alternate port, scheme, redirect, or configuration
-override — is rejected.  A future connection editor requires a separate
-reviewed SSRF/DNS-rebinding design; none of that exists here.
+is the one configured address (``comfy_endpoint.comfy_origin``: FILM_SUITE_COMFY_URL,
+else this machine on port 8188, then 8000); an explicit origin that is not that
+address, userinfo, a path or a redirect is rejected.
 
 All blocking stdlib HTTP, hashing, and file work runs through
 ``asyncio.to_thread`` so the FastAPI event loop stays responsive.
@@ -27,7 +26,7 @@ from typing import Any, Mapping
 
 from .bounded_download import DownloadError, ExclusiveSink
 
-DEFAULT_ORIGIN = "http://127.0.0.1:8188"
+from .comfy_endpoint import DEFAULT_ORIGIN, comfy_origin  # noqa: F401 - DEFAULT_ORIGIN stays exported
 CONNECT_TIMEOUT_SECONDS = 2.0
 READ_TIMEOUT_SECONDS = 15.0
 MAX_JSON_BYTES = 16 * 1024 * 1024
@@ -92,10 +91,11 @@ def urlopen(request: urllib.request.Request, *, timeout: float | None = None) ->
 class ComfyUIClient:
     """Bounded REST client for the fixed local ComfyUI origin."""
 
-    def __init__(self, origin: str = DEFAULT_ORIGIN) -> None:
-        if origin != DEFAULT_ORIGIN:
-            raise ValueError(f"ComfyUI origin is fixed to {DEFAULT_ORIGIN}")
-        self.origin = origin
+    def __init__(self, origin: str | None = None) -> None:
+        resolved = comfy_origin()
+        if origin is not None and origin != resolved:
+            raise ValueError(f"ComfyUI origin must be the configured address {resolved}")
+        self.origin = resolved
 
     async def _request(
         self,

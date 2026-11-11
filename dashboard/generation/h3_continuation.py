@@ -34,7 +34,13 @@ BRIDGE_TARGET_ID = "minimax-h3-bridge-mctx-v1"
 ROLES = {EXTEND_TARGET_ID: "extend", PREPEND_TARGET_ID: "prepend", BRIDGE_TARGET_ID: "bridge"}
 TARGET_IDS = tuple(ROLES)
 PROVIDER_ID = "comfyui-local"
-COMFY_ORIGIN = "http://127.0.0.1:8188"
+# w39-p2-tester item 4: the one configured ComfyUI address (generation/comfy_endpoint.py, loaded by path).
+import importlib.util as _endpoint_util
+from pathlib import Path as _EndpointPath
+_endpoint_spec = _endpoint_util.spec_from_file_location("film_suite_comfy_endpoint", _EndpointPath(__file__).resolve().parents[1] / "generation" / "comfy_endpoint.py")
+_endpoint = _endpoint_util.module_from_spec(_endpoint_spec)
+_endpoint_spec.loader.exec_module(_endpoint)
+COMFY_ORIGIN = _endpoint.DEFAULT_ORIGIN  # the default; every request reads _endpoint.comfy_origin()
 FOLDER = "studio-h3"
 STAGED = FOLDER + "/staged"
 PROMPT_SENTINEL = "__STUDIO_PROMPT__"
@@ -415,7 +421,7 @@ def _multipart(fields: Mapping[str, str], filename: str, data: bytes) -> tuple[b
 def upload_output(data: bytes, filename: str, *, opener: Callable[..., Any] | None = None) -> str:
     """Write one file byte-exact to ``ComfyUI/output/studio-h3/staged/<filename>``; return its output path."""
     body, boundary = _multipart({"type": "output", "subfolder": STAGED, "overwrite": "true"}, filename, data)
-    request = urllib.request.Request(COMFY_ORIGIN + "/upload/image", data=body, method="POST",
+    request = urllib.request.Request(_endpoint.comfy_origin() + "/upload/image", data=body, method="POST",
                                      headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
     with (opener or urllib.request.urlopen)(request, timeout=300) as response:
         answer = json.loads(response.read(1 << 20).decode("utf-8"))
@@ -448,7 +454,7 @@ def release_staged(paths: list[str], *, opener: Callable[..., Any] | None = None
         if type(path) is not str or not path.startswith(STAGED + "/") or ".." in path or not path.endswith(".mp4"):
             continue
         body = json.dumps({"path": path}).encode("utf-8")
-        request = urllib.request.Request(COMFY_ORIGIN + "/obvpm/h3/delete_take", data=body, method="POST",
+        request = urllib.request.Request(_endpoint.comfy_origin() + "/obvpm/h3/delete_take", data=body, method="POST",
                                          headers={"Content-Type": "application/json"})
         try:
             with (opener or urllib.request.urlopen)(request, timeout=30) as response:

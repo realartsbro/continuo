@@ -194,13 +194,21 @@ def run_take(
         raise VoiceRunError(message) from exc
 
 
-class ComfyHTTP:
-    """The real ComfyUI side over the loopback HTTP API (127.0.0.1:8188 only)."""
+# w39-p2-tester item 4: the one configured ComfyUI address (generation/comfy_endpoint.py, loaded by path).
+import importlib.util as _endpoint_util
+from pathlib import Path as _EndpointPath
+_endpoint_spec = _endpoint_util.spec_from_file_location("film_suite_comfy_endpoint", _EndpointPath(__file__).resolve().parents[1] / "generation" / "comfy_endpoint.py")
+_endpoint = _endpoint_util.module_from_spec(_endpoint_spec)
+_endpoint_spec.loader.exec_module(_endpoint)
 
-    def __init__(self, origin: str = "http://127.0.0.1:8188", *, client_id: str | None = None, progress: Callable[[str], float | None] | None = None):
-        if origin != "http://127.0.0.1:8188":
-            raise ValueError("voice takes run on the local engine only")
-        self.origin = origin
+class ComfyHTTP:
+    """The real ComfyUI side over the configured ComfyUI HTTP API (comfy_endpoint)."""
+
+    def __init__(self, origin: str | None = None, *, client_id: str | None = None, progress: Callable[[str], float | None] | None = None):
+        resolved = _endpoint.comfy_origin()
+        if origin is not None and origin != resolved:
+            raise ValueError("voice takes run on the configured engine only")
+        self.origin = resolved
         self.client_id = client_id or f"fs-voice-{uuid.uuid4().hex[:12]}"
         self._progress = progress
 

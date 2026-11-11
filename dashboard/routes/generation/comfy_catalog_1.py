@@ -224,7 +224,7 @@ def _static_checks_all(value: bool) -> dict[str, bool]:
 
 
 def _unreachable_generation_health(request: GenerationHealthRequest) -> dict[str, Any]:
-    return generation.StaticHealth(
+    out = generation.StaticHealth(
         provider_id=request.provider_id,
         target_id=request.target_id,
         state="unreachable",
@@ -232,6 +232,12 @@ def _unreachable_generation_health(request: GenerationHealthRequest) -> dict[str
         inference_tested=False,
         reason_code="unreachable",
     ).to_dict()
+    if request.provider_id == "comfyui-local":
+        # w39-p2-tester item 2: the one true reason names the fact and the address(es) asked.
+        engine = _comfy_endpoint_module.engine_state()
+        out["engine"] = engine
+        out["reason"] = engine.get("reason") or f"ComfyUI at {engine.get('address')} answers; this model's check failed"
+    return out
 
 
 @router.post("/generation/health")
@@ -274,7 +280,10 @@ async def generation_health(request: GenerationHealthRequest) -> dict[str, Any]:
                 manifest=manifest,
                 client=client,
             )
-            return health.to_dict()
+            out = health.to_dict()
+            if out.get("reason_code") == "unreachable":
+                return _unreachable_generation_health(request)  # w39-p2-tester item 2: one reason, with the address
+            return out
         except Exception:
             return _unreachable_generation_health(request)
     if request.provider_id == GMI_PROVIDER_ID:

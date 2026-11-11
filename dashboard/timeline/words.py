@@ -90,15 +90,20 @@ def phrases_of(names: list[str]) -> list[str]:
     return list(dict.fromkeys(phrase(n) for n in names))
 
 
+def more_edits(n: int) -> str:
+    """The count of edits a label does not name, saying what it counts (lane w39-p2-detail, rule 5): " +1 edit"."""
+    return f" +{n} edit{'' if n == 1 else 's'}" if n > 0 else ""
+
+
 def label_for(ops: list[dict], by: str) -> str:
-    """The revision label of a write without its own label: the first three distinct phrases, then "+N";
+    """The revision label of a write without its own label: the first three distinct phrases, then "+N edits";
     "Hermes: " before it when Hermes wrote it. Whole phrases only, never cut, within LABEL_MAX."""
     said = phrases_of([op.get("op", "") for op in ops])
     head = "Hermes: " if by == "hermes" else ""
     shown = SHOWN
     while True:
         rest = len(said) - shown
-        label = head + ", ".join(said[:shown]) + (f" +{rest}" if rest > 0 else "")
+        label = head + ", ".join(said[:shown]) + more_edits(rest)
         if len(label) <= LABEL_MAX or shown == 1:
             return label[:LABEL_MAX]
         shown -= 1

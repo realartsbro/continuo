@@ -693,6 +693,58 @@ def required_classes(catalog: Mapping[str, Any]) -> list[str]:
     return sorted(names)
 
 
+def engine_file_names(infos: Iterable[Any]) -> frozenset[str]:
+    """Model file names the engine's own loader nodes list (``object_info`` input options; w39-p2-tester item 4).
+
+    A ComfyUI on another port (the Windows desktop app) keeps its models in its own folder; its loader lists are the
+    truth for what it can load. Only names with a model suffix count; the folder kind is not known from a list."""
+    names: set[str] = set()
+    for info in infos:
+        if not isinstance(info, dict):
+            continue
+        for node in info.values():
+            inputs = node.get("input") if isinstance(node, dict) else None
+            for group in (inputs or {}).values() if isinstance(inputs, dict) else ():
+                for spec in (group or {}).values() if isinstance(group, dict) else ():
+                    options = spec[0] if isinstance(spec, (list, tuple)) and spec else None
+                    for option in options if isinstance(options, list) else ():
+                        if isinstance(option, str) and len(option) < 400 and Path(option).suffix.lower() in MODEL_SUFFIXES:
+                            names.add(option.replace("\\", "/"))
+    return frozenset(names)
+
+
+async def probe_engine(client: Any, names: Iterable[str], *, timeout: float = 20.0, concurrency: int = 8) -> tuple[frozenset[str] | None, frozenset[str]]:
+    """``(classes, file names)`` the engine registers / lists; ``(None, empty)`` when it is unreachable. Never queues work."""
+    wanted = sorted(set(names))
+    gate = asyncio.Semaphore(concurrency)
+    infos: list[Any] = []
+
+    async def one(name: str) -> str | None:
+        async with gate:
+            info = await client.object_info(name)
+        infos.append(info)
+        return name if isinstance(info, dict) and name in info else None
+
+    async def run() -> frozenset[str]:
+        await client.system_stats()
+        results = await asyncio.gather(*(one(name) for name in wanted))
+        return frozenset(name for name in results if name)
+
+    try:
+        classes = await asyncio.wait_for(run(), timeout)
+    except Exception:  # noqa: BLE001 - unreachable means unchecked, not missing
+        return None, frozenset()
+    return classes, engine_file_names(infos)
+
+
+def with_engine_files(found: Mapping[str, Any], engine_files: Iterable[str]) -> dict[str, Any]:
+    """Folder scan plus the engine's loader lists (a name the engine lists counts as present in every folder kind)."""
+    extra = set(engine_files or ())
+    if not extra:
+        return dict(found)
+    return {kind: {**entry, "names": sorted(set(entry.get("names", ())) | extra)} for kind, entry in found.items()}
+
+
 async def probe_classes(client: Any, names: Iterable[str], *, timeout: float = 20.0, concurrency: int = 8) -> frozenset[str] | None:
     """Which of ``names`` ComfyUI registers, via GET /object_info/{class}.
 
@@ -776,11 +828,16 @@ def load_evidence(path: Path | None = None) -> dict[str, Any]:
     return {"schema": EVIDENCE_SCHEMA, "variants": variants, "edit_targets": edits}
 
 
+# w39-p2-open (the artist, 11 Nov: "es gibt keinen Grund ihn davor zu schuetzen"): a wired model without a render
+# record is offered; this fact is only its tooltip (and the agent's reason), never a refusal.
+UNRENDERED = "No render through the Suite on record"
+
+
 def variant_evidence(evidence: Mapping[str, Any], family_id: str, variant_id: str) -> dict[str, Any]:
     """Public evidence of one variant: rendered / failed / unproven, with a plain reason."""
     entry = (evidence.get("variants") or {}).get(f"{family_id}/{variant_id}")
     if not entry:
-        return {"state": "unproven", "reason": "Not proven: never rendered through the Suite"}
+        return {"state": "unproven", "reason": UNRENDERED}
     out = {"state": entry["state"], "date": entry["date"]}
     if "seconds" in entry:
         out["seconds"] = entry["seconds"]
@@ -795,7 +852,7 @@ def edit_target_evidence(evidence: Mapping[str, Any], target_id: str, operation:
     """Evidence of one /image/edit target (and one operation when given)."""
     entry = (evidence.get("edit_targets") or {}).get(target_id)
     if not entry:
-        return {"state": "unproven", "reason": "Not proven: never rendered through the Suite"}
+        return {"state": "unproven", "reason": UNRENDERED}
     ops = entry.get("operations") or {}
     if operation is not None and ops.get(operation) == "failed":
         return {"state": "failed", "date": entry["date"], "reason": "Fails in the image engine: the grey area comes back unchanged"}
@@ -824,9 +881,10 @@ def public_catalog(
 ) -> dict[str, Any]:
     """Path-free projection: file NAMES with presence, never folders/sources.
 
-    Only what rendered for real is offered: a variant without a rendered
-    evidence entry (or with missing files) keeps no ``suite_targets`` and its
-    workflow says ``availability="unavailable"`` with the plain reason.
+    Every wired variant with its files present is offered (``runnable``); a variant
+    without a render record says so in its reason (the tooltip), never by being
+    withheld (w39-p2-open).  Missing files or a render that failed for real keep no
+    ``suite_targets`` and say ``availability="unavailable"`` with the plain reason.
     """
     if evidence is None:
         evidence = load_evidence()
@@ -850,7 +908,7 @@ def public_catalog(
                 availability, reason = ("runnable", "Connected") if connected else ("unavailable", "Not connected")
             elif offered and health["missing_files"]:
                 availability, reason = "unavailable", "Missing model files: " + ", ".join(health["missing_files"])
-            elif offered and proof["state"] != "rendered":
+            elif offered and proof["state"] == "failed":
                 availability, reason = "unavailable", proof["reason"]
             elif offered:
                 availability, reason = "runnable", proof["reason"]
@@ -896,10 +954,12 @@ def build_public_catalog(
     comfy_root: Path | None = None,
     catalog_path: Path | None = None,
     kinds: Iterable[str] = DEFAULT_KINDS,
+    engine_files: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Blocking: load catalog, scan folders, project. Run off the event loop."""
     catalog = load_catalog(catalog_path)
     found = discover_model_files(model_roots(comfy_root))  # None: FILM_SUITE_COMFY_ROOT, read now
+    found = with_engine_files(found, engine_files)
     return public_catalog(catalog, found, classes, _now(), kinds=kinds, subscription=_subscription_state())
 
 
@@ -935,7 +995,8 @@ def _subscription_state_unguarded() -> dict[str, Any]:
 __all__ = [
     "CATALOG_PATH", "CatalogError", "comfy_root", "DEFAULT_KINDS", "FAMILY_KINDS", "catalog_view", "FOLDER_KINDS", "MAX_DEPTH", "MAX_ENTRIES",
     "MAX_YAML_BYTES", "OPERATIONS", "SCHEMA", "build_public_catalog", "discover_model_files", "find_variant",
-    "krea_profile", "load_catalog", "model_roots", "parse_catalog", "probe_classes", "public_catalog",
+    "krea_profile", "load_catalog", "model_roots", "parse_catalog", "probe_classes", "probe_engine", "public_catalog",
+    "engine_file_names", "with_engine_files",
     "required_classes", "variant_files", "variant_health", "EVIDENCE_PATH", "load_evidence", "variant_evidence",
     "edit_target_evidence",
 ]

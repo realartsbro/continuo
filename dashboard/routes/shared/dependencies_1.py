@@ -85,8 +85,9 @@ async def film_suite_dependencies() -> dict[str, Any]:
     ``tools`` / ``missing_tools`` / ``tools_fix`` name a missing one with its fix."""
     facts = await asyncio.to_thread(_film_suite_dependencies)
     missing_tools = await asyncio.to_thread(_missing_media_tools)
+    engine = await asyncio.to_thread(_comfy_endpoint_module.engine_state)  # w39-p2-tester item 2: the image engine
     return {**facts, "tools": {name: name not in missing_tools for name in ("ffmpeg", "ffprobe")},
-            "missing_tools": missing_tools, "tools_fix": dict(_FFMPEG_FIX)}
+            "missing_tools": missing_tools, "tools_fix": dict(_FFMPEG_FIX), "engine": engine}
 
 
 # The Audio and Image answers name the readiness state instead of "<module> not installed" when the missing module is

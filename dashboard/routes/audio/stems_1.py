@@ -98,7 +98,7 @@ def _audio_stems_public(job: dict[str, Any]) -> dict[str, Any]:
 
 
 def _audio_stems_comfy() -> Any:
-    """The local engine (127.0.0.1:8188 only), through the voice runner's loopback client (upload, queue, submit, history, view)."""
+    """The configured local engine (comfy_endpoint), through the voice runner's loopback client (upload, queue, submit, history, view)."""
     return _voice_runner_module.ComfyHTTP(client_id=_comfyui_preview_module.PREVIEW_CLIENT_ID, progress=_voice_progress)
 
 

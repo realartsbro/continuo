@@ -44,6 +44,10 @@
    {
     "api_sha256": "8c817d5e1fc371777ac7028c471eb4fb3ad9d341e8e6deb98b910c3557a49c51",
     "manifest_sha256": "adbc520956de79ef1b1e73fb5e92d3fdcd24c051c28cd925c37ca1dcfebeca67"
+   },
+   {
+    "api_sha256": "8c817d5e1fc371777ac7028c471eb4fb3ad9d341e8e6deb98b910c3557a49c51",
+    "manifest_sha256": "9cc637ab7c16583f39239f6cf4ad09cbaf6b8ae52abf99e479e2105d06972bb6"
    }
   ],
   "qwen-image-2.1-create-pe-v3-v2": [

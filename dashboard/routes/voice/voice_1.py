@@ -535,7 +535,7 @@ def _voice_generate_batch(request: VoiceGenerateRequest, receipt: Any = None) ->
 
 
 def _voice_comfy() -> Any:
-    """The local engine (127.0.0.1:8188 only); the preview reader's client id, so its % reaches the take."""
+    """The configured local engine (comfy_endpoint); the preview reader's client id, so its % reaches the take."""
     return _voice_runner_module.ComfyHTTP(client_id=_comfyui_preview_module.PREVIEW_CLIENT_ID, progress=_voice_progress)
 
 

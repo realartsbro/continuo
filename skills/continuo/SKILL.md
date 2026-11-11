@@ -53,6 +53,17 @@ for a picture or an edit. Each model reads its own prompt format.
   lies under `project_folder`) and open that file; `continuo_image_picture` returns the full picture as base64,
   megabytes per call.
 
+## Previz (block a scene)
+
+1. `continuo_script_read`: the scene id (`s-...`) and its shot ids. 2. `continuo_previz_block_scene {scene}`: the
+heading's place from the set kit, a figure per person posed by the action, a camera per shot. 3. Read the answer
+(`scenes[scene]`, `cameras`) and fix only what the artist asked for: set pieces with `continuo_previz_write` (the
+full `boxes` list; a kit piece is a box named with a kit word: pier, water, ferry, hull, lighthouse, rocks, shore,
+cabin, lamp, console, bench, table, chair, crate, suitcase, bollard, rope), a figure with `continuo_previz_figure`
+(pos [x, z], yaw 0 faces the camera side +z, pose stand|sit|walk|coil|lean), a camera with `continuo_previz_camera`
+(`expected_revision` = the read's `shot_plan_revision`). Metres, y up, the floor is y = 0. Each write is one
+proposal the artist can undo.
+
 ## Budget: read once, change once, check once
 
 - Read the state you need once (suite state, then the one read of that family, e.g. `continuo_timeline_read` detail

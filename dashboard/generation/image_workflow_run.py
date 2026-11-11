@@ -49,10 +49,18 @@ LORA_ROOTS: dict[str, str] = {
     # w24-h3img: the H3 FL2VA UNETLoader; the artist's LoRAs sit before P-H3-Image's own bypass LoRA (node 13)
     "p-h3-image-lora-t2i-v1": "10",
     "p-h3-image-lora-edit-v1": "10",
+    # w39-p2-open: Ideogram 4 renders with two models through one DualModelGuider: the conditional UNETLoader (10,
+    # into CFGOverride 16 -> guider ``model``) and the unconditional one (11, guider ``model_negative``). The artist's
+    # LoRAs go on both, the same files in the same order at the same strengths (LORA_ALSO), as the community graphs
+    # do ("load the same LoRA in both"; kat3ri/ComfyUI-ideogram4-regional-lora README). They are two different
+    # weight files, so each loader patches its own model (ComfyUI #14521 is about one file used twice).
+    "ideogram4-create-v1": "10",
+}
+# Further model nodes that take the same chain (a second copy, its own node ids after the first chain).
+LORA_ALSO: dict[str, tuple[str, ...]] = {
+    "ideogram4-create-v1": ("11",),
 }
 UNSUPPORTED: dict[str, str] = {
-    "ideogram4-create-v1": "Ideogram 4 renders with two models (conditional and unconditional) through one guider; "
-                           "a LoRA on one of them is not a supported setup",
     # w6-gptimage: a subscription model made by OpenAI's service; nothing local to load a LoRA into.
     "gpt-image-2-create-v1": "GPT Image is made by your ChatGPT (Codex) subscription; it takes no LoRA",
     "gpt-image-2-edit-v1": "GPT Image is made by your ChatGPT (Codex) subscription; it takes no LoRA",
@@ -157,24 +165,29 @@ def admit_loras(target_id: str, family_id: str, loras: list[dict[str, Any]], liv
 
 
 def apply_loras(graph: dict[str, Any], target_id: str, loras: list[dict[str, Any]]) -> dict[str, Any]:
-    """Insert the LoRA chain after the target's model node and rewire its consumers (in place)."""
+    """Insert the LoRA chain after the target's model node(s) and rewire their consumers (in place).
+
+    A target with more than one model node (LORA_ALSO, Ideogram 4's conditional and unconditional models) gets one
+    chain per node: the same files, order and strengths; the first chain keeps ids LORA_NODE_BASE.. as before."""
     if not loras:
         return graph
     root = LORA_ROOTS.get(target_id)
-    if root is None or root not in graph:
+    roots = ((root,) if root is not None else ()) + LORA_ALSO.get(target_id, ())
+    if root is None or any(r not in graph for r in roots):
         raise RunError("loras_unavailable", UNSUPPORTED.get(target_id, "This model's workflow takes no LoRA"))
-    ids = [str(LORA_NODE_BASE + i) for i in range(len(loras))]
+    ids = [str(LORA_NODE_BASE + i) for i in range(len(loras) * len(roots))]
     if any(node_id in graph for node_id in ids):
         raise RunError("loras_unavailable", "LoRA node collision")
-    consumers = [(node_id, key) for node_id, node in graph.items() for key, value in node["inputs"].items()
-                 if isinstance(value, list) and len(value) == 2 and value[0] == root and value[1] == 0]
-    parent = root
-    for node_id, item in zip(ids, loras):
-        graph[node_id] = {"class_type": "LoraLoaderModelOnly",
-                          "inputs": {"model": [parent, 0], "lora_name": item["file"].replace("/", os.sep), "strength_model": item["strength"]}}
-        parent = node_id
-    for node_id, key in consumers:
-        graph[node_id]["inputs"][key] = [parent, 0]
+    consumers = {r: [(node_id, key) for node_id, node in graph.items() for key, value in node["inputs"].items()
+                     if isinstance(value, list) and len(value) == 2 and value[0] == r and value[1] == 0] for r in roots}
+    for index, model_node in enumerate(roots):
+        parent = model_node
+        for node_id, item in zip(ids[index * len(loras):(index + 1) * len(loras)], loras):
+            graph[node_id] = {"class_type": "LoraLoaderModelOnly",
+                              "inputs": {"model": [parent, 0], "lora_name": item["file"].replace("/", os.sep), "strength_model": item["strength"]}}
+            parent = node_id
+        for node_id, key in consumers[model_node]:
+            graph[node_id]["inputs"][key] = [parent, 0]
     return graph
 
 
@@ -212,6 +225,6 @@ def member_controls(controls: Mapping[str, Any], seed_default: int, index: int) 
     return out
 
 
-__all__ = ["BATCH_MAX", "BATCH_MIN", "FAMILY_LABELS", "LORA_EVIDENCE", "LORA_MAX", "LORA_NODE_BASE", "LORA_ROOTS", "ROLES",
+__all__ = ["BATCH_MAX", "BATCH_MIN", "FAMILY_LABELS", "LORA_ALSO", "LORA_EVIDENCE", "LORA_MAX", "LORA_NODE_BASE", "LORA_ROOTS", "ROLES",
            "RunError", "UNSUPPORTED", "admit_loras", "apply_loras", "check_batch", "compile_request", "lora_health",
            "lora_support", "member_controls", "normalize_loras", "run_descriptor", "strip"]

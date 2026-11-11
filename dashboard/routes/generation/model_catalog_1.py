@@ -49,20 +49,27 @@ async def models_catalog(request: ModelCatalogRequest) -> Any:
     """
     try:
         classes = None
+        engine_files: frozenset[str] = frozenset()
+        engine = None
         if request.check_classes:
             catalog = await asyncio.to_thread(_model_catalog_module.load_catalog)
-            classes = await _model_catalog_module.probe_classes(
+            # w39-p2-tester item 4: the engine's own loader lists count as present (a ComfyUI on another port keeps
+            # its models in its own folder), and the answer says whether an engine answered and where.
+            classes, engine_files = await _model_catalog_module.probe_engine(
                 _model_catalog_client(), _model_catalog_module.required_classes(catalog)
             )
-        return await asyncio.wait_for(
+            engine = await asyncio.to_thread(_comfy_endpoint_module.engine_state, answered=classes is not None)
+        out = await asyncio.wait_for(
             asyncio.to_thread(
                 _model_catalog_module.build_public_catalog,
                 classes,
                 comfy_root=_MODEL_CATALOG_COMFY_ROOT,
+                engine_files=engine_files,
                 **({"kinds": tuple(request.kinds)} if request.kinds else {}),
             ),
             _MODEL_CATALOG_TIMEOUT_SECONDS,
         )
+        return {**out, "engine": engine} if engine is not None else out
     except Exception:  # noqa: BLE001 - finite, path-free plugin boundary
         return JSONResponse(
             status_code=503,

@@ -346,6 +346,29 @@ function sampleTimes(n) {
   if (n === 1) return [0];
   return Array.from({ length: n }, (_, i2) => i2 / (n - 1));
 }
+function figureTones(figures) {
+  const hueOf = (c) => {
+    const r = (c >> 16 & 255) / 255, g = (c >> 8 & 255) / 255, b = (c & 255) / 255, M = Math.max(r, g, b), d = M - Math.min(r, g, b);
+    if (!d) return 0;
+    const h = M === r ? (g - b) / d % 6 : M === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return (h * 60 + 360) % 360;
+  };
+  const gap = (a, b) => Math.abs((hueOf(FIGURE_TONES[a]) - hueOf(FIGURE_TONES[b]) + 540) % 360 - 180);
+  const used = [];
+  return (figures || []).map((f2, i2) => {
+    const key = String(f2 && (f2.element || f2.name) || "");
+    let h = 0;
+    for (let c = 0; c < key.length; c++) h = Math.imul(h, 31) + key.charCodeAt(c) >>> 0;
+    const own2 = key ? h % FIGURE_TONES.length : i2 % FIGURE_TONES.length;
+    let k = own2;
+    if (used.includes(k) || used.some((u) => gap(u, k) < 90)) {
+      const free = FIGURE_TONES.map((_, j) => j).filter((j) => !used.includes(j));
+      k = free.length ? free.reduce((best, j) => Math.min(...used.map((u) => gap(u, j))) > Math.min(...used.map((u) => gap(u, best))) ? j : best, free[0]) : own2;
+    }
+    used.push(k);
+    return FIGURE_TONES[k];
+  });
+}
 function headingLight(heading2) {
   const h = String(heading2 || "").toUpperCase();
   const ext = /^\s*(EXT|E\/I)\b/.test(h) && !/^\s*(INT\.?\s*\/\s*EXT|I\/E)\b/.test(h) ? true : /^\s*(INT|I\/E)\b/.test(h) ? false : null;
@@ -428,8 +451,8 @@ function defaultCamera(scene, shot) {
     if (size === "ECU") return [[f2.pos[0], figEye(f2), f2.pos[1]]];
     return [[f2.pos[0], t2, f2.pos[1]], [f2.pos[0] + rx * w, t2 - 0.12, f2.pos[1] + rz * w], [f2.pos[0] - rx * w, t2 - 0.12, f2.pos[1] - rz * w], [f2.pos[0], b, f2.pos[1]]];
   });
-  const fits = (pos2, at, pts) => {
-    const fw = [at[0] - pos2[0], at[1] - pos2[1], at[2] - pos2[2]], fl = Math.hypot(...fw);
+  const fits = (pos2, at2, pts) => {
+    const fw = [at2[0] - pos2[0], at2[1] - pos2[1], at2[2] - pos2[2]], fl = Math.hypot(...fw);
     const f2 = fw.map((x) => x / fl);
     const rl = Math.hypot(f2[2], f2[0]) || 1, r = [-f2[2] / rl, 0, f2[0] / rl], u = [r[1] * f2[2] - r[2] * f2[1], r[2] * f2[0] - r[0] * f2[2], r[0] * f2[1] - r[1] * f2[0]];
     const tv = Math.tan(v / 2), th = tv * aspect2, mg = CLOSE2.has(size) ? 0.98 : 0.9;
@@ -453,9 +476,9 @@ function defaultCamera(scene, shot) {
     };
     const pts = keyPts(rx, rz);
     for (let i2 = 0; i2 < 40 && !fits([cx + dx * dist2, camY, cz + dz * dist2], aimAt(dist2), pts); i2++) dist2 *= 1.06;
-    const pos2 = [cx + dx * dist2, camY, cz + dz * dist2], at = aimAt(dist2);
+    const pos2 = [cx + dx * dist2, camY, cz + dz * dist2], at2 = aimAt(dist2);
     const clear2 = figures.every((f2) => Math.hypot(f2.pos[0] - pos2[0], f2.pos[1] - pos2[2]) >= FIG_CLEAR_M);
-    return { pos: pos2, at, dist: dist2, dx, dz, rx, rz, clear: clear2 };
+    return { pos: pos2, at: at2, dist: dist2, dx, dz, rx, rz, clear: clear2 };
   };
   let k = null;
   for (const off of subject.length > 1 ? [0, 20, -20, 40, -40, 65, -65] : [15, -15, 35, -35, 60, -60, 90, -90]) {
@@ -493,13 +516,13 @@ function evaluate(scene, shot, t2 = 0) {
   const end2 = cam.end || null;
   const k = end2 ? ease(Math.max(0, Math.min(1, Number(t2) || 0))) : 0;
   const pos2 = end2 ? lerp3(start.pos, end2.pos, k) : start.pos.slice();
-  const at = end2 ? lerp3(start.at, end2.at, k) : start.at.slice();
+  const at2 = end2 ? lerp3(start.at, end2.at, k) : start.at.slice();
   const aspect2 = aspectOf(cam);
   const lens = Number(cam.lens_mm) || 35;
   const over = shot && s.overrides && s.overrides[shot.id] || {};
   const figures = (s.figures || []).map((f2) => ({ ...f2, ...over[f2.id] || {}, pos: (over[f2.id] && over[f2.id].pos || f2.pos).slice() }));
   return {
-    camera: { pos: pos2, at, up: [0, 1, 0], fov: vfov(lens, Number(cam.sensor_w_mm) || 36, aspect2), aspect: aspect2, lens_mm: lens, roll_deg: Number(cam.roll_deg) || 0 },
+    camera: { pos: pos2, at: at2, up: [0, 1, 0], fov: vfov(lens, Number(cam.sensor_w_mm) || 36, aspect2), aspect: aspect2, lens_mm: lens, roll_deg: Number(cam.roll_deg) || 0 },
     figures,
     boxes: (s.boxes || []).map((b) => ({ ...b })),
     floor: s.floor || { w: 8, d: 8 },
@@ -528,14 +551,14 @@ function frameSignature(scene, shot) {
   }
   return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
 }
-var DEFAULT_CAMERA, lerp, lerp3, ease, MANNEQUIN, J, UPPER, SKELETON, FIGURE_TONES, figureTone, TIMES2, HEADROOM, FIG_CLEAR_M, CLOSE2, SPAN, sizeWidth, figTop, figEye, r33;
+var DEFAULT_CAMERA, lerp, lerp3, ease, MANNEQUIN, J, UPPER, SKELETON, FIGURE_TONES, TIMES2, HEADROOM, FIG_CLEAR_M, CLOSE2, SPAN, sizeWidth, figTop, figEye, r33;
 var init_previz_eval = __esm({
   "desktop/film-suite/src/planning/previz-eval.js"() {
     DEFAULT_CAMERA = { lens_mm: 35, sensor_w_mm: 36, aspect: "16:9", roll_deg: 0, start: { pos: [0, 1.6, 4.5], at: [0, 1.2, 0] } };
     lerp = (a, b, k) => a + (b - a) * k;
     lerp3 = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
     ease = (t2) => t2 * t2 * (3 - 2 * t2);
-    MANNEQUIN = { stand: { top: 1.735, eye: 1.6 }, sit: { top: 1.415, eye: 1.28 }, walk: { top: 1.735, eye: 1.6 } };
+    MANNEQUIN = { stand: { top: 1.735, eye: 1.6 }, sit: { top: 1.415, eye: 1.28 }, walk: { top: 1.735, eye: 1.6 }, coil: { top: 1.715, eye: 1.58 }, lean: { top: 1.725, eye: 1.59 } };
     J = (o, dy = 0, dz = 0) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, [v[0], v[1] + dy, v[2] + dz]]));
     UPPER = { neck0: [0, 1.44, 0], neck1: [0, 1.53, 0], head: [0, 1.62, 0], chest0: [0, 1.06, 0], chest1: [0, 1.36, 0], shoulderL: [-0.2, 1.38, 0], shoulderR: [0.2, 1.38, 0] };
     SKELETON = {
@@ -580,10 +603,41 @@ var init_previz_eval = __esm({
         elbowR: [0.24, 0.8, 0.1],
         wristL: [-0.2, 0.66, 0.32],
         wristR: [0.2, 0.66, 0.32]
+      },
+      // w39-p2-previz2 (bench 1.3: "arms hang straight down"; FrameForge / Cine Tracer pose libraries): poses with intent.
+      // coil: weight on the right leg (the left knee eased forward), both hands in front at the waist working a coil of
+      // rope (the renderer puts the coil in the hands); lean: weight on the left leg, the right hand out on a rail at hip
+      // height, the left hand at the hip.
+      coil: {
+        ...J(UPPER, -0.02, 0.03),
+        pelvis: [0.02, 0.95, 0],
+        hipL: [-0.08, 0.9, 0],
+        hipR: [0.12, 0.93, 0],
+        kneeL: [-0.11, 0.49, 0.09],
+        kneeR: [0.12, 0.5, 0.01],
+        ankleL: [-0.15, 0.08, 0.07],
+        ankleR: [0.12, 0.08, -0.02],
+        elbowL: [-0.24, 1.1, 0.1],
+        elbowR: [0.24, 1.12, 0.1],
+        wristL: [-0.1, 1.08, 0.33],
+        wristR: [0.12, 1.16, 0.31]
+      },
+      lean: {
+        ...J(UPPER, -0.01, 0),
+        pelvis: [-0.03, 0.95, 0],
+        hipL: [-0.13, 0.92, 0],
+        hipR: [0.07, 0.9, 0],
+        kneeL: [-0.12, 0.5, 0.01],
+        kneeR: [0.13, 0.49, 0.08],
+        ankleL: [-0.12, 0.08, 0],
+        ankleR: [0.2, 0.08, 0.1],
+        elbowL: [-0.32, 1.12, -0.05],
+        elbowR: [0.38, 1.18, 0.02],
+        wristL: [-0.19, 0.98, 0.04],
+        wristR: [0.52, 0.98, 0.06]
       }
     };
     FIGURE_TONES = [6262719, 12611663, 7316330, 11901514, 9072560, 5219235];
-    figureTone = (i2) => FIGURE_TONES[(i2 % FIGURE_TONES.length + FIGURE_TONES.length) % FIGURE_TONES.length];
     TIMES2 = ["day", "dawn", "dusk", "night"];
     HEADROOM = { CU: 0.08, MCU: 0.1, MCS: 0.1, MS: 0.1, MWS: 0.1, FS: 0.08 };
     FIG_CLEAR_M = 0.5;
@@ -846,13 +900,13 @@ function hue2rgb(p, q, t2) {
   return p;
 }
 function checkIntersection$1(object, material, raycaster, ray, pA, pB, pC, point2) {
-  let intersect;
+  let intersect2;
   if (material.side === BackSide) {
-    intersect = ray.intersectTriangle(pC, pB, pA, true, point2);
+    intersect2 = ray.intersectTriangle(pC, pB, pA, true, point2);
   } else {
-    intersect = ray.intersectTriangle(pA, pB, pC, material.side === FrontSide, point2);
+    intersect2 = ray.intersectTriangle(pA, pB, pC, material.side === FrontSide, point2);
   }
-  if (intersect === null) return null;
+  if (intersect2 === null) return null;
   _intersectionPointWorld.copy(point2);
   _intersectionPointWorld.applyMatrix4(object.matrixWorld);
   const distance = raycaster.ray.origin.distanceTo(_intersectionPointWorld);
@@ -921,9 +975,9 @@ function cloneUniforms(src) {
 function mergeUniforms(uniforms) {
   const merged = {};
   for (let u = 0; u < uniforms.length; u++) {
-    const tmp = cloneUniforms(uniforms[u]);
-    for (const p in tmp) {
-      merged[p] = tmp[p];
+    const tmp2 = cloneUniforms(uniforms[u]);
+    for (const p in tmp2) {
+      merged[p] = tmp2[p];
     }
   }
   return merged;
@@ -944,6 +998,19 @@ function getUnlitUniformColorSpace(renderer2) {
     return currentRenderTarget.texture.colorSpace;
   }
   return ColorManagement.workingColorSpace;
+}
+function transformVertex(vertexPosition, mvPosition, center, scale, sin, cos) {
+  _alignedPosition.subVectors(vertexPosition, center).addScalar(0.5).multiply(scale);
+  if (sin !== void 0) {
+    _rotatedPosition.x = cos * _alignedPosition.x - sin * _alignedPosition.y;
+    _rotatedPosition.y = sin * _alignedPosition.x + cos * _alignedPosition.y;
+  } else {
+    _rotatedPosition.copy(_alignedPosition);
+  }
+  vertexPosition.copy(mvPosition);
+  vertexPosition.x += _rotatedPosition.x;
+  vertexPosition.y += _rotatedPosition.y;
+  vertexPosition.applyMatrix4(_viewWorldMatrix);
 }
 function checkIntersection(object, raycaster, ray, thresholdSq, a, b, i2) {
   const positionAttribute = object.geometry.attributes.position;
@@ -966,6 +1033,514 @@ function checkIntersection(object, raycaster, ray, thresholdSq, a, b, i2) {
     object
   };
 }
+function CubicPoly() {
+  let c0 = 0, c1 = 0, c2 = 0, c3 = 0;
+  function init(x0, x1, t0, t1) {
+    c0 = x0;
+    c1 = t0;
+    c2 = -3 * x0 + 3 * x1 - 2 * t0 - t1;
+    c3 = 2 * x0 - 2 * x1 + t0 + t1;
+  }
+  return {
+    initCatmullRom: function(x0, x1, x2, x3, tension) {
+      init(x1, x2, tension * (x2 - x0), tension * (x3 - x1));
+    },
+    initNonuniformCatmullRom: function(x0, x1, x2, x3, dt0, dt1, dt2) {
+      let t1 = (x1 - x0) / dt0 - (x2 - x0) / (dt0 + dt1) + (x2 - x1) / dt1;
+      let t2 = (x2 - x1) / dt1 - (x3 - x1) / (dt1 + dt2) + (x3 - x2) / dt2;
+      t1 *= dt1;
+      t2 *= dt1;
+      init(x1, x2, t1, t2);
+    },
+    calc: function(t2) {
+      const t22 = t2 * t2;
+      const t3 = t22 * t2;
+      return c0 + c1 * t2 + c2 * t22 + c3 * t3;
+    }
+  };
+}
+function CatmullRom(t2, p0, p1, p2, p3) {
+  const v0 = (p2 - p0) * 0.5;
+  const v1 = (p3 - p1) * 0.5;
+  const t22 = t2 * t2;
+  const t3 = t2 * t22;
+  return (2 * p1 - 2 * p2 + v0 + v1) * t3 + (-3 * p1 + 3 * p2 - 2 * v0 - v1) * t22 + v0 * t2 + p1;
+}
+function QuadraticBezierP0(t2, p) {
+  const k = 1 - t2;
+  return k * k * p;
+}
+function QuadraticBezierP1(t2, p) {
+  return 2 * (1 - t2) * t2 * p;
+}
+function QuadraticBezierP2(t2, p) {
+  return t2 * t2 * p;
+}
+function QuadraticBezier(t2, p0, p1, p2) {
+  return QuadraticBezierP0(t2, p0) + QuadraticBezierP1(t2, p1) + QuadraticBezierP2(t2, p2);
+}
+function CubicBezierP0(t2, p) {
+  const k = 1 - t2;
+  return k * k * k * p;
+}
+function CubicBezierP1(t2, p) {
+  const k = 1 - t2;
+  return 3 * k * k * t2 * p;
+}
+function CubicBezierP2(t2, p) {
+  return 3 * (1 - t2) * t2 * t2 * p;
+}
+function CubicBezierP3(t2, p) {
+  return t2 * t2 * t2 * p;
+}
+function CubicBezier(t2, p0, p1, p2, p3) {
+  return CubicBezierP0(t2, p0) + CubicBezierP1(t2, p1) + CubicBezierP2(t2, p2) + CubicBezierP3(t2, p3);
+}
+function earcut(data, holeIndices, dim = 2) {
+  const hasHoles = holeIndices && holeIndices.length;
+  const outerLen = hasHoles ? holeIndices[0] * dim : data.length;
+  let outerNode = linkedList(data, 0, outerLen, dim, true);
+  const triangles = [];
+  if (!outerNode || outerNode.next === outerNode.prev) return triangles;
+  let minX, minY, invSize;
+  if (hasHoles) outerNode = eliminateHoles(data, holeIndices, outerNode, dim);
+  if (data.length > 80 * dim) {
+    minX = Infinity;
+    minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (let i2 = dim; i2 < outerLen; i2 += dim) {
+      const x = data[i2];
+      const y = data[i2 + 1];
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    invSize = Math.max(maxX - minX, maxY - minY);
+    invSize = invSize !== 0 ? 32767 / invSize : 0;
+  }
+  earcutLinked(outerNode, triangles, dim, minX, minY, invSize, 0);
+  return triangles;
+}
+function linkedList(data, start, end2, dim, clockwise) {
+  let last2;
+  if (clockwise === signedArea(data, start, end2, dim) > 0) {
+    for (let i2 = start; i2 < end2; i2 += dim) last2 = insertNode(i2 / dim | 0, data[i2], data[i2 + 1], last2);
+  } else {
+    for (let i2 = end2 - dim; i2 >= start; i2 -= dim) last2 = insertNode(i2 / dim | 0, data[i2], data[i2 + 1], last2);
+  }
+  if (last2 && equals(last2, last2.next)) {
+    removeNode(last2);
+    last2 = last2.next;
+  }
+  return last2;
+}
+function filterPoints(start, end2) {
+  if (!start) return start;
+  if (!end2) end2 = start;
+  let p = start, again;
+  do {
+    again = false;
+    if (!p.steiner && (equals(p, p.next) || area(p.prev, p, p.next) === 0)) {
+      removeNode(p);
+      p = end2 = p.prev;
+      if (p === p.next) break;
+      again = true;
+    } else {
+      p = p.next;
+    }
+  } while (again || p !== end2);
+  return end2;
+}
+function earcutLinked(ear, triangles, dim, minX, minY, invSize, pass) {
+  if (!ear) return;
+  if (!pass && invSize) indexCurve(ear, minX, minY, invSize);
+  let stop2 = ear;
+  while (ear.prev !== ear.next) {
+    const prev = ear.prev;
+    const next = ear.next;
+    if (invSize ? isEarHashed(ear, minX, minY, invSize) : isEar(ear)) {
+      triangles.push(prev.i, ear.i, next.i);
+      removeNode(ear);
+      ear = next.next;
+      stop2 = next.next;
+      continue;
+    }
+    ear = next;
+    if (ear === stop2) {
+      if (!pass) {
+        earcutLinked(filterPoints(ear), triangles, dim, minX, minY, invSize, 1);
+      } else if (pass === 1) {
+        ear = cureLocalIntersections(filterPoints(ear), triangles);
+        earcutLinked(ear, triangles, dim, minX, minY, invSize, 2);
+      } else if (pass === 2) {
+        splitEarcut(ear, triangles, dim, minX, minY, invSize);
+      }
+      break;
+    }
+  }
+}
+function isEar(ear) {
+  const a = ear.prev, b = ear, c = ear.next;
+  if (area(a, b, c) >= 0) return false;
+  const ax = a.x, bx = b.x, cx = c.x, ay = a.y, by = b.y, cy = c.y;
+  const x0 = Math.min(ax, bx, cx), y0 = Math.min(ay, by, cy), x1 = Math.max(ax, bx, cx), y1 = Math.max(ay, by, cy);
+  let p = c.next;
+  while (p !== a) {
+    if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 && pointInTriangleExceptFirst(ax, ay, bx, by, cx, cy, p.x, p.y) && area(p.prev, p, p.next) >= 0) return false;
+    p = p.next;
+  }
+  return true;
+}
+function isEarHashed(ear, minX, minY, invSize) {
+  const a = ear.prev, b = ear, c = ear.next;
+  if (area(a, b, c) >= 0) return false;
+  const ax = a.x, bx = b.x, cx = c.x, ay = a.y, by = b.y, cy = c.y;
+  const x0 = Math.min(ax, bx, cx), y0 = Math.min(ay, by, cy), x1 = Math.max(ax, bx, cx), y1 = Math.max(ay, by, cy);
+  const minZ = zOrder(x0, y0, minX, minY, invSize), maxZ = zOrder(x1, y1, minX, minY, invSize);
+  let p = ear.prevZ, n = ear.nextZ;
+  while (p && p.z >= minZ && n && n.z <= maxZ) {
+    if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 && p !== a && p !== c && pointInTriangleExceptFirst(ax, ay, bx, by, cx, cy, p.x, p.y) && area(p.prev, p, p.next) >= 0) return false;
+    p = p.prevZ;
+    if (n.x >= x0 && n.x <= x1 && n.y >= y0 && n.y <= y1 && n !== a && n !== c && pointInTriangleExceptFirst(ax, ay, bx, by, cx, cy, n.x, n.y) && area(n.prev, n, n.next) >= 0) return false;
+    n = n.nextZ;
+  }
+  while (p && p.z >= minZ) {
+    if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 && p !== a && p !== c && pointInTriangleExceptFirst(ax, ay, bx, by, cx, cy, p.x, p.y) && area(p.prev, p, p.next) >= 0) return false;
+    p = p.prevZ;
+  }
+  while (n && n.z <= maxZ) {
+    if (n.x >= x0 && n.x <= x1 && n.y >= y0 && n.y <= y1 && n !== a && n !== c && pointInTriangleExceptFirst(ax, ay, bx, by, cx, cy, n.x, n.y) && area(n.prev, n, n.next) >= 0) return false;
+    n = n.nextZ;
+  }
+  return true;
+}
+function cureLocalIntersections(start, triangles) {
+  let p = start;
+  do {
+    const a = p.prev, b = p.next.next;
+    if (!equals(a, b) && intersects(a, p, p.next, b) && locallyInside(a, b) && locallyInside(b, a)) {
+      triangles.push(a.i, p.i, b.i);
+      removeNode(p);
+      removeNode(p.next);
+      p = start = b;
+    }
+    p = p.next;
+  } while (p !== start);
+  return filterPoints(p);
+}
+function splitEarcut(start, triangles, dim, minX, minY, invSize) {
+  let a = start;
+  do {
+    let b = a.next.next;
+    while (b !== a.prev) {
+      if (a.i !== b.i && isValidDiagonal(a, b)) {
+        let c = splitPolygon(a, b);
+        a = filterPoints(a, a.next);
+        c = filterPoints(c, c.next);
+        earcutLinked(a, triangles, dim, minX, minY, invSize, 0);
+        earcutLinked(c, triangles, dim, minX, minY, invSize, 0);
+        return;
+      }
+      b = b.next;
+    }
+    a = a.next;
+  } while (a !== start);
+}
+function eliminateHoles(data, holeIndices, outerNode, dim) {
+  const queue = [];
+  for (let i2 = 0, len = holeIndices.length; i2 < len; i2++) {
+    const start = holeIndices[i2] * dim;
+    const end2 = i2 < len - 1 ? holeIndices[i2 + 1] * dim : data.length;
+    const list = linkedList(data, start, end2, dim, false);
+    if (list === list.next) list.steiner = true;
+    queue.push(getLeftmost(list));
+  }
+  queue.sort(compareXYSlope);
+  for (let i2 = 0; i2 < queue.length; i2++) {
+    outerNode = eliminateHole(queue[i2], outerNode);
+  }
+  return outerNode;
+}
+function compareXYSlope(a, b) {
+  let result = a.x - b.x;
+  if (result === 0) {
+    result = a.y - b.y;
+    if (result === 0) {
+      const aSlope = (a.next.y - a.y) / (a.next.x - a.x);
+      const bSlope = (b.next.y - b.y) / (b.next.x - b.x);
+      result = aSlope - bSlope;
+    }
+  }
+  return result;
+}
+function eliminateHole(hole, outerNode) {
+  const bridge2 = findHoleBridge(hole, outerNode);
+  if (!bridge2) {
+    return outerNode;
+  }
+  const bridgeReverse = splitPolygon(bridge2, hole);
+  filterPoints(bridgeReverse, bridgeReverse.next);
+  return filterPoints(bridge2, bridge2.next);
+}
+function findHoleBridge(hole, outerNode) {
+  let p = outerNode;
+  const hx = hole.x;
+  const hy = hole.y;
+  let qx = -Infinity;
+  let m;
+  if (equals(hole, p)) return p;
+  do {
+    if (equals(hole, p.next)) return p.next;
+    else if (hy <= p.y && hy >= p.next.y && p.next.y !== p.y) {
+      const x = p.x + (hy - p.y) * (p.next.x - p.x) / (p.next.y - p.y);
+      if (x <= hx && x > qx) {
+        qx = x;
+        m = p.x < p.next.x ? p : p.next;
+        if (x === hx) return m;
+      }
+    }
+    p = p.next;
+  } while (p !== outerNode);
+  if (!m) return null;
+  const stop2 = m;
+  const mx = m.x;
+  const my = m.y;
+  let tanMin = Infinity;
+  p = m;
+  do {
+    if (hx >= p.x && p.x >= mx && hx !== p.x && pointInTriangle(hy < my ? hx : qx, hy, mx, my, hy < my ? qx : hx, hy, p.x, p.y)) {
+      const tan = Math.abs(hy - p.y) / (hx - p.x);
+      if (locallyInside(p, hole) && (tan < tanMin || tan === tanMin && (p.x > m.x || p.x === m.x && sectorContainsSector(m, p)))) {
+        m = p;
+        tanMin = tan;
+      }
+    }
+    p = p.next;
+  } while (p !== stop2);
+  return m;
+}
+function sectorContainsSector(m, p) {
+  return area(m.prev, m, p.prev) < 0 && area(p.next, m, m.next) < 0;
+}
+function indexCurve(start, minX, minY, invSize) {
+  let p = start;
+  do {
+    if (p.z === 0) p.z = zOrder(p.x, p.y, minX, minY, invSize);
+    p.prevZ = p.prev;
+    p.nextZ = p.next;
+    p = p.next;
+  } while (p !== start);
+  p.prevZ.nextZ = null;
+  p.prevZ = null;
+  sortLinked(p);
+}
+function sortLinked(list) {
+  let numMerges;
+  let inSize = 1;
+  do {
+    let p = list;
+    let e;
+    list = null;
+    let tail2 = null;
+    numMerges = 0;
+    while (p) {
+      numMerges++;
+      let q = p;
+      let pSize = 0;
+      for (let i2 = 0; i2 < inSize; i2++) {
+        pSize++;
+        q = q.nextZ;
+        if (!q) break;
+      }
+      let qSize = inSize;
+      while (pSize > 0 || qSize > 0 && q) {
+        if (pSize !== 0 && (qSize === 0 || !q || p.z <= q.z)) {
+          e = p;
+          p = p.nextZ;
+          pSize--;
+        } else {
+          e = q;
+          q = q.nextZ;
+          qSize--;
+        }
+        if (tail2) tail2.nextZ = e;
+        else list = e;
+        e.prevZ = tail2;
+        tail2 = e;
+      }
+      p = q;
+    }
+    tail2.nextZ = null;
+    inSize *= 2;
+  } while (numMerges > 1);
+  return list;
+}
+function zOrder(x, y, minX, minY, invSize) {
+  x = (x - minX) * invSize | 0;
+  y = (y - minY) * invSize | 0;
+  x = (x | x << 8) & 16711935;
+  x = (x | x << 4) & 252645135;
+  x = (x | x << 2) & 858993459;
+  x = (x | x << 1) & 1431655765;
+  y = (y | y << 8) & 16711935;
+  y = (y | y << 4) & 252645135;
+  y = (y | y << 2) & 858993459;
+  y = (y | y << 1) & 1431655765;
+  return x | y << 1;
+}
+function getLeftmost(start) {
+  let p = start, leftmost = start;
+  do {
+    if (p.x < leftmost.x || p.x === leftmost.x && p.y < leftmost.y) leftmost = p;
+    p = p.next;
+  } while (p !== start);
+  return leftmost;
+}
+function pointInTriangle(ax, ay, bx, by, cx, cy, px2, py2) {
+  return (cx - px2) * (ay - py2) >= (ax - px2) * (cy - py2) && (ax - px2) * (by - py2) >= (bx - px2) * (ay - py2) && (bx - px2) * (cy - py2) >= (cx - px2) * (by - py2);
+}
+function pointInTriangleExceptFirst(ax, ay, bx, by, cx, cy, px2, py2) {
+  return !(ax === px2 && ay === py2) && pointInTriangle(ax, ay, bx, by, cx, cy, px2, py2);
+}
+function isValidDiagonal(a, b) {
+  return a.next.i !== b.i && a.prev.i !== b.i && !intersectsPolygon(a, b) && // doesn't intersect other edges
+  (locallyInside(a, b) && locallyInside(b, a) && middleInside(a, b) && // locally visible
+  (area(a.prev, a, b.prev) || area(a, b.prev, b)) || // does not create opposite-facing sectors
+  equals(a, b) && area(a.prev, a, a.next) > 0 && area(b.prev, b, b.next) > 0);
+}
+function area(p, q, r) {
+  return (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+}
+function equals(p1, p2) {
+  return p1.x === p2.x && p1.y === p2.y;
+}
+function intersects(p1, q1, p2, q2) {
+  const o1 = sign(area(p1, q1, p2));
+  const o2 = sign(area(p1, q1, q2));
+  const o3 = sign(area(p2, q2, p1));
+  const o4 = sign(area(p2, q2, q1));
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && onSegment(p1, p2, q1)) return true;
+  if (o2 === 0 && onSegment(p1, q2, q1)) return true;
+  if (o3 === 0 && onSegment(p2, p1, q2)) return true;
+  if (o4 === 0 && onSegment(p2, q1, q2)) return true;
+  return false;
+}
+function onSegment(p, q, r) {
+  return q.x <= Math.max(p.x, r.x) && q.x >= Math.min(p.x, r.x) && q.y <= Math.max(p.y, r.y) && q.y >= Math.min(p.y, r.y);
+}
+function sign(num4) {
+  return num4 > 0 ? 1 : num4 < 0 ? -1 : 0;
+}
+function intersectsPolygon(a, b) {
+  let p = a;
+  do {
+    if (p.i !== a.i && p.next.i !== a.i && p.i !== b.i && p.next.i !== b.i && intersects(p, p.next, a, b)) return true;
+    p = p.next;
+  } while (p !== a);
+  return false;
+}
+function locallyInside(a, b) {
+  return area(a.prev, a, a.next) < 0 ? area(a, b, a.next) >= 0 && area(a, a.prev, b) >= 0 : area(a, b, a.prev) < 0 || area(a, a.next, b) < 0;
+}
+function middleInside(a, b) {
+  let p = a;
+  let inside = false;
+  const px2 = (a.x + b.x) / 2;
+  const py2 = (a.y + b.y) / 2;
+  do {
+    if (p.y > py2 !== p.next.y > py2 && p.next.y !== p.y && px2 < (p.next.x - p.x) * (py2 - p.y) / (p.next.y - p.y) + p.x)
+      inside = !inside;
+    p = p.next;
+  } while (p !== a);
+  return inside;
+}
+function splitPolygon(a, b) {
+  const a2 = createNode(a.i, a.x, a.y), b2 = createNode(b.i, b.x, b.y), an = a.next, bp = b.prev;
+  a.next = b;
+  b.prev = a;
+  a2.next = an;
+  an.prev = a2;
+  b2.next = a2;
+  a2.prev = b2;
+  bp.next = b2;
+  b2.prev = bp;
+  return b2;
+}
+function insertNode(i2, x, y, last2) {
+  const p = createNode(i2, x, y);
+  if (!last2) {
+    p.prev = p;
+    p.next = p;
+  } else {
+    p.next = last2.next;
+    p.prev = last2;
+    last2.next.prev = p;
+    last2.next = p;
+  }
+  return p;
+}
+function removeNode(p) {
+  p.next.prev = p.prev;
+  p.prev.next = p.next;
+  if (p.prevZ) p.prevZ.nextZ = p.nextZ;
+  if (p.nextZ) p.nextZ.prevZ = p.prevZ;
+}
+function createNode(i2, x, y) {
+  return {
+    i: i2,
+    // vertex index in coordinates array
+    x,
+    y,
+    // vertex coordinates
+    prev: null,
+    // previous and next vertex nodes in a polygon ring
+    next: null,
+    z: 0,
+    // z-order curve value
+    prevZ: null,
+    // previous and next nodes in z-order
+    nextZ: null,
+    steiner: false
+    // indicates whether this is a steiner point
+  };
+}
+function signedArea(data, start, end2, dim) {
+  let sum2 = 0;
+  for (let i2 = start, j = end2 - dim; i2 < end2; i2 += dim) {
+    sum2 += (data[j] - data[i2]) * (data[i2 + 1] + data[j + 1]);
+    j = i2;
+  }
+  return sum2;
+}
+function removeDupEndPts(points) {
+  const l = points.length;
+  if (l > 2 && points[l - 1].equals(points[0])) {
+    points.pop();
+  }
+}
+function addContour(vertices, contour) {
+  for (let i2 = 0; i2 < contour.length; i2++) {
+    vertices.push(contour[i2].x);
+    vertices.push(contour[i2].y);
+  }
+}
+function toJSON$1(shapes, options, data) {
+  data.shapes = [];
+  if (Array.isArray(shapes)) {
+    for (let i2 = 0, l = shapes.length; i2 < l; i2++) {
+      const shape = shapes[i2];
+      data.shapes.push(shape.uuid);
+    }
+  } else {
+    data.shapes.push(shapes.uuid);
+  }
+  data.options = Object.assign({}, options);
+  if (options.extrudePath !== void 0) data.options.extrudePath = options.extrudePath.toJSON();
+  return data;
+}
 function convertArray(array, type) {
   if (!array || array.constructor === type) return array;
   if (typeof type.BYTES_PER_ELEMENT === "number") {
@@ -975,6 +1550,22 @@ function convertArray(array, type) {
 }
 function isTypedArray(object) {
   return ArrayBuffer.isView(object) && !(object instanceof DataView);
+}
+function ascSort(a, b) {
+  return a.distance - b.distance;
+}
+function intersect(object, raycaster, intersects2, recursive) {
+  let propagate = true;
+  if (object.layers.test(raycaster.layers)) {
+    const result = object.raycast(raycaster, intersects2);
+    if (result === false) propagate = false;
+  }
+  if (propagate === true && recursive === true) {
+    const children = object.children;
+    for (let i2 = 0, l = children.length; i2 < l; i2++) {
+      intersect(children[i2], raycaster, intersects2, true);
+    }
+  }
 }
 function getByteLength(width, height, format, type) {
   const typeByteLength = getTextureTypeByteLength(type);
@@ -1084,7 +1675,7 @@ function getTextureTypeByteLength(type) {
   }
   throw new Error(`Unknown texture type ${type}.`);
 }
-var REVISION, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, BasicDepthPacking, RGBADepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, EventDispatcher, _lut, DEG2RAD, RAD2DEG, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, _cache, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material, MeshBasicMaterial, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Fog, Scene, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, LineBasicMaterial, _vStart, _vEnd, _inverseMatrix$1, _ray$1, _sphere$1, _intersectPointOnRay, _intersectPointOnSegment, Line, CanvasTexture, DepthTexture, ExternalTexture, CapsuleGeometry, CylinderGeometry, PlaneGeometry, SphereGeometry, MeshStandardMaterial, MeshNormalMaterial, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, LoadingManager, DefaultLoadingManager, Loader, Light, HemisphereLight, _projScreenMatrix$1, _lightPositionWorld$1, _lookTarget$1, LightShadow, SpotLightShadow, SpotLight, _projScreenMatrix, _lightPositionWorld, _lookTarget, PointLightShadow, PointLight, OrthographicCamera, DirectionalLightShadow, DirectionalLight, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer;
+var REVISION, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, BasicDepthPacking, RGBADepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, EventDispatcher, _lut, DEG2RAD, RAD2DEG, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, _cache, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material, MeshBasicMaterial, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Fog, Scene, InterleavedBuffer, _vector$7, InterleavedBufferAttribute, SpriteMaterial, _geometry, _intersectPoint, _worldScale, _mvPosition, _alignedPosition, _rotatedPosition, _viewWorldMatrix, _vA, _vB, _vC, _uvA, _uvB, _uvC, Sprite, DataTexture, InstancedBufferAttribute, _instanceLocalMatrix, _instanceWorldMatrix, _instanceIntersects, _box3, _identity, _mesh$1, _sphere$4, InstancedMesh, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, LineBasicMaterial, _vStart, _vEnd, _inverseMatrix$1, _ray$1, _sphere$1, _intersectPointOnRay, _intersectPointOnSegment, Line, CanvasTexture, DepthTexture, ExternalTexture, CapsuleGeometry, CylinderGeometry, ConeGeometry, PolyhedronGeometry, Curve, EllipseCurve, ArcCurve, tmp, px, py, pz, CatmullRomCurve3, CubicBezierCurve, CubicBezierCurve3, LineCurve, LineCurve3, QuadraticBezierCurve, QuadraticBezierCurve3, SplineCurve, Curves, CurvePath, Path, Shape, Earcut, ShapeUtils, ExtrudeGeometry, WorldUVGenerator, IcosahedronGeometry, PlaneGeometry, SphereGeometry, TorusGeometry, MeshStandardMaterial, MeshNormalMaterial, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, LoadingManager, DefaultLoadingManager, Loader, Light, HemisphereLight, _projScreenMatrix$1, _lightPositionWorld$1, _lookTarget$1, LightShadow, SpotLightShadow, SpotLight, _projScreenMatrix, _lightPositionWorld, _lookTarget, PointLightShadow, PointLight, OrthographicCamera, DirectionalLightShadow, DirectionalLight, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer, _matrix, Raycaster;
 var init_three_core = __esm({
   "../../../hermes-agent/node_modules/three/build/three.core.js"() {
     /**
@@ -3700,17 +4291,17 @@ var init_three_core = __esm({
        * @return {Matrix3} A reference to this matrix.
        */
       transpose() {
-        let tmp;
+        let tmp2;
         const m = this.elements;
-        tmp = m[1];
+        tmp2 = m[1];
         m[1] = m[3];
-        m[3] = tmp;
-        tmp = m[2];
+        m[3] = tmp2;
+        tmp2 = m[2];
         m[2] = m[6];
-        m[6] = tmp;
-        tmp = m[5];
+        m[6] = tmp2;
+        tmp2 = m[5];
         m[5] = m[7];
-        m[7] = tmp;
+        m[7] = tmp2;
         return this;
       }
       /**
@@ -6560,29 +7151,29 @@ var init_three_core = __esm({
         _edge2.subVectors(c, a);
         _normal$1.crossVectors(_edge1, _edge2);
         let DdN = this.direction.dot(_normal$1);
-        let sign;
+        let sign2;
         if (DdN > 0) {
           if (backfaceCulling) return null;
-          sign = 1;
+          sign2 = 1;
         } else if (DdN < 0) {
-          sign = -1;
+          sign2 = -1;
           DdN = -DdN;
         } else {
           return null;
         }
         _diff.subVectors(this.origin, a);
-        const DdQxE2 = sign * this.direction.dot(_edge2.crossVectors(_diff, _edge2));
+        const DdQxE2 = sign2 * this.direction.dot(_edge2.crossVectors(_diff, _edge2));
         if (DdQxE2 < 0) {
           return null;
         }
-        const DdE1xQ = sign * this.direction.dot(_edge1.cross(_diff));
+        const DdE1xQ = sign2 * this.direction.dot(_edge1.cross(_diff));
         if (DdE1xQ < 0) {
           return null;
         }
         if (DdQxE2 + DdE1xQ > DdN) {
           return null;
         }
-        const QdN = -sign * _diff.dot(_normal$1);
+        const QdN = -sign2 * _diff.dot(_normal$1);
         if (QdN < 0) {
           return null;
         }
@@ -7131,25 +7722,25 @@ var init_three_core = __esm({
        */
       transpose() {
         const te = this.elements;
-        let tmp;
-        tmp = te[1];
+        let tmp2;
+        tmp2 = te[1];
         te[1] = te[4];
-        te[4] = tmp;
-        tmp = te[2];
+        te[4] = tmp2;
+        tmp2 = te[2];
         te[2] = te[8];
-        te[8] = tmp;
-        tmp = te[6];
+        te[8] = tmp2;
+        tmp2 = te[6];
         te[6] = te[9];
-        te[9] = tmp;
-        tmp = te[3];
+        te[9] = tmp2;
+        tmp2 = te[3];
         te[3] = te[12];
-        te[12] = tmp;
-        tmp = te[7];
+        te[12] = tmp2;
+        tmp2 = te[7];
         te[7] = te[13];
-        te[13] = tmp;
-        tmp = te[11];
+        te[13] = tmp2;
+        tmp2 = te[11];
         te[11] = te[14];
-        te[14] = tmp;
+        te[14] = tmp2;
         return this;
       }
       /**
@@ -11515,18 +12106,18 @@ var init_three_core = __esm({
             );
           }
         }
-        const tmp = new Vector3(), tmp2 = new Vector3();
+        const tmp2 = new Vector3(), tmp22 = new Vector3();
         const n = new Vector3(), n2 = new Vector3();
         function handleVertex(v) {
           n.fromBufferAttribute(normalAttribute, v);
           n2.copy(n);
           const t2 = tan1[v];
-          tmp.copy(t2);
-          tmp.sub(n.multiplyScalar(n.dot(t2))).normalize();
-          tmp2.crossVectors(n2, t2);
-          const test = tmp2.dot(tan2[v]);
+          tmp2.copy(t2);
+          tmp2.sub(n.multiplyScalar(n.dot(t2))).normalize();
+          tmp22.crossVectors(n2, t2);
+          const test = tmp22.dot(tan2[v]);
           const w = test < 0 ? -1 : 1;
-          tangentAttribute.setXYZW(v, tmp.x, tmp.y, tmp.z, w);
+          tangentAttribute.setXYZW(v, tmp2.x, tmp2.y, tmp2.z, w);
         }
         for (let i2 = 0, il = groups2.length; i2 < il; ++i2) {
           const group = groups2[i2];
@@ -11902,7 +12493,7 @@ var init_three_core = __esm({
        * @param {Raycaster} raycaster - The raycaster.
        * @param {Array<Object>} intersects - The target array that holds the intersection points.
        */
-      raycast(raycaster, intersects) {
+      raycast(raycaster, intersects2) {
         const geometry = this.geometry;
         const material = this.material;
         const matrixWorld = this.matrixWorld;
@@ -11920,9 +12511,9 @@ var init_three_core = __esm({
         if (geometry.boundingBox !== null) {
           if (_ray$3.intersectsBox(geometry.boundingBox) === false) return;
         }
-        this._computeIntersections(raycaster, intersects, _ray$3);
+        this._computeIntersections(raycaster, intersects2, _ray$3);
       }
-      _computeIntersections(raycaster, intersects, rayLocalSpace) {
+      _computeIntersections(raycaster, intersects2, rayLocalSpace) {
         let intersection;
         const geometry = this.geometry;
         const material = this.material;
@@ -11948,7 +12539,7 @@ var init_three_core = __esm({
                 if (intersection) {
                   intersection.faceIndex = Math.floor(j / 3);
                   intersection.face.materialIndex = group.materialIndex;
-                  intersects.push(intersection);
+                  intersects2.push(intersection);
                 }
               }
             }
@@ -11962,7 +12553,7 @@ var init_three_core = __esm({
               intersection = checkGeometryIntersection(this, material, raycaster, rayLocalSpace, uv, uv1, normal, a, b, c);
               if (intersection) {
                 intersection.faceIndex = Math.floor(i2 / 3);
-                intersects.push(intersection);
+                intersects2.push(intersection);
               }
             }
           }
@@ -11981,7 +12572,7 @@ var init_three_core = __esm({
                 if (intersection) {
                   intersection.faceIndex = Math.floor(j / 3);
                   intersection.face.materialIndex = group.materialIndex;
-                  intersects.push(intersection);
+                  intersects2.push(intersection);
                 }
               }
             }
@@ -11995,7 +12586,7 @@ var init_three_core = __esm({
               intersection = checkGeometryIntersection(this, material, raycaster, rayLocalSpace, uv, uv1, normal, a, b, c);
               if (intersection) {
                 intersection.faceIndex = Math.floor(i2 / 3);
-                intersects.push(intersection);
+                intersects2.push(intersection);
               }
             }
           }
@@ -13108,6 +13699,901 @@ var init_three_core = __esm({
         return data;
       }
     };
+    InterleavedBuffer = class {
+      /**
+       * Constructs a new interleaved buffer.
+       *
+       * @param {TypedArray} array - A typed array with a shared buffer storing attribute data.
+       * @param {number} stride - The number of typed-array elements per vertex.
+       */
+      constructor(array, stride) {
+        this.isInterleavedBuffer = true;
+        this.array = array;
+        this.stride = stride;
+        this.count = array !== void 0 ? array.length / stride : 0;
+        this.usage = StaticDrawUsage;
+        this.updateRanges = [];
+        this.version = 0;
+        this.uuid = generateUUID();
+      }
+      /**
+       * A callback function that is executed after the renderer has transferred the attribute array
+       * data to the GPU.
+       */
+      onUploadCallback() {
+      }
+      /**
+       * Flag to indicate that this attribute has changed and should be re-sent to
+       * the GPU. Set this to `true` when you modify the value of the array.
+       *
+       * @type {number}
+       * @default false
+       * @param {boolean} value
+       */
+      set needsUpdate(value) {
+        if (value === true) this.version++;
+      }
+      /**
+       * Sets the usage of this interleaved buffer.
+       *
+       * @param {(StaticDrawUsage|DynamicDrawUsage|StreamDrawUsage|StaticReadUsage|DynamicReadUsage|StreamReadUsage|StaticCopyUsage|DynamicCopyUsage|StreamCopyUsage)} value - The usage to set.
+       * @return {InterleavedBuffer} A reference to this interleaved buffer.
+       */
+      setUsage(value) {
+        this.usage = value;
+        return this;
+      }
+      /**
+       * Adds a range of data in the data array to be updated on the GPU.
+       *
+       * @param {number} start - Position at which to start update.
+       * @param {number} count - The number of components to update.
+       */
+      addUpdateRange(start, count3) {
+        this.updateRanges.push({ start, count: count3 });
+      }
+      /**
+       * Clears the update ranges.
+       */
+      clearUpdateRanges() {
+        this.updateRanges.length = 0;
+      }
+      /**
+       * Copies the values of the given interleaved buffer to this instance.
+       *
+       * @param {InterleavedBuffer} source - The interleaved buffer to copy.
+       * @return {InterleavedBuffer} A reference to this instance.
+       */
+      copy(source) {
+        this.array = new source.array.constructor(source.array);
+        this.count = source.count;
+        this.stride = source.stride;
+        this.usage = source.usage;
+        return this;
+      }
+      /**
+       * Copies a vector from the given interleaved buffer to this one. The start
+       * and destination position in the attribute buffers are represented by the
+       * given indices.
+       *
+       * @param {number} index1 - The destination index into this interleaved buffer.
+       * @param {InterleavedBuffer} interleavedBuffer - The interleaved buffer to copy from.
+       * @param {number} index2 - The source index into the given interleaved buffer.
+       * @return {InterleavedBuffer} A reference to this instance.
+       */
+      copyAt(index1, interleavedBuffer, index2) {
+        index1 *= this.stride;
+        index2 *= interleavedBuffer.stride;
+        for (let i2 = 0, l = this.stride; i2 < l; i2++) {
+          this.array[index1 + i2] = interleavedBuffer.array[index2 + i2];
+        }
+        return this;
+      }
+      /**
+       * Sets the given array data in the interleaved buffer.
+       *
+       * @param {(TypedArray|Array)} value - The array data to set.
+       * @param {number} [offset=0] - The offset in this interleaved buffer's array.
+       * @return {InterleavedBuffer} A reference to this instance.
+       */
+      set(value, offset = 0) {
+        this.array.set(value, offset);
+        return this;
+      }
+      /**
+       * Returns a new interleaved buffer with copied values from this instance.
+       *
+       * @param {Object} [data] - An object with shared array buffers that allows to retain shared structures.
+       * @return {InterleavedBuffer} A clone of this instance.
+       */
+      clone(data) {
+        if (data.arrayBuffers === void 0) {
+          data.arrayBuffers = {};
+        }
+        if (this.array.buffer._uuid === void 0) {
+          this.array.buffer._uuid = generateUUID();
+        }
+        if (data.arrayBuffers[this.array.buffer._uuid] === void 0) {
+          data.arrayBuffers[this.array.buffer._uuid] = this.array.slice(0).buffer;
+        }
+        const array = new this.array.constructor(data.arrayBuffers[this.array.buffer._uuid]);
+        const ib = new this.constructor(array, this.stride);
+        ib.setUsage(this.usage);
+        return ib;
+      }
+      /**
+       * Sets the given callback function that is executed after the Renderer has transferred
+       * the array data to the GPU. Can be used to perform clean-up operations after
+       * the upload when data are not needed anymore on the CPU side.
+       *
+       * @param {Function} callback - The `onUpload()` callback.
+       * @return {InterleavedBuffer} A reference to this instance.
+       */
+      onUpload(callback) {
+        this.onUploadCallback = callback;
+        return this;
+      }
+      /**
+       * Serializes the interleaved buffer into JSON.
+       *
+       * @param {Object} [data] - An optional value holding meta information about the serialization.
+       * @return {Object} A JSON object representing the serialized interleaved buffer.
+       */
+      toJSON(data) {
+        if (data.arrayBuffers === void 0) {
+          data.arrayBuffers = {};
+        }
+        if (this.array.buffer._uuid === void 0) {
+          this.array.buffer._uuid = generateUUID();
+        }
+        if (data.arrayBuffers[this.array.buffer._uuid] === void 0) {
+          data.arrayBuffers[this.array.buffer._uuid] = Array.from(new Uint32Array(this.array.buffer));
+        }
+        return {
+          uuid: this.uuid,
+          buffer: this.array.buffer._uuid,
+          type: this.array.constructor.name,
+          stride: this.stride
+        };
+      }
+    };
+    _vector$7 = /* @__PURE__ */ new Vector3();
+    InterleavedBufferAttribute = class _InterleavedBufferAttribute {
+      /**
+       * Constructs a new interleaved buffer attribute.
+       *
+       * @param {InterleavedBuffer} interleavedBuffer - The buffer holding the interleaved data.
+       * @param {number} itemSize - The item size.
+       * @param {number} offset - The attribute offset into the buffer.
+       * @param {boolean} [normalized=false] - Whether the data are normalized or not.
+       */
+      constructor(interleavedBuffer, itemSize, offset, normalized = false) {
+        this.isInterleavedBufferAttribute = true;
+        this.name = "";
+        this.data = interleavedBuffer;
+        this.itemSize = itemSize;
+        this.offset = offset;
+        this.normalized = normalized;
+      }
+      /**
+       * The item count of this buffer attribute.
+       *
+       * @type {number}
+       * @readonly
+       */
+      get count() {
+        return this.data.count;
+      }
+      /**
+       * The array holding the interleaved buffer attribute data.
+       *
+       * @type {TypedArray}
+       */
+      get array() {
+        return this.data.array;
+      }
+      /**
+       * Flag to indicate that this attribute has changed and should be re-sent to
+       * the GPU. Set this to `true` when you modify the value of the array.
+       *
+       * @type {number}
+       * @default false
+       * @param {boolean} value
+       */
+      set needsUpdate(value) {
+        this.data.needsUpdate = value;
+      }
+      /**
+       * Applies the given 4x4 matrix to the given attribute. Only works with
+       * item size `3`.
+       *
+       * @param {Matrix4} m - The matrix to apply.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      applyMatrix4(m) {
+        for (let i2 = 0, l = this.data.count; i2 < l; i2++) {
+          _vector$7.fromBufferAttribute(this, i2);
+          _vector$7.applyMatrix4(m);
+          this.setXYZ(i2, _vector$7.x, _vector$7.y, _vector$7.z);
+        }
+        return this;
+      }
+      /**
+       * Applies the given 3x3 normal matrix to the given attribute. Only works with
+       * item size `3`.
+       *
+       * @param {Matrix3} m - The normal matrix to apply.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      applyNormalMatrix(m) {
+        for (let i2 = 0, l = this.count; i2 < l; i2++) {
+          _vector$7.fromBufferAttribute(this, i2);
+          _vector$7.applyNormalMatrix(m);
+          this.setXYZ(i2, _vector$7.x, _vector$7.y, _vector$7.z);
+        }
+        return this;
+      }
+      /**
+       * Applies the given 4x4 matrix to the given attribute. Only works with
+       * item size `3` and with direction vectors.
+       *
+       * @param {Matrix4} m - The matrix to apply.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      transformDirection(m) {
+        for (let i2 = 0, l = this.count; i2 < l; i2++) {
+          _vector$7.fromBufferAttribute(this, i2);
+          _vector$7.transformDirection(m);
+          this.setXYZ(i2, _vector$7.x, _vector$7.y, _vector$7.z);
+        }
+        return this;
+      }
+      /**
+       * Returns the given component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @param {number} component - The component index.
+       * @return {number} The returned value.
+       */
+      getComponent(index, component) {
+        let value = this.array[index * this.data.stride + this.offset + component];
+        if (this.normalized) value = denormalize(value, this.array);
+        return value;
+      }
+      /**
+       * Sets the given value to the given component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @param {number} component - The component index.
+       * @param {number} value - The value to set.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      setComponent(index, component, value) {
+        if (this.normalized) value = normalize2(value, this.array);
+        this.data.array[index * this.data.stride + this.offset + component] = value;
+        return this;
+      }
+      /**
+       * Sets the x component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @param {number} x - The value to set.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      setX(index, x) {
+        if (this.normalized) x = normalize2(x, this.array);
+        this.data.array[index * this.data.stride + this.offset] = x;
+        return this;
+      }
+      /**
+       * Sets the y component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @param {number} y - The value to set.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      setY(index, y) {
+        if (this.normalized) y = normalize2(y, this.array);
+        this.data.array[index * this.data.stride + this.offset + 1] = y;
+        return this;
+      }
+      /**
+       * Sets the z component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @param {number} z - The value to set.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      setZ(index, z) {
+        if (this.normalized) z = normalize2(z, this.array);
+        this.data.array[index * this.data.stride + this.offset + 2] = z;
+        return this;
+      }
+      /**
+       * Sets the w component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @param {number} w - The value to set.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      setW(index, w) {
+        if (this.normalized) w = normalize2(w, this.array);
+        this.data.array[index * this.data.stride + this.offset + 3] = w;
+        return this;
+      }
+      /**
+       * Returns the x component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @return {number} The x component.
+       */
+      getX(index) {
+        let x = this.data.array[index * this.data.stride + this.offset];
+        if (this.normalized) x = denormalize(x, this.array);
+        return x;
+      }
+      /**
+       * Returns the y component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @return {number} The y component.
+       */
+      getY(index) {
+        let y = this.data.array[index * this.data.stride + this.offset + 1];
+        if (this.normalized) y = denormalize(y, this.array);
+        return y;
+      }
+      /**
+       * Returns the z component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @return {number} The z component.
+       */
+      getZ(index) {
+        let z = this.data.array[index * this.data.stride + this.offset + 2];
+        if (this.normalized) z = denormalize(z, this.array);
+        return z;
+      }
+      /**
+       * Returns the w component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @return {number} The w component.
+       */
+      getW(index) {
+        let w = this.data.array[index * this.data.stride + this.offset + 3];
+        if (this.normalized) w = denormalize(w, this.array);
+        return w;
+      }
+      /**
+       * Sets the x and y component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @param {number} x - The value for the x component to set.
+       * @param {number} y - The value for the y component to set.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      setXY(index, x, y) {
+        index = index * this.data.stride + this.offset;
+        if (this.normalized) {
+          x = normalize2(x, this.array);
+          y = normalize2(y, this.array);
+        }
+        this.data.array[index + 0] = x;
+        this.data.array[index + 1] = y;
+        return this;
+      }
+      /**
+       * Sets the x, y and z component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @param {number} x - The value for the x component to set.
+       * @param {number} y - The value for the y component to set.
+       * @param {number} z - The value for the z component to set.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      setXYZ(index, x, y, z) {
+        index = index * this.data.stride + this.offset;
+        if (this.normalized) {
+          x = normalize2(x, this.array);
+          y = normalize2(y, this.array);
+          z = normalize2(z, this.array);
+        }
+        this.data.array[index + 0] = x;
+        this.data.array[index + 1] = y;
+        this.data.array[index + 2] = z;
+        return this;
+      }
+      /**
+       * Sets the x, y, z and w component of the vector at the given index.
+       *
+       * @param {number} index - The index into the buffer attribute.
+       * @param {number} x - The value for the x component to set.
+       * @param {number} y - The value for the y component to set.
+       * @param {number} z - The value for the z component to set.
+       * @param {number} w - The value for the w component to set.
+       * @return {InterleavedBufferAttribute} A reference to this instance.
+       */
+      setXYZW(index, x, y, z, w) {
+        index = index * this.data.stride + this.offset;
+        if (this.normalized) {
+          x = normalize2(x, this.array);
+          y = normalize2(y, this.array);
+          z = normalize2(z, this.array);
+          w = normalize2(w, this.array);
+        }
+        this.data.array[index + 0] = x;
+        this.data.array[index + 1] = y;
+        this.data.array[index + 2] = z;
+        this.data.array[index + 3] = w;
+        return this;
+      }
+      /**
+       * Returns a new buffer attribute with copied values from this instance.
+       *
+       * If no parameter is provided, cloning an interleaved buffer attribute will de-interleave buffer data.
+       *
+       * @param {Object} [data] - An object with interleaved buffers that allows to retain the interleaved property.
+       * @return {BufferAttribute|InterleavedBufferAttribute} A clone of this instance.
+       */
+      clone(data) {
+        if (data === void 0) {
+          console.log("THREE.InterleavedBufferAttribute.clone(): Cloning an interleaved buffer attribute will de-interleave buffer data.");
+          const array = [];
+          for (let i2 = 0; i2 < this.count; i2++) {
+            const index = i2 * this.data.stride + this.offset;
+            for (let j = 0; j < this.itemSize; j++) {
+              array.push(this.data.array[index + j]);
+            }
+          }
+          return new BufferAttribute(new this.array.constructor(array), this.itemSize, this.normalized);
+        } else {
+          if (data.interleavedBuffers === void 0) {
+            data.interleavedBuffers = {};
+          }
+          if (data.interleavedBuffers[this.data.uuid] === void 0) {
+            data.interleavedBuffers[this.data.uuid] = this.data.clone(data);
+          }
+          return new _InterleavedBufferAttribute(data.interleavedBuffers[this.data.uuid], this.itemSize, this.offset, this.normalized);
+        }
+      }
+      /**
+       * Serializes the buffer attribute into JSON.
+       *
+       * If no parameter is provided, cloning an interleaved buffer attribute will de-interleave buffer data.
+       *
+       * @param {Object} [data] - An optional value holding meta information about the serialization.
+       * @return {Object} A JSON object representing the serialized buffer attribute.
+       */
+      toJSON(data) {
+        if (data === void 0) {
+          console.log("THREE.InterleavedBufferAttribute.toJSON(): Serializing an interleaved buffer attribute will de-interleave buffer data.");
+          const array = [];
+          for (let i2 = 0; i2 < this.count; i2++) {
+            const index = i2 * this.data.stride + this.offset;
+            for (let j = 0; j < this.itemSize; j++) {
+              array.push(this.data.array[index + j]);
+            }
+          }
+          return {
+            itemSize: this.itemSize,
+            type: this.array.constructor.name,
+            array,
+            normalized: this.normalized
+          };
+        } else {
+          if (data.interleavedBuffers === void 0) {
+            data.interleavedBuffers = {};
+          }
+          if (data.interleavedBuffers[this.data.uuid] === void 0) {
+            data.interleavedBuffers[this.data.uuid] = this.data.toJSON(data);
+          }
+          return {
+            isInterleavedBufferAttribute: true,
+            itemSize: this.itemSize,
+            data: this.data.uuid,
+            offset: this.offset,
+            normalized: this.normalized
+          };
+        }
+      }
+    };
+    SpriteMaterial = class extends Material {
+      /**
+       * Constructs a new sprite material.
+       *
+       * @param {Object} [parameters] - An object with one or more properties
+       * defining the material's appearance. Any property of the material
+       * (including any property from inherited materials) can be passed
+       * in here. Color values can be passed any type of value accepted
+       * by {@link Color#set}.
+       */
+      constructor(parameters) {
+        super();
+        this.isSpriteMaterial = true;
+        this.type = "SpriteMaterial";
+        this.color = new Color(16777215);
+        this.map = null;
+        this.alphaMap = null;
+        this.rotation = 0;
+        this.sizeAttenuation = true;
+        this.transparent = true;
+        this.fog = true;
+        this.setValues(parameters);
+      }
+      copy(source) {
+        super.copy(source);
+        this.color.copy(source.color);
+        this.map = source.map;
+        this.alphaMap = source.alphaMap;
+        this.rotation = source.rotation;
+        this.sizeAttenuation = source.sizeAttenuation;
+        this.fog = source.fog;
+        return this;
+      }
+    };
+    _intersectPoint = /* @__PURE__ */ new Vector3();
+    _worldScale = /* @__PURE__ */ new Vector3();
+    _mvPosition = /* @__PURE__ */ new Vector3();
+    _alignedPosition = /* @__PURE__ */ new Vector2();
+    _rotatedPosition = /* @__PURE__ */ new Vector2();
+    _viewWorldMatrix = /* @__PURE__ */ new Matrix4();
+    _vA = /* @__PURE__ */ new Vector3();
+    _vB = /* @__PURE__ */ new Vector3();
+    _vC = /* @__PURE__ */ new Vector3();
+    _uvA = /* @__PURE__ */ new Vector2();
+    _uvB = /* @__PURE__ */ new Vector2();
+    _uvC = /* @__PURE__ */ new Vector2();
+    Sprite = class extends Object3D {
+      /**
+       * Constructs a new sprite.
+       *
+       * @param {(SpriteMaterial|SpriteNodeMaterial)} [material] - The sprite material.
+       */
+      constructor(material = new SpriteMaterial()) {
+        super();
+        this.isSprite = true;
+        this.type = "Sprite";
+        if (_geometry === void 0) {
+          _geometry = new BufferGeometry();
+          const float32Array = new Float32Array([
+            -0.5,
+            -0.5,
+            0,
+            0,
+            0,
+            0.5,
+            -0.5,
+            0,
+            1,
+            0,
+            0.5,
+            0.5,
+            0,
+            1,
+            1,
+            -0.5,
+            0.5,
+            0,
+            0,
+            1
+          ]);
+          const interleavedBuffer = new InterleavedBuffer(float32Array, 5);
+          _geometry.setIndex([0, 1, 2, 0, 2, 3]);
+          _geometry.setAttribute("position", new InterleavedBufferAttribute(interleavedBuffer, 3, 0, false));
+          _geometry.setAttribute("uv", new InterleavedBufferAttribute(interleavedBuffer, 2, 3, false));
+        }
+        this.geometry = _geometry;
+        this.material = material;
+        this.center = new Vector2(0.5, 0.5);
+        this.count = 1;
+      }
+      /**
+       * Computes intersection points between a casted ray and this sprite.
+       *
+       * @param {Raycaster} raycaster - The raycaster.
+       * @param {Array<Object>} intersects - The target array that holds the intersection points.
+       */
+      raycast(raycaster, intersects2) {
+        if (raycaster.camera === null) {
+          console.error('THREE.Sprite: "Raycaster.camera" needs to be set in order to raycast against sprites.');
+        }
+        _worldScale.setFromMatrixScale(this.matrixWorld);
+        _viewWorldMatrix.copy(raycaster.camera.matrixWorld);
+        this.modelViewMatrix.multiplyMatrices(raycaster.camera.matrixWorldInverse, this.matrixWorld);
+        _mvPosition.setFromMatrixPosition(this.modelViewMatrix);
+        if (raycaster.camera.isPerspectiveCamera && this.material.sizeAttenuation === false) {
+          _worldScale.multiplyScalar(-_mvPosition.z);
+        }
+        const rotation = this.material.rotation;
+        let sin, cos;
+        if (rotation !== 0) {
+          cos = Math.cos(rotation);
+          sin = Math.sin(rotation);
+        }
+        const center = this.center;
+        transformVertex(_vA.set(-0.5, -0.5, 0), _mvPosition, center, _worldScale, sin, cos);
+        transformVertex(_vB.set(0.5, -0.5, 0), _mvPosition, center, _worldScale, sin, cos);
+        transformVertex(_vC.set(0.5, 0.5, 0), _mvPosition, center, _worldScale, sin, cos);
+        _uvA.set(0, 0);
+        _uvB.set(1, 0);
+        _uvC.set(1, 1);
+        let intersect2 = raycaster.ray.intersectTriangle(_vA, _vB, _vC, false, _intersectPoint);
+        if (intersect2 === null) {
+          transformVertex(_vB.set(-0.5, 0.5, 0), _mvPosition, center, _worldScale, sin, cos);
+          _uvB.set(0, 1);
+          intersect2 = raycaster.ray.intersectTriangle(_vA, _vC, _vB, false, _intersectPoint);
+          if (intersect2 === null) {
+            return;
+          }
+        }
+        const distance = raycaster.ray.origin.distanceTo(_intersectPoint);
+        if (distance < raycaster.near || distance > raycaster.far) return;
+        intersects2.push({
+          distance,
+          point: _intersectPoint.clone(),
+          uv: Triangle.getInterpolation(_intersectPoint, _vA, _vB, _vC, _uvA, _uvB, _uvC, new Vector2()),
+          face: null,
+          object: this
+        });
+      }
+      copy(source, recursive) {
+        super.copy(source, recursive);
+        if (source.center !== void 0) this.center.copy(source.center);
+        this.material = source.material;
+        return this;
+      }
+    };
+    DataTexture = class extends Texture {
+      /**
+       * Constructs a new data texture.
+       *
+       * @param {?TypedArray} [data=null] - The buffer data.
+       * @param {number} [width=1] - The width of the texture.
+       * @param {number} [height=1] - The height of the texture.
+       * @param {number} [format=RGBAFormat] - The texture format.
+       * @param {number} [type=UnsignedByteType] - The texture type.
+       * @param {number} [mapping=Texture.DEFAULT_MAPPING] - The texture mapping.
+       * @param {number} [wrapS=ClampToEdgeWrapping] - The wrapS value.
+       * @param {number} [wrapT=ClampToEdgeWrapping] - The wrapT value.
+       * @param {number} [magFilter=NearestFilter] - The mag filter value.
+       * @param {number} [minFilter=NearestFilter] - The min filter value.
+       * @param {number} [anisotropy=Texture.DEFAULT_ANISOTROPY] - The anisotropy value.
+       * @param {string} [colorSpace=NoColorSpace] - The color space.
+       */
+      constructor(data = null, width = 1, height = 1, format, type, mapping, wrapS, wrapT, magFilter = NearestFilter, minFilter = NearestFilter, anisotropy, colorSpace) {
+        super(null, mapping, wrapS, wrapT, magFilter, minFilter, format, type, anisotropy, colorSpace);
+        this.isDataTexture = true;
+        this.image = { data, width, height };
+        this.generateMipmaps = false;
+        this.flipY = false;
+        this.unpackAlignment = 1;
+      }
+    };
+    InstancedBufferAttribute = class extends BufferAttribute {
+      /**
+       * Constructs a new instanced buffer attribute.
+       *
+       * @param {TypedArray} array - The array holding the attribute data.
+       * @param {number} itemSize - The item size.
+       * @param {boolean} [normalized=false] - Whether the data are normalized or not.
+       * @param {number} [meshPerAttribute=1] - How often a value of this buffer attribute should be repeated.
+       */
+      constructor(array, itemSize, normalized, meshPerAttribute = 1) {
+        super(array, itemSize, normalized);
+        this.isInstancedBufferAttribute = true;
+        this.meshPerAttribute = meshPerAttribute;
+      }
+      copy(source) {
+        super.copy(source);
+        this.meshPerAttribute = source.meshPerAttribute;
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.meshPerAttribute = this.meshPerAttribute;
+        data.isInstancedBufferAttribute = true;
+        return data;
+      }
+    };
+    _instanceLocalMatrix = /* @__PURE__ */ new Matrix4();
+    _instanceWorldMatrix = /* @__PURE__ */ new Matrix4();
+    _instanceIntersects = [];
+    _box3 = /* @__PURE__ */ new Box3();
+    _identity = /* @__PURE__ */ new Matrix4();
+    _mesh$1 = /* @__PURE__ */ new Mesh();
+    _sphere$4 = /* @__PURE__ */ new Sphere();
+    InstancedMesh = class extends Mesh {
+      /**
+       * Constructs a new instanced mesh.
+       *
+       * @param {BufferGeometry} [geometry] - The mesh geometry.
+       * @param {Material|Array<Material>} [material] - The mesh material.
+       * @param {number} count - The number of instances.
+       */
+      constructor(geometry, material, count3) {
+        super(geometry, material);
+        this.isInstancedMesh = true;
+        this.instanceMatrix = new InstancedBufferAttribute(new Float32Array(count3 * 16), 16);
+        this.instanceColor = null;
+        this.morphTexture = null;
+        this.count = count3;
+        this.boundingBox = null;
+        this.boundingSphere = null;
+        for (let i2 = 0; i2 < count3; i2++) {
+          this.setMatrixAt(i2, _identity);
+        }
+      }
+      /**
+       * Computes the bounding box of the instanced mesh, and updates {@link InstancedMesh#boundingBox}.
+       * The bounding box is not automatically computed by the engine; this method must be called by your app.
+       * You may need to recompute the bounding box if an instance is transformed via {@link InstancedMesh#setMatrixAt}.
+       */
+      computeBoundingBox() {
+        const geometry = this.geometry;
+        const count3 = this.count;
+        if (this.boundingBox === null) {
+          this.boundingBox = new Box3();
+        }
+        if (geometry.boundingBox === null) {
+          geometry.computeBoundingBox();
+        }
+        this.boundingBox.makeEmpty();
+        for (let i2 = 0; i2 < count3; i2++) {
+          this.getMatrixAt(i2, _instanceLocalMatrix);
+          _box3.copy(geometry.boundingBox).applyMatrix4(_instanceLocalMatrix);
+          this.boundingBox.union(_box3);
+        }
+      }
+      /**
+       * Computes the bounding sphere of the instanced mesh, and updates {@link InstancedMesh#boundingSphere}
+       * The engine automatically computes the bounding sphere when it is needed, e.g., for ray casting or view frustum culling.
+       * You may need to recompute the bounding sphere if an instance is transformed via {@link InstancedMesh#setMatrixAt}.
+       */
+      computeBoundingSphere() {
+        const geometry = this.geometry;
+        const count3 = this.count;
+        if (this.boundingSphere === null) {
+          this.boundingSphere = new Sphere();
+        }
+        if (geometry.boundingSphere === null) {
+          geometry.computeBoundingSphere();
+        }
+        this.boundingSphere.makeEmpty();
+        for (let i2 = 0; i2 < count3; i2++) {
+          this.getMatrixAt(i2, _instanceLocalMatrix);
+          _sphere$4.copy(geometry.boundingSphere).applyMatrix4(_instanceLocalMatrix);
+          this.boundingSphere.union(_sphere$4);
+        }
+      }
+      copy(source, recursive) {
+        super.copy(source, recursive);
+        this.instanceMatrix.copy(source.instanceMatrix);
+        if (source.morphTexture !== null) this.morphTexture = source.morphTexture.clone();
+        if (source.instanceColor !== null) this.instanceColor = source.instanceColor.clone();
+        this.count = source.count;
+        if (source.boundingBox !== null) this.boundingBox = source.boundingBox.clone();
+        if (source.boundingSphere !== null) this.boundingSphere = source.boundingSphere.clone();
+        return this;
+      }
+      /**
+       * Gets the color of the defined instance.
+       *
+       * @param {number} index - The instance index.
+       * @param {Color} color - The target object that is used to store the method's result.
+       */
+      getColorAt(index, color) {
+        color.fromArray(this.instanceColor.array, index * 3);
+      }
+      /**
+       * Gets the local transformation matrix of the defined instance.
+       *
+       * @param {number} index - The instance index.
+       * @param {Matrix4} matrix - The target object that is used to store the method's result.
+       */
+      getMatrixAt(index, matrix) {
+        matrix.fromArray(this.instanceMatrix.array, index * 16);
+      }
+      /**
+       * Gets the morph target weights of the defined instance.
+       *
+       * @param {number} index - The instance index.
+       * @param {Mesh} object - The target object that is used to store the method's result.
+       */
+      getMorphAt(index, object) {
+        const objectInfluences = object.morphTargetInfluences;
+        const array = this.morphTexture.source.data.data;
+        const len = objectInfluences.length + 1;
+        const dataIndex = index * len + 1;
+        for (let i2 = 0; i2 < objectInfluences.length; i2++) {
+          objectInfluences[i2] = array[dataIndex + i2];
+        }
+      }
+      raycast(raycaster, intersects2) {
+        const matrixWorld = this.matrixWorld;
+        const raycastTimes = this.count;
+        _mesh$1.geometry = this.geometry;
+        _mesh$1.material = this.material;
+        if (_mesh$1.material === void 0) return;
+        if (this.boundingSphere === null) this.computeBoundingSphere();
+        _sphere$4.copy(this.boundingSphere);
+        _sphere$4.applyMatrix4(matrixWorld);
+        if (raycaster.ray.intersectsSphere(_sphere$4) === false) return;
+        for (let instanceId = 0; instanceId < raycastTimes; instanceId++) {
+          this.getMatrixAt(instanceId, _instanceLocalMatrix);
+          _instanceWorldMatrix.multiplyMatrices(matrixWorld, _instanceLocalMatrix);
+          _mesh$1.matrixWorld = _instanceWorldMatrix;
+          _mesh$1.raycast(raycaster, _instanceIntersects);
+          for (let i2 = 0, l = _instanceIntersects.length; i2 < l; i2++) {
+            const intersect2 = _instanceIntersects[i2];
+            intersect2.instanceId = instanceId;
+            intersect2.object = this;
+            intersects2.push(intersect2);
+          }
+          _instanceIntersects.length = 0;
+        }
+      }
+      /**
+       * Sets the given color to the defined instance. Make sure you set the `needsUpdate` flag of
+       * {@link InstancedMesh#instanceColor} to `true` after updating all the colors.
+       *
+       * @param {number} index - The instance index.
+       * @param {Color} color - The instance color.
+       */
+      setColorAt(index, color) {
+        if (this.instanceColor === null) {
+          this.instanceColor = new InstancedBufferAttribute(new Float32Array(this.instanceMatrix.count * 3).fill(1), 3);
+        }
+        color.toArray(this.instanceColor.array, index * 3);
+      }
+      /**
+       * Sets the given local transformation matrix to the defined instance. Make sure you set the `needsUpdate` flag of
+       * {@link InstancedMesh#instanceMatrix} to `true` after updating all the colors.
+       *
+       * @param {number} index - The instance index.
+       * @param {Matrix4} matrix - The local transformation.
+       */
+      setMatrixAt(index, matrix) {
+        matrix.toArray(this.instanceMatrix.array, index * 16);
+      }
+      /**
+       * Sets the morph target weights to the defined instance. Make sure you set the `needsUpdate` flag of
+       * {@link InstancedMesh#morphTexture} to `true` after updating all the influences.
+       *
+       * @param {number} index - The instance index.
+       * @param {Mesh} object -  A mesh which `morphTargetInfluences` property containing the morph target weights
+       * of a single instance.
+       */
+      setMorphAt(index, object) {
+        const objectInfluences = object.morphTargetInfluences;
+        const len = objectInfluences.length + 1;
+        if (this.morphTexture === null) {
+          this.morphTexture = new DataTexture(new Float32Array(len * this.count), len, this.count, RedFormat, FloatType);
+        }
+        const array = this.morphTexture.source.data.data;
+        let morphInfluencesSum = 0;
+        for (let i2 = 0; i2 < objectInfluences.length; i2++) {
+          morphInfluencesSum += objectInfluences[i2];
+        }
+        const morphBaseInfluence = this.geometry.morphTargetsRelative ? 1 : 1 - morphInfluencesSum;
+        const dataIndex = len * index;
+        array[dataIndex] = morphBaseInfluence;
+        array.set(objectInfluences, dataIndex + 1);
+      }
+      updateMorphTargets() {
+      }
+      /**
+       * Frees the GPU-related resources allocated by this instance. Call this
+       * method whenever this instance is no longer used in your app.
+       */
+      dispose() {
+        this.dispatchEvent({ type: "dispose" });
+        if (this.morphTexture !== null) {
+          this.morphTexture.dispose();
+          this.morphTexture = null;
+        }
+      }
+    };
     _vector1 = /* @__PURE__ */ new Vector3();
     _vector2 = /* @__PURE__ */ new Vector3();
     _normalMatrix = /* @__PURE__ */ new Matrix3();
@@ -13620,7 +15106,7 @@ var init_three_core = __esm({
        * @param {Raycaster} raycaster - The raycaster.
        * @param {Array<Object>} intersects - The target array that holds the intersection points.
        */
-      raycast(raycaster, intersects) {
+      raycast(raycaster, intersects2) {
         const geometry = this.geometry;
         const matrixWorld = this.matrixWorld;
         const threshold = raycaster.params.Line.threshold;
@@ -13644,32 +15130,32 @@ var init_three_core = __esm({
           for (let i2 = start, l = end2 - 1; i2 < l; i2 += step2) {
             const a = index.getX(i2);
             const b = index.getX(i2 + 1);
-            const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, a, b, i2);
-            if (intersect) {
-              intersects.push(intersect);
+            const intersect2 = checkIntersection(this, raycaster, _ray$1, localThresholdSq, a, b, i2);
+            if (intersect2) {
+              intersects2.push(intersect2);
             }
           }
           if (this.isLineLoop) {
             const a = index.getX(end2 - 1);
             const b = index.getX(start);
-            const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, a, b, end2 - 1);
-            if (intersect) {
-              intersects.push(intersect);
+            const intersect2 = checkIntersection(this, raycaster, _ray$1, localThresholdSq, a, b, end2 - 1);
+            if (intersect2) {
+              intersects2.push(intersect2);
             }
           }
         } else {
           const start = Math.max(0, drawRange.start);
           const end2 = Math.min(positionAttribute.count, drawRange.start + drawRange.count);
           for (let i2 = start, l = end2 - 1; i2 < l; i2 += step2) {
-            const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, i2, i2 + 1, i2);
-            if (intersect) {
-              intersects.push(intersect);
+            const intersect2 = checkIntersection(this, raycaster, _ray$1, localThresholdSq, i2, i2 + 1, i2);
+            if (intersect2) {
+              intersects2.push(intersect2);
             }
           }
           if (this.isLineLoop) {
-            const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, end2 - 1, start, end2 - 1);
-            if (intersect) {
-              intersects.push(intersect);
+            const intersect2 = checkIntersection(this, raycaster, _ray$1, localThresholdSq, end2 - 1, start, end2 - 1);
+            if (intersect2) {
+              intersects2.push(intersect2);
             }
           }
         }
@@ -13989,10 +15475,10 @@ var init_three_core = __esm({
           const vertex2 = new Vector3();
           let groupCount = 0;
           const radius = top2 === true ? radiusTop : radiusBottom;
-          const sign = top2 === true ? 1 : -1;
+          const sign2 = top2 === true ? 1 : -1;
           for (let x = 1; x <= radialSegments; x++) {
-            vertices.push(0, halfHeight * sign, 0);
-            normals.push(0, sign, 0);
+            vertices.push(0, halfHeight * sign2, 0);
+            normals.push(0, sign2, 0);
             uvs.push(0.5, 0.5);
             index++;
           }
@@ -14003,12 +15489,12 @@ var init_three_core = __esm({
             const cosTheta = Math.cos(theta);
             const sinTheta = Math.sin(theta);
             vertex2.x = radius * sinTheta;
-            vertex2.y = halfHeight * sign;
+            vertex2.y = halfHeight * sign2;
             vertex2.z = radius * cosTheta;
             vertices.push(vertex2.x, vertex2.y, vertex2.z);
-            normals.push(0, sign, 0);
+            normals.push(0, sign2, 0);
             uv.x = cosTheta * 0.5 + 0.5;
-            uv.y = sinTheta * 0.5 * sign + 0.5;
+            uv.y = sinTheta * 0.5 * sign2 + 0.5;
             uvs.push(uv.x, uv.y);
             index++;
           }
@@ -14040,6 +15526,2219 @@ var init_three_core = __esm({
        */
       static fromJSON(data) {
         return new _CylinderGeometry(data.radiusTop, data.radiusBottom, data.height, data.radialSegments, data.heightSegments, data.openEnded, data.thetaStart, data.thetaLength);
+      }
+    };
+    ConeGeometry = class _ConeGeometry extends CylinderGeometry {
+      /**
+       * Constructs a new cone geometry.
+       *
+       * @param {number} [radius=1] - Radius of the cone base.
+       * @param {number} [height=1] - Height of the cone.
+       * @param {number} [radialSegments=32] - Number of segmented faces around the circumference of the cone.
+       * @param {number} [heightSegments=1] - Number of rows of faces along the height of the cone.
+       * @param {boolean} [openEnded=false] - Whether the base of the cone is open or capped.
+       * @param {number} [thetaStart=0] - Start angle for first segment, in radians.
+       * @param {number} [thetaLength=Math.PI*2] - The central angle, often called theta, of the circular sector, in radians.
+       * The default value results in a complete cone.
+       */
+      constructor(radius = 1, height = 1, radialSegments = 32, heightSegments = 1, openEnded = false, thetaStart = 0, thetaLength = Math.PI * 2) {
+        super(0, radius, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength);
+        this.type = "ConeGeometry";
+        this.parameters = {
+          radius,
+          height,
+          radialSegments,
+          heightSegments,
+          openEnded,
+          thetaStart,
+          thetaLength
+        };
+      }
+      /**
+       * Factory method for creating an instance of this class from the given
+       * JSON object.
+       *
+       * @param {Object} data - A JSON object representing the serialized geometry.
+       * @return {ConeGeometry} A new instance.
+       */
+      static fromJSON(data) {
+        return new _ConeGeometry(data.radius, data.height, data.radialSegments, data.heightSegments, data.openEnded, data.thetaStart, data.thetaLength);
+      }
+    };
+    PolyhedronGeometry = class _PolyhedronGeometry extends BufferGeometry {
+      /**
+       * Constructs a new polyhedron geometry.
+       *
+       * @param {Array<number>} [vertices] - A flat array of vertices describing the base shape.
+       * @param {Array<number>} [indices] - A flat array of indices describing the base shape.
+       * @param {number} [radius=1] - The radius of the shape.
+       * @param {number} [detail=0] - How many levels to subdivide the geometry. The more detail, the smoother the shape.
+       */
+      constructor(vertices = [], indices = [], radius = 1, detail = 0) {
+        super();
+        this.type = "PolyhedronGeometry";
+        this.parameters = {
+          vertices,
+          indices,
+          radius,
+          detail
+        };
+        const vertexBuffer = [];
+        const uvBuffer = [];
+        subdivide(detail);
+        applyRadius(radius);
+        generateUVs();
+        this.setAttribute("position", new Float32BufferAttribute(vertexBuffer, 3));
+        this.setAttribute("normal", new Float32BufferAttribute(vertexBuffer.slice(), 3));
+        this.setAttribute("uv", new Float32BufferAttribute(uvBuffer, 2));
+        if (detail === 0) {
+          this.computeVertexNormals();
+        } else {
+          this.normalizeNormals();
+        }
+        function subdivide(detail2) {
+          const a = new Vector3();
+          const b = new Vector3();
+          const c = new Vector3();
+          for (let i2 = 0; i2 < indices.length; i2 += 3) {
+            getVertexByIndex(indices[i2 + 0], a);
+            getVertexByIndex(indices[i2 + 1], b);
+            getVertexByIndex(indices[i2 + 2], c);
+            subdivideFace(a, b, c, detail2);
+          }
+        }
+        function subdivideFace(a, b, c, detail2) {
+          const cols = detail2 + 1;
+          const v = [];
+          for (let i2 = 0; i2 <= cols; i2++) {
+            v[i2] = [];
+            const aj = a.clone().lerp(c, i2 / cols);
+            const bj = b.clone().lerp(c, i2 / cols);
+            const rows = cols - i2;
+            for (let j = 0; j <= rows; j++) {
+              if (j === 0 && i2 === cols) {
+                v[i2][j] = aj;
+              } else {
+                v[i2][j] = aj.clone().lerp(bj, j / rows);
+              }
+            }
+          }
+          for (let i2 = 0; i2 < cols; i2++) {
+            for (let j = 0; j < 2 * (cols - i2) - 1; j++) {
+              const k = Math.floor(j / 2);
+              if (j % 2 === 0) {
+                pushVertex(v[i2][k + 1]);
+                pushVertex(v[i2 + 1][k]);
+                pushVertex(v[i2][k]);
+              } else {
+                pushVertex(v[i2][k + 1]);
+                pushVertex(v[i2 + 1][k + 1]);
+                pushVertex(v[i2 + 1][k]);
+              }
+            }
+          }
+        }
+        function applyRadius(radius2) {
+          const vertex2 = new Vector3();
+          for (let i2 = 0; i2 < vertexBuffer.length; i2 += 3) {
+            vertex2.x = vertexBuffer[i2 + 0];
+            vertex2.y = vertexBuffer[i2 + 1];
+            vertex2.z = vertexBuffer[i2 + 2];
+            vertex2.normalize().multiplyScalar(radius2);
+            vertexBuffer[i2 + 0] = vertex2.x;
+            vertexBuffer[i2 + 1] = vertex2.y;
+            vertexBuffer[i2 + 2] = vertex2.z;
+          }
+        }
+        function generateUVs() {
+          const vertex2 = new Vector3();
+          for (let i2 = 0; i2 < vertexBuffer.length; i2 += 3) {
+            vertex2.x = vertexBuffer[i2 + 0];
+            vertex2.y = vertexBuffer[i2 + 1];
+            vertex2.z = vertexBuffer[i2 + 2];
+            const u = azimuth(vertex2) / 2 / Math.PI + 0.5;
+            const v = inclination(vertex2) / Math.PI + 0.5;
+            uvBuffer.push(u, 1 - v);
+          }
+          correctUVs();
+          correctSeam();
+        }
+        function correctSeam() {
+          for (let i2 = 0; i2 < uvBuffer.length; i2 += 6) {
+            const x0 = uvBuffer[i2 + 0];
+            const x1 = uvBuffer[i2 + 2];
+            const x2 = uvBuffer[i2 + 4];
+            const max = Math.max(x0, x1, x2);
+            const min = Math.min(x0, x1, x2);
+            if (max > 0.9 && min < 0.1) {
+              if (x0 < 0.2) uvBuffer[i2 + 0] += 1;
+              if (x1 < 0.2) uvBuffer[i2 + 2] += 1;
+              if (x2 < 0.2) uvBuffer[i2 + 4] += 1;
+            }
+          }
+        }
+        function pushVertex(vertex2) {
+          vertexBuffer.push(vertex2.x, vertex2.y, vertex2.z);
+        }
+        function getVertexByIndex(index, vertex2) {
+          const stride = index * 3;
+          vertex2.x = vertices[stride + 0];
+          vertex2.y = vertices[stride + 1];
+          vertex2.z = vertices[stride + 2];
+        }
+        function correctUVs() {
+          const a = new Vector3();
+          const b = new Vector3();
+          const c = new Vector3();
+          const centroid = new Vector3();
+          const uvA = new Vector2();
+          const uvB = new Vector2();
+          const uvC = new Vector2();
+          for (let i2 = 0, j = 0; i2 < vertexBuffer.length; i2 += 9, j += 6) {
+            a.set(vertexBuffer[i2 + 0], vertexBuffer[i2 + 1], vertexBuffer[i2 + 2]);
+            b.set(vertexBuffer[i2 + 3], vertexBuffer[i2 + 4], vertexBuffer[i2 + 5]);
+            c.set(vertexBuffer[i2 + 6], vertexBuffer[i2 + 7], vertexBuffer[i2 + 8]);
+            uvA.set(uvBuffer[j + 0], uvBuffer[j + 1]);
+            uvB.set(uvBuffer[j + 2], uvBuffer[j + 3]);
+            uvC.set(uvBuffer[j + 4], uvBuffer[j + 5]);
+            centroid.copy(a).add(b).add(c).divideScalar(3);
+            const azi = azimuth(centroid);
+            correctUV(uvA, j + 0, a, azi);
+            correctUV(uvB, j + 2, b, azi);
+            correctUV(uvC, j + 4, c, azi);
+          }
+        }
+        function correctUV(uv, stride, vector, azimuth2) {
+          if (azimuth2 < 0 && uv.x === 1) {
+            uvBuffer[stride] = uv.x - 1;
+          }
+          if (vector.x === 0 && vector.z === 0) {
+            uvBuffer[stride] = azimuth2 / 2 / Math.PI + 0.5;
+          }
+        }
+        function azimuth(vector) {
+          return Math.atan2(vector.z, -vector.x);
+        }
+        function inclination(vector) {
+          return Math.atan2(-vector.y, Math.sqrt(vector.x * vector.x + vector.z * vector.z));
+        }
+      }
+      copy(source) {
+        super.copy(source);
+        this.parameters = Object.assign({}, source.parameters);
+        return this;
+      }
+      /**
+       * Factory method for creating an instance of this class from the given
+       * JSON object.
+       *
+       * @param {Object} data - A JSON object representing the serialized geometry.
+       * @return {PolyhedronGeometry} A new instance.
+       */
+      static fromJSON(data) {
+        return new _PolyhedronGeometry(data.vertices, data.indices, data.radius, data.details);
+      }
+    };
+    Curve = class {
+      /**
+       * Constructs a new curve.
+       */
+      constructor() {
+        this.type = "Curve";
+        this.arcLengthDivisions = 200;
+        this.needsUpdate = false;
+        this.cacheArcLengths = null;
+      }
+      /**
+       * This method returns a vector in 2D or 3D space (depending on the curve definition)
+       * for the given interpolation factor.
+       *
+       * @abstract
+       * @param {number} t - A interpolation factor representing a position on the curve. Must be in the range `[0,1]`.
+       * @param {(Vector2|Vector3)} [optionalTarget] - The optional target vector the result is written to.
+       * @return {(Vector2|Vector3)} The position on the curve. It can be a 2D or 3D vector depending on the curve definition.
+       */
+      getPoint() {
+        console.warn("THREE.Curve: .getPoint() not implemented.");
+      }
+      /**
+       * This method returns a vector in 2D or 3D space (depending on the curve definition)
+       * for the given interpolation factor. Unlike {@link Curve#getPoint}, this method honors the length
+       * of the curve which equidistant samples.
+       *
+       * @param {number} u - A interpolation factor representing a position on the curve. Must be in the range `[0,1]`.
+       * @param {(Vector2|Vector3)} [optionalTarget] - The optional target vector the result is written to.
+       * @return {(Vector2|Vector3)} The position on the curve. It can be a 2D or 3D vector depending on the curve definition.
+       */
+      getPointAt(u, optionalTarget) {
+        const t2 = this.getUtoTmapping(u);
+        return this.getPoint(t2, optionalTarget);
+      }
+      /**
+       * This method samples the curve via {@link Curve#getPoint} and returns an array of points representing
+       * the curve shape.
+       *
+       * @param {number} [divisions=5] - The number of divisions.
+       * @return {Array<(Vector2|Vector3)>} An array holding the sampled curve values. The number of points is `divisions + 1`.
+       */
+      getPoints(divisions = 5) {
+        const points = [];
+        for (let d = 0; d <= divisions; d++) {
+          points.push(this.getPoint(d / divisions));
+        }
+        return points;
+      }
+      // Get sequence of points using getPointAt( u )
+      /**
+       * This method samples the curve via {@link Curve#getPointAt} and returns an array of points representing
+       * the curve shape. Unlike {@link Curve#getPoints}, this method returns equi-spaced points across the entire
+       * curve.
+       *
+       * @param {number} [divisions=5] - The number of divisions.
+       * @return {Array<(Vector2|Vector3)>} An array holding the sampled curve values. The number of points is `divisions + 1`.
+       */
+      getSpacedPoints(divisions = 5) {
+        const points = [];
+        for (let d = 0; d <= divisions; d++) {
+          points.push(this.getPointAt(d / divisions));
+        }
+        return points;
+      }
+      /**
+       * Returns the total arc length of the curve.
+       *
+       * @return {number} The length of the curve.
+       */
+      getLength() {
+        const lengths = this.getLengths();
+        return lengths[lengths.length - 1];
+      }
+      /**
+       * Returns an array of cumulative segment lengths of the curve.
+       *
+       * @param {number} [divisions=this.arcLengthDivisions] - The number of divisions.
+       * @return {Array<number>} An array holding the cumulative segment lengths.
+       */
+      getLengths(divisions = this.arcLengthDivisions) {
+        if (this.cacheArcLengths && this.cacheArcLengths.length === divisions + 1 && !this.needsUpdate) {
+          return this.cacheArcLengths;
+        }
+        this.needsUpdate = false;
+        const cache2 = [];
+        let current2, last2 = this.getPoint(0);
+        let sum2 = 0;
+        cache2.push(0);
+        for (let p = 1; p <= divisions; p++) {
+          current2 = this.getPoint(p / divisions);
+          sum2 += current2.distanceTo(last2);
+          cache2.push(sum2);
+          last2 = current2;
+        }
+        this.cacheArcLengths = cache2;
+        return cache2;
+      }
+      /**
+       * Update the cumulative segment distance cache. The method must be called
+       * every time curve parameters are changed. If an updated curve is part of a
+       * composed curve like {@link CurvePath}, this method must be called on the
+       * composed curve, too.
+       */
+      updateArcLengths() {
+        this.needsUpdate = true;
+        this.getLengths();
+      }
+      /**
+       * Given an interpolation factor in the range `[0,1]`, this method returns an updated
+       * interpolation factor in the same range that can be ued to sample equidistant points
+       * from a curve.
+       *
+       * @param {number} u - The interpolation factor.
+       * @param {?number} distance - An optional distance on the curve.
+       * @return {number} The updated interpolation factor.
+       */
+      getUtoTmapping(u, distance = null) {
+        const arcLengths = this.getLengths();
+        let i2 = 0;
+        const il = arcLengths.length;
+        let targetArcLength;
+        if (distance) {
+          targetArcLength = distance;
+        } else {
+          targetArcLength = u * arcLengths[il - 1];
+        }
+        let low = 0, high = il - 1, comparison;
+        while (low <= high) {
+          i2 = Math.floor(low + (high - low) / 2);
+          comparison = arcLengths[i2] - targetArcLength;
+          if (comparison < 0) {
+            low = i2 + 1;
+          } else if (comparison > 0) {
+            high = i2 - 1;
+          } else {
+            high = i2;
+            break;
+          }
+        }
+        i2 = high;
+        if (arcLengths[i2] === targetArcLength) {
+          return i2 / (il - 1);
+        }
+        const lengthBefore = arcLengths[i2];
+        const lengthAfter = arcLengths[i2 + 1];
+        const segmentLength = lengthAfter - lengthBefore;
+        const segmentFraction = (targetArcLength - lengthBefore) / segmentLength;
+        const t2 = (i2 + segmentFraction) / (il - 1);
+        return t2;
+      }
+      /**
+       * Returns a unit vector tangent for the given interpolation factor.
+       * If the derived curve does not implement its tangent derivation,
+       * two points a small delta apart will be used to find its gradient
+       * which seems to give a reasonable approximation.
+       *
+       * @param {number} t - The interpolation factor.
+       * @param {(Vector2|Vector3)} [optionalTarget] - The optional target vector the result is written to.
+       * @return {(Vector2|Vector3)} The tangent vector.
+       */
+      getTangent(t2, optionalTarget) {
+        const delta = 1e-4;
+        let t1 = t2 - delta;
+        let t22 = t2 + delta;
+        if (t1 < 0) t1 = 0;
+        if (t22 > 1) t22 = 1;
+        const pt1 = this.getPoint(t1);
+        const pt2 = this.getPoint(t22);
+        const tangent = optionalTarget || (pt1.isVector2 ? new Vector2() : new Vector3());
+        tangent.copy(pt2).sub(pt1).normalize();
+        return tangent;
+      }
+      /**
+       * Same as {@link Curve#getTangent} but with equidistant samples.
+       *
+       * @param {number} u - The interpolation factor.
+       * @param {(Vector2|Vector3)} [optionalTarget] - The optional target vector the result is written to.
+       * @return {(Vector2|Vector3)} The tangent vector.
+       * @see {@link Curve#getPointAt}
+       */
+      getTangentAt(u, optionalTarget) {
+        const t2 = this.getUtoTmapping(u);
+        return this.getTangent(t2, optionalTarget);
+      }
+      /**
+       * Generates the Frenet Frames. Requires a curve definition in 3D space. Used
+       * in geometries like {@link TubeGeometry} or {@link ExtrudeGeometry}.
+       *
+       * @param {number} segments - The number of segments.
+       * @param {boolean} [closed=false] - Whether the curve is closed or not.
+       * @return {{tangents: Array<Vector3>, normals: Array<Vector3>, binormals: Array<Vector3>}} The Frenet Frames.
+       */
+      computeFrenetFrames(segments, closed = false) {
+        const normal = new Vector3();
+        const tangents = [];
+        const normals = [];
+        const binormals = [];
+        const vec = new Vector3();
+        const mat2 = new Matrix4();
+        for (let i2 = 0; i2 <= segments; i2++) {
+          const u = i2 / segments;
+          tangents[i2] = this.getTangentAt(u, new Vector3());
+        }
+        normals[0] = new Vector3();
+        binormals[0] = new Vector3();
+        let min = Number.MAX_VALUE;
+        const tx2 = Math.abs(tangents[0].x);
+        const ty = Math.abs(tangents[0].y);
+        const tz = Math.abs(tangents[0].z);
+        if (tx2 <= min) {
+          min = tx2;
+          normal.set(1, 0, 0);
+        }
+        if (ty <= min) {
+          min = ty;
+          normal.set(0, 1, 0);
+        }
+        if (tz <= min) {
+          normal.set(0, 0, 1);
+        }
+        vec.crossVectors(tangents[0], normal).normalize();
+        normals[0].crossVectors(tangents[0], vec);
+        binormals[0].crossVectors(tangents[0], normals[0]);
+        for (let i2 = 1; i2 <= segments; i2++) {
+          normals[i2] = normals[i2 - 1].clone();
+          binormals[i2] = binormals[i2 - 1].clone();
+          vec.crossVectors(tangents[i2 - 1], tangents[i2]);
+          if (vec.length() > Number.EPSILON) {
+            vec.normalize();
+            const theta = Math.acos(clamp6(tangents[i2 - 1].dot(tangents[i2]), -1, 1));
+            normals[i2].applyMatrix4(mat2.makeRotationAxis(vec, theta));
+          }
+          binormals[i2].crossVectors(tangents[i2], normals[i2]);
+        }
+        if (closed === true) {
+          let theta = Math.acos(clamp6(normals[0].dot(normals[segments]), -1, 1));
+          theta /= segments;
+          if (tangents[0].dot(vec.crossVectors(normals[0], normals[segments])) > 0) {
+            theta = -theta;
+          }
+          for (let i2 = 1; i2 <= segments; i2++) {
+            normals[i2].applyMatrix4(mat2.makeRotationAxis(tangents[i2], theta * i2));
+            binormals[i2].crossVectors(tangents[i2], normals[i2]);
+          }
+        }
+        return {
+          tangents,
+          normals,
+          binormals
+        };
+      }
+      /**
+       * Returns a new curve with copied values from this instance.
+       *
+       * @return {Curve} A clone of this instance.
+       */
+      clone() {
+        return new this.constructor().copy(this);
+      }
+      /**
+       * Copies the values of the given curve to this instance.
+       *
+       * @param {Curve} source - The curve to copy.
+       * @return {Curve} A reference to this curve.
+       */
+      copy(source) {
+        this.arcLengthDivisions = source.arcLengthDivisions;
+        return this;
+      }
+      /**
+       * Serializes the curve into JSON.
+       *
+       * @return {Object} A JSON object representing the serialized curve.
+       * @see {@link ObjectLoader#parse}
+       */
+      toJSON() {
+        const data = {
+          metadata: {
+            version: 4.7,
+            type: "Curve",
+            generator: "Curve.toJSON"
+          }
+        };
+        data.arcLengthDivisions = this.arcLengthDivisions;
+        data.type = this.type;
+        return data;
+      }
+      /**
+       * Deserializes the curve from the given JSON.
+       *
+       * @param {Object} json - The JSON holding the serialized curve.
+       * @return {Curve} A reference to this curve.
+       */
+      fromJSON(json) {
+        this.arcLengthDivisions = json.arcLengthDivisions;
+        return this;
+      }
+    };
+    EllipseCurve = class extends Curve {
+      /**
+       * Constructs a new ellipse curve.
+       *
+       * @param {number} [aX=0] - The X center of the ellipse.
+       * @param {number} [aY=0] - The Y center of the ellipse.
+       * @param {number} [xRadius=1] - The radius of the ellipse in the x direction.
+       * @param {number} [yRadius=1] - The radius of the ellipse in the y direction.
+       * @param {number} [aStartAngle=0] - The start angle of the curve in radians starting from the positive X axis.
+       * @param {number} [aEndAngle=Math.PI*2] - The end angle of the curve in radians starting from the positive X axis.
+       * @param {boolean} [aClockwise=false] - Whether the ellipse is drawn clockwise or not.
+       * @param {number} [aRotation=0] - The rotation angle of the ellipse in radians, counterclockwise from the positive X axis.
+       */
+      constructor(aX = 0, aY = 0, xRadius = 1, yRadius = 1, aStartAngle = 0, aEndAngle = Math.PI * 2, aClockwise = false, aRotation = 0) {
+        super();
+        this.isEllipseCurve = true;
+        this.type = "EllipseCurve";
+        this.aX = aX;
+        this.aY = aY;
+        this.xRadius = xRadius;
+        this.yRadius = yRadius;
+        this.aStartAngle = aStartAngle;
+        this.aEndAngle = aEndAngle;
+        this.aClockwise = aClockwise;
+        this.aRotation = aRotation;
+      }
+      /**
+       * Returns a point on the curve.
+       *
+       * @param {number} t - A interpolation factor representing a position on the curve. Must be in the range `[0,1]`.
+       * @param {Vector2} [optionalTarget] - The optional target vector the result is written to.
+       * @return {Vector2} The position on the curve.
+       */
+      getPoint(t2, optionalTarget = new Vector2()) {
+        const point2 = optionalTarget;
+        const twoPi = Math.PI * 2;
+        let deltaAngle = this.aEndAngle - this.aStartAngle;
+        const samePoints = Math.abs(deltaAngle) < Number.EPSILON;
+        while (deltaAngle < 0) deltaAngle += twoPi;
+        while (deltaAngle > twoPi) deltaAngle -= twoPi;
+        if (deltaAngle < Number.EPSILON) {
+          if (samePoints) {
+            deltaAngle = 0;
+          } else {
+            deltaAngle = twoPi;
+          }
+        }
+        if (this.aClockwise === true && !samePoints) {
+          if (deltaAngle === twoPi) {
+            deltaAngle = -twoPi;
+          } else {
+            deltaAngle = deltaAngle - twoPi;
+          }
+        }
+        const angle = this.aStartAngle + t2 * deltaAngle;
+        let x = this.aX + this.xRadius * Math.cos(angle);
+        let y = this.aY + this.yRadius * Math.sin(angle);
+        if (this.aRotation !== 0) {
+          const cos = Math.cos(this.aRotation);
+          const sin = Math.sin(this.aRotation);
+          const tx2 = x - this.aX;
+          const ty = y - this.aY;
+          x = tx2 * cos - ty * sin + this.aX;
+          y = tx2 * sin + ty * cos + this.aY;
+        }
+        return point2.set(x, y);
+      }
+      copy(source) {
+        super.copy(source);
+        this.aX = source.aX;
+        this.aY = source.aY;
+        this.xRadius = source.xRadius;
+        this.yRadius = source.yRadius;
+        this.aStartAngle = source.aStartAngle;
+        this.aEndAngle = source.aEndAngle;
+        this.aClockwise = source.aClockwise;
+        this.aRotation = source.aRotation;
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.aX = this.aX;
+        data.aY = this.aY;
+        data.xRadius = this.xRadius;
+        data.yRadius = this.yRadius;
+        data.aStartAngle = this.aStartAngle;
+        data.aEndAngle = this.aEndAngle;
+        data.aClockwise = this.aClockwise;
+        data.aRotation = this.aRotation;
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.aX = json.aX;
+        this.aY = json.aY;
+        this.xRadius = json.xRadius;
+        this.yRadius = json.yRadius;
+        this.aStartAngle = json.aStartAngle;
+        this.aEndAngle = json.aEndAngle;
+        this.aClockwise = json.aClockwise;
+        this.aRotation = json.aRotation;
+        return this;
+      }
+    };
+    ArcCurve = class extends EllipseCurve {
+      /**
+       * Constructs a new arc curve.
+       *
+       * @param {number} [aX=0] - The X center of the ellipse.
+       * @param {number} [aY=0] - The Y center of the ellipse.
+       * @param {number} [aRadius=1] - The radius of the ellipse in the x direction.
+       * @param {number} [aStartAngle=0] - The start angle of the curve in radians starting from the positive X axis.
+       * @param {number} [aEndAngle=Math.PI*2] - The end angle of the curve in radians starting from the positive X axis.
+       * @param {boolean} [aClockwise=false] - Whether the ellipse is drawn clockwise or not.
+       */
+      constructor(aX, aY, aRadius, aStartAngle, aEndAngle, aClockwise) {
+        super(aX, aY, aRadius, aRadius, aStartAngle, aEndAngle, aClockwise);
+        this.isArcCurve = true;
+        this.type = "ArcCurve";
+      }
+    };
+    tmp = /* @__PURE__ */ new Vector3();
+    px = /* @__PURE__ */ new CubicPoly();
+    py = /* @__PURE__ */ new CubicPoly();
+    pz = /* @__PURE__ */ new CubicPoly();
+    CatmullRomCurve3 = class extends Curve {
+      /**
+       * Constructs a new Catmull-Rom curve.
+       *
+       * @param {Array<Vector3>} [points] - An array of 3D points defining the curve.
+       * @param {boolean} [closed=false] - Whether the curve is closed or not.
+       * @param {('centripetal'|'chordal'|'catmullrom')} [curveType='centripetal'] - The curve type.
+       * @param {number} [tension=0.5] - Tension of the curve.
+       */
+      constructor(points = [], closed = false, curveType = "centripetal", tension = 0.5) {
+        super();
+        this.isCatmullRomCurve3 = true;
+        this.type = "CatmullRomCurve3";
+        this.points = points;
+        this.closed = closed;
+        this.curveType = curveType;
+        this.tension = tension;
+      }
+      /**
+       * Returns a point on the curve.
+       *
+       * @param {number} t - A interpolation factor representing a position on the curve. Must be in the range `[0,1]`.
+       * @param {Vector3} [optionalTarget] - The optional target vector the result is written to.
+       * @return {Vector3} The position on the curve.
+       */
+      getPoint(t2, optionalTarget = new Vector3()) {
+        const point2 = optionalTarget;
+        const points = this.points;
+        const l = points.length;
+        const p = (l - (this.closed ? 0 : 1)) * t2;
+        let intPoint = Math.floor(p);
+        let weight = p - intPoint;
+        if (this.closed) {
+          intPoint += intPoint > 0 ? 0 : (Math.floor(Math.abs(intPoint) / l) + 1) * l;
+        } else if (weight === 0 && intPoint === l - 1) {
+          intPoint = l - 2;
+          weight = 1;
+        }
+        let p0, p3;
+        if (this.closed || intPoint > 0) {
+          p0 = points[(intPoint - 1) % l];
+        } else {
+          tmp.subVectors(points[0], points[1]).add(points[0]);
+          p0 = tmp;
+        }
+        const p1 = points[intPoint % l];
+        const p2 = points[(intPoint + 1) % l];
+        if (this.closed || intPoint + 2 < l) {
+          p3 = points[(intPoint + 2) % l];
+        } else {
+          tmp.subVectors(points[l - 1], points[l - 2]).add(points[l - 1]);
+          p3 = tmp;
+        }
+        if (this.curveType === "centripetal" || this.curveType === "chordal") {
+          const pow = this.curveType === "chordal" ? 0.5 : 0.25;
+          let dt0 = Math.pow(p0.distanceToSquared(p1), pow);
+          let dt1 = Math.pow(p1.distanceToSquared(p2), pow);
+          let dt2 = Math.pow(p2.distanceToSquared(p3), pow);
+          if (dt1 < 1e-4) dt1 = 1;
+          if (dt0 < 1e-4) dt0 = dt1;
+          if (dt2 < 1e-4) dt2 = dt1;
+          px.initNonuniformCatmullRom(p0.x, p1.x, p2.x, p3.x, dt0, dt1, dt2);
+          py.initNonuniformCatmullRom(p0.y, p1.y, p2.y, p3.y, dt0, dt1, dt2);
+          pz.initNonuniformCatmullRom(p0.z, p1.z, p2.z, p3.z, dt0, dt1, dt2);
+        } else if (this.curveType === "catmullrom") {
+          px.initCatmullRom(p0.x, p1.x, p2.x, p3.x, this.tension);
+          py.initCatmullRom(p0.y, p1.y, p2.y, p3.y, this.tension);
+          pz.initCatmullRom(p0.z, p1.z, p2.z, p3.z, this.tension);
+        }
+        point2.set(
+          px.calc(weight),
+          py.calc(weight),
+          pz.calc(weight)
+        );
+        return point2;
+      }
+      copy(source) {
+        super.copy(source);
+        this.points = [];
+        for (let i2 = 0, l = source.points.length; i2 < l; i2++) {
+          const point2 = source.points[i2];
+          this.points.push(point2.clone());
+        }
+        this.closed = source.closed;
+        this.curveType = source.curveType;
+        this.tension = source.tension;
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.points = [];
+        for (let i2 = 0, l = this.points.length; i2 < l; i2++) {
+          const point2 = this.points[i2];
+          data.points.push(point2.toArray());
+        }
+        data.closed = this.closed;
+        data.curveType = this.curveType;
+        data.tension = this.tension;
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.points = [];
+        for (let i2 = 0, l = json.points.length; i2 < l; i2++) {
+          const point2 = json.points[i2];
+          this.points.push(new Vector3().fromArray(point2));
+        }
+        this.closed = json.closed;
+        this.curveType = json.curveType;
+        this.tension = json.tension;
+        return this;
+      }
+    };
+    CubicBezierCurve = class extends Curve {
+      /**
+       * Constructs a new Cubic Bezier curve.
+       *
+       * @param {Vector2} [v0] - The start point.
+       * @param {Vector2} [v1] - The first control point.
+       * @param {Vector2} [v2] - The second control point.
+       * @param {Vector2} [v3] - The end point.
+       */
+      constructor(v0 = new Vector2(), v1 = new Vector2(), v2 = new Vector2(), v3 = new Vector2()) {
+        super();
+        this.isCubicBezierCurve = true;
+        this.type = "CubicBezierCurve";
+        this.v0 = v0;
+        this.v1 = v1;
+        this.v2 = v2;
+        this.v3 = v3;
+      }
+      /**
+       * Returns a point on the curve.
+       *
+       * @param {number} t - A interpolation factor representing a position on the curve. Must be in the range `[0,1]`.
+       * @param {Vector2} [optionalTarget] - The optional target vector the result is written to.
+       * @return {Vector2} The position on the curve.
+       */
+      getPoint(t2, optionalTarget = new Vector2()) {
+        const point2 = optionalTarget;
+        const v0 = this.v0, v1 = this.v1, v2 = this.v2, v3 = this.v3;
+        point2.set(
+          CubicBezier(t2, v0.x, v1.x, v2.x, v3.x),
+          CubicBezier(t2, v0.y, v1.y, v2.y, v3.y)
+        );
+        return point2;
+      }
+      copy(source) {
+        super.copy(source);
+        this.v0.copy(source.v0);
+        this.v1.copy(source.v1);
+        this.v2.copy(source.v2);
+        this.v3.copy(source.v3);
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.v0 = this.v0.toArray();
+        data.v1 = this.v1.toArray();
+        data.v2 = this.v2.toArray();
+        data.v3 = this.v3.toArray();
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.v0.fromArray(json.v0);
+        this.v1.fromArray(json.v1);
+        this.v2.fromArray(json.v2);
+        this.v3.fromArray(json.v3);
+        return this;
+      }
+    };
+    CubicBezierCurve3 = class extends Curve {
+      /**
+       * Constructs a new Cubic Bezier curve.
+       *
+       * @param {Vector3} [v0] - The start point.
+       * @param {Vector3} [v1] - The first control point.
+       * @param {Vector3} [v2] - The second control point.
+       * @param {Vector3} [v3] - The end point.
+       */
+      constructor(v0 = new Vector3(), v1 = new Vector3(), v2 = new Vector3(), v3 = new Vector3()) {
+        super();
+        this.isCubicBezierCurve3 = true;
+        this.type = "CubicBezierCurve3";
+        this.v0 = v0;
+        this.v1 = v1;
+        this.v2 = v2;
+        this.v3 = v3;
+      }
+      /**
+       * Returns a point on the curve.
+       *
+       * @param {number} t - A interpolation factor representing a position on the curve. Must be in the range `[0,1]`.
+       * @param {Vector3} [optionalTarget] - The optional target vector the result is written to.
+       * @return {Vector3} The position on the curve.
+       */
+      getPoint(t2, optionalTarget = new Vector3()) {
+        const point2 = optionalTarget;
+        const v0 = this.v0, v1 = this.v1, v2 = this.v2, v3 = this.v3;
+        point2.set(
+          CubicBezier(t2, v0.x, v1.x, v2.x, v3.x),
+          CubicBezier(t2, v0.y, v1.y, v2.y, v3.y),
+          CubicBezier(t2, v0.z, v1.z, v2.z, v3.z)
+        );
+        return point2;
+      }
+      copy(source) {
+        super.copy(source);
+        this.v0.copy(source.v0);
+        this.v1.copy(source.v1);
+        this.v2.copy(source.v2);
+        this.v3.copy(source.v3);
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.v0 = this.v0.toArray();
+        data.v1 = this.v1.toArray();
+        data.v2 = this.v2.toArray();
+        data.v3 = this.v3.toArray();
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.v0.fromArray(json.v0);
+        this.v1.fromArray(json.v1);
+        this.v2.fromArray(json.v2);
+        this.v3.fromArray(json.v3);
+        return this;
+      }
+    };
+    LineCurve = class extends Curve {
+      /**
+       * Constructs a new line curve.
+       *
+       * @param {Vector2} [v1] - The start point.
+       * @param {Vector2} [v2] - The end point.
+       */
+      constructor(v1 = new Vector2(), v2 = new Vector2()) {
+        super();
+        this.isLineCurve = true;
+        this.type = "LineCurve";
+        this.v1 = v1;
+        this.v2 = v2;
+      }
+      /**
+       * Returns a point on the line.
+       *
+       * @param {number} t - A interpolation factor representing a position on the line. Must be in the range `[0,1]`.
+       * @param {Vector2} [optionalTarget] - The optional target vector the result is written to.
+       * @return {Vector2} The position on the line.
+       */
+      getPoint(t2, optionalTarget = new Vector2()) {
+        const point2 = optionalTarget;
+        if (t2 === 1) {
+          point2.copy(this.v2);
+        } else {
+          point2.copy(this.v2).sub(this.v1);
+          point2.multiplyScalar(t2).add(this.v1);
+        }
+        return point2;
+      }
+      // Line curve is linear, so we can overwrite default getPointAt
+      getPointAt(u, optionalTarget) {
+        return this.getPoint(u, optionalTarget);
+      }
+      getTangent(t2, optionalTarget = new Vector2()) {
+        return optionalTarget.subVectors(this.v2, this.v1).normalize();
+      }
+      getTangentAt(u, optionalTarget) {
+        return this.getTangent(u, optionalTarget);
+      }
+      copy(source) {
+        super.copy(source);
+        this.v1.copy(source.v1);
+        this.v2.copy(source.v2);
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.v1 = this.v1.toArray();
+        data.v2 = this.v2.toArray();
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.v1.fromArray(json.v1);
+        this.v2.fromArray(json.v2);
+        return this;
+      }
+    };
+    LineCurve3 = class extends Curve {
+      /**
+       * Constructs a new line curve.
+       *
+       * @param {Vector3} [v1] - The start point.
+       * @param {Vector3} [v2] - The end point.
+       */
+      constructor(v1 = new Vector3(), v2 = new Vector3()) {
+        super();
+        this.isLineCurve3 = true;
+        this.type = "LineCurve3";
+        this.v1 = v1;
+        this.v2 = v2;
+      }
+      /**
+       * Returns a point on the line.
+       *
+       * @param {number} t - A interpolation factor representing a position on the line. Must be in the range `[0,1]`.
+       * @param {Vector3} [optionalTarget] - The optional target vector the result is written to.
+       * @return {Vector3} The position on the line.
+       */
+      getPoint(t2, optionalTarget = new Vector3()) {
+        const point2 = optionalTarget;
+        if (t2 === 1) {
+          point2.copy(this.v2);
+        } else {
+          point2.copy(this.v2).sub(this.v1);
+          point2.multiplyScalar(t2).add(this.v1);
+        }
+        return point2;
+      }
+      // Line curve is linear, so we can overwrite default getPointAt
+      getPointAt(u, optionalTarget) {
+        return this.getPoint(u, optionalTarget);
+      }
+      getTangent(t2, optionalTarget = new Vector3()) {
+        return optionalTarget.subVectors(this.v2, this.v1).normalize();
+      }
+      getTangentAt(u, optionalTarget) {
+        return this.getTangent(u, optionalTarget);
+      }
+      copy(source) {
+        super.copy(source);
+        this.v1.copy(source.v1);
+        this.v2.copy(source.v2);
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.v1 = this.v1.toArray();
+        data.v2 = this.v2.toArray();
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.v1.fromArray(json.v1);
+        this.v2.fromArray(json.v2);
+        return this;
+      }
+    };
+    QuadraticBezierCurve = class extends Curve {
+      /**
+       * Constructs a new Quadratic Bezier curve.
+       *
+       * @param {Vector2} [v0] - The start point.
+       * @param {Vector2} [v1] - The control point.
+       * @param {Vector2} [v2] - The end point.
+       */
+      constructor(v0 = new Vector2(), v1 = new Vector2(), v2 = new Vector2()) {
+        super();
+        this.isQuadraticBezierCurve = true;
+        this.type = "QuadraticBezierCurve";
+        this.v0 = v0;
+        this.v1 = v1;
+        this.v2 = v2;
+      }
+      /**
+       * Returns a point on the curve.
+       *
+       * @param {number} t - A interpolation factor representing a position on the curve. Must be in the range `[0,1]`.
+       * @param {Vector2} [optionalTarget] - The optional target vector the result is written to.
+       * @return {Vector2} The position on the curve.
+       */
+      getPoint(t2, optionalTarget = new Vector2()) {
+        const point2 = optionalTarget;
+        const v0 = this.v0, v1 = this.v1, v2 = this.v2;
+        point2.set(
+          QuadraticBezier(t2, v0.x, v1.x, v2.x),
+          QuadraticBezier(t2, v0.y, v1.y, v2.y)
+        );
+        return point2;
+      }
+      copy(source) {
+        super.copy(source);
+        this.v0.copy(source.v0);
+        this.v1.copy(source.v1);
+        this.v2.copy(source.v2);
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.v0 = this.v0.toArray();
+        data.v1 = this.v1.toArray();
+        data.v2 = this.v2.toArray();
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.v0.fromArray(json.v0);
+        this.v1.fromArray(json.v1);
+        this.v2.fromArray(json.v2);
+        return this;
+      }
+    };
+    QuadraticBezierCurve3 = class extends Curve {
+      /**
+       * Constructs a new Quadratic Bezier curve.
+       *
+       * @param {Vector3} [v0] - The start point.
+       * @param {Vector3} [v1] - The control point.
+       * @param {Vector3} [v2] - The end point.
+       */
+      constructor(v0 = new Vector3(), v1 = new Vector3(), v2 = new Vector3()) {
+        super();
+        this.isQuadraticBezierCurve3 = true;
+        this.type = "QuadraticBezierCurve3";
+        this.v0 = v0;
+        this.v1 = v1;
+        this.v2 = v2;
+      }
+      /**
+       * Returns a point on the curve.
+       *
+       * @param {number} t - A interpolation factor representing a position on the curve. Must be in the range `[0,1]`.
+       * @param {Vector3} [optionalTarget] - The optional target vector the result is written to.
+       * @return {Vector3} The position on the curve.
+       */
+      getPoint(t2, optionalTarget = new Vector3()) {
+        const point2 = optionalTarget;
+        const v0 = this.v0, v1 = this.v1, v2 = this.v2;
+        point2.set(
+          QuadraticBezier(t2, v0.x, v1.x, v2.x),
+          QuadraticBezier(t2, v0.y, v1.y, v2.y),
+          QuadraticBezier(t2, v0.z, v1.z, v2.z)
+        );
+        return point2;
+      }
+      copy(source) {
+        super.copy(source);
+        this.v0.copy(source.v0);
+        this.v1.copy(source.v1);
+        this.v2.copy(source.v2);
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.v0 = this.v0.toArray();
+        data.v1 = this.v1.toArray();
+        data.v2 = this.v2.toArray();
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.v0.fromArray(json.v0);
+        this.v1.fromArray(json.v1);
+        this.v2.fromArray(json.v2);
+        return this;
+      }
+    };
+    SplineCurve = class extends Curve {
+      /**
+       * Constructs a new 2D spline curve.
+       *
+       * @param {Array<Vector2>} [points] -  An array of 2D points defining the curve.
+       */
+      constructor(points = []) {
+        super();
+        this.isSplineCurve = true;
+        this.type = "SplineCurve";
+        this.points = points;
+      }
+      /**
+       * Returns a point on the curve.
+       *
+       * @param {number} t - A interpolation factor representing a position on the curve. Must be in the range `[0,1]`.
+       * @param {Vector2} [optionalTarget] - The optional target vector the result is written to.
+       * @return {Vector2} The position on the curve.
+       */
+      getPoint(t2, optionalTarget = new Vector2()) {
+        const point2 = optionalTarget;
+        const points = this.points;
+        const p = (points.length - 1) * t2;
+        const intPoint = Math.floor(p);
+        const weight = p - intPoint;
+        const p0 = points[intPoint === 0 ? intPoint : intPoint - 1];
+        const p1 = points[intPoint];
+        const p2 = points[intPoint > points.length - 2 ? points.length - 1 : intPoint + 1];
+        const p3 = points[intPoint > points.length - 3 ? points.length - 1 : intPoint + 2];
+        point2.set(
+          CatmullRom(weight, p0.x, p1.x, p2.x, p3.x),
+          CatmullRom(weight, p0.y, p1.y, p2.y, p3.y)
+        );
+        return point2;
+      }
+      copy(source) {
+        super.copy(source);
+        this.points = [];
+        for (let i2 = 0, l = source.points.length; i2 < l; i2++) {
+          const point2 = source.points[i2];
+          this.points.push(point2.clone());
+        }
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.points = [];
+        for (let i2 = 0, l = this.points.length; i2 < l; i2++) {
+          const point2 = this.points[i2];
+          data.points.push(point2.toArray());
+        }
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.points = [];
+        for (let i2 = 0, l = json.points.length; i2 < l; i2++) {
+          const point2 = json.points[i2];
+          this.points.push(new Vector2().fromArray(point2));
+        }
+        return this;
+      }
+    };
+    Curves = /* @__PURE__ */ Object.freeze({
+      __proto__: null,
+      ArcCurve,
+      CatmullRomCurve3,
+      CubicBezierCurve,
+      CubicBezierCurve3,
+      EllipseCurve,
+      LineCurve,
+      LineCurve3,
+      QuadraticBezierCurve,
+      QuadraticBezierCurve3,
+      SplineCurve
+    });
+    CurvePath = class extends Curve {
+      /**
+       * Constructs a new curve path.
+       */
+      constructor() {
+        super();
+        this.type = "CurvePath";
+        this.curves = [];
+        this.autoClose = false;
+      }
+      /**
+       * Adds a curve to this curve path.
+       *
+       * @param {Curve} curve - The curve to add.
+       */
+      add(curve) {
+        this.curves.push(curve);
+      }
+      /**
+       * Adds a line curve to close the path.
+       *
+       * @return {CurvePath} A reference to this curve path.
+       */
+      closePath() {
+        const startPoint = this.curves[0].getPoint(0);
+        const endPoint = this.curves[this.curves.length - 1].getPoint(1);
+        if (!startPoint.equals(endPoint)) {
+          const lineType = startPoint.isVector2 === true ? "LineCurve" : "LineCurve3";
+          this.curves.push(new Curves[lineType](endPoint, startPoint));
+        }
+        return this;
+      }
+      /**
+       * This method returns a vector in 2D or 3D space (depending on the curve definitions)
+       * for the given interpolation factor.
+       *
+       * @param {number} t - A interpolation factor representing a position on the curve. Must be in the range `[0,1]`.
+       * @param {(Vector2|Vector3)} [optionalTarget] - The optional target vector the result is written to.
+       * @return {?(Vector2|Vector3)} The position on the curve. It can be a 2D or 3D vector depending on the curve definition.
+       */
+      getPoint(t2, optionalTarget) {
+        const d = t2 * this.getLength();
+        const curveLengths = this.getCurveLengths();
+        let i2 = 0;
+        while (i2 < curveLengths.length) {
+          if (curveLengths[i2] >= d) {
+            const diff = curveLengths[i2] - d;
+            const curve = this.curves[i2];
+            const segmentLength = curve.getLength();
+            const u = segmentLength === 0 ? 0 : 1 - diff / segmentLength;
+            return curve.getPointAt(u, optionalTarget);
+          }
+          i2++;
+        }
+        return null;
+      }
+      getLength() {
+        const lens = this.getCurveLengths();
+        return lens[lens.length - 1];
+      }
+      updateArcLengths() {
+        this.needsUpdate = true;
+        this.cacheLengths = null;
+        this.getCurveLengths();
+      }
+      /**
+       * Returns list of cumulative curve lengths of the defined curves.
+       *
+       * @return {Array<number>} The curve lengths.
+       */
+      getCurveLengths() {
+        if (this.cacheLengths && this.cacheLengths.length === this.curves.length) {
+          return this.cacheLengths;
+        }
+        const lengths = [];
+        let sums = 0;
+        for (let i2 = 0, l = this.curves.length; i2 < l; i2++) {
+          sums += this.curves[i2].getLength();
+          lengths.push(sums);
+        }
+        this.cacheLengths = lengths;
+        return lengths;
+      }
+      getSpacedPoints(divisions = 40) {
+        const points = [];
+        for (let i2 = 0; i2 <= divisions; i2++) {
+          points.push(this.getPoint(i2 / divisions));
+        }
+        if (this.autoClose) {
+          points.push(points[0]);
+        }
+        return points;
+      }
+      getPoints(divisions = 12) {
+        const points = [];
+        let last2;
+        for (let i2 = 0, curves = this.curves; i2 < curves.length; i2++) {
+          const curve = curves[i2];
+          const resolution = curve.isEllipseCurve ? divisions * 2 : curve.isLineCurve || curve.isLineCurve3 ? 1 : curve.isSplineCurve ? divisions * curve.points.length : divisions;
+          const pts = curve.getPoints(resolution);
+          for (let j = 0; j < pts.length; j++) {
+            const point2 = pts[j];
+            if (last2 && last2.equals(point2)) continue;
+            points.push(point2);
+            last2 = point2;
+          }
+        }
+        if (this.autoClose && points.length > 1 && !points[points.length - 1].equals(points[0])) {
+          points.push(points[0]);
+        }
+        return points;
+      }
+      copy(source) {
+        super.copy(source);
+        this.curves = [];
+        for (let i2 = 0, l = source.curves.length; i2 < l; i2++) {
+          const curve = source.curves[i2];
+          this.curves.push(curve.clone());
+        }
+        this.autoClose = source.autoClose;
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.autoClose = this.autoClose;
+        data.curves = [];
+        for (let i2 = 0, l = this.curves.length; i2 < l; i2++) {
+          const curve = this.curves[i2];
+          data.curves.push(curve.toJSON());
+        }
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.autoClose = json.autoClose;
+        this.curves = [];
+        for (let i2 = 0, l = json.curves.length; i2 < l; i2++) {
+          const curve = json.curves[i2];
+          this.curves.push(new Curves[curve.type]().fromJSON(curve));
+        }
+        return this;
+      }
+    };
+    Path = class extends CurvePath {
+      /**
+       * Constructs a new path.
+       *
+       * @param {Array<Vector2>} [points] - An array of 2D points defining the path.
+       */
+      constructor(points) {
+        super();
+        this.type = "Path";
+        this.currentPoint = new Vector2();
+        if (points) {
+          this.setFromPoints(points);
+        }
+      }
+      /**
+       * Creates a path from the given list of points. The points are added
+       * to the path as instances of {@link LineCurve}.
+       *
+       * @param {Array<Vector2>} points - An array of 2D points.
+       * @return {Path} A reference to this path.
+       */
+      setFromPoints(points) {
+        this.moveTo(points[0].x, points[0].y);
+        for (let i2 = 1, l = points.length; i2 < l; i2++) {
+          this.lineTo(points[i2].x, points[i2].y);
+        }
+        return this;
+      }
+      /**
+       * Moves {@link Path#currentPoint} to the given point.
+       *
+       * @param {number} x - The x coordinate.
+       * @param {number} y - The y coordinate.
+       * @return {Path} A reference to this path.
+       */
+      moveTo(x, y) {
+        this.currentPoint.set(x, y);
+        return this;
+      }
+      /**
+       * Adds an instance of {@link LineCurve} to the path by connecting
+       * the current point with the given one.
+       *
+       * @param {number} x - The x coordinate of the end point.
+       * @param {number} y - The y coordinate of the end point.
+       * @return {Path} A reference to this path.
+       */
+      lineTo(x, y) {
+        const curve = new LineCurve(this.currentPoint.clone(), new Vector2(x, y));
+        this.curves.push(curve);
+        this.currentPoint.set(x, y);
+        return this;
+      }
+      /**
+       * Adds an instance of {@link QuadraticBezierCurve} to the path by connecting
+       * the current point with the given one.
+       *
+       * @param {number} aCPx - The x coordinate of the control point.
+       * @param {number} aCPy - The y coordinate of the control point.
+       * @param {number} aX - The x coordinate of the end point.
+       * @param {number} aY - The y coordinate of the end point.
+       * @return {Path} A reference to this path.
+       */
+      quadraticCurveTo(aCPx, aCPy, aX, aY) {
+        const curve = new QuadraticBezierCurve(
+          this.currentPoint.clone(),
+          new Vector2(aCPx, aCPy),
+          new Vector2(aX, aY)
+        );
+        this.curves.push(curve);
+        this.currentPoint.set(aX, aY);
+        return this;
+      }
+      /**
+       * Adds an instance of {@link CubicBezierCurve} to the path by connecting
+       * the current point with the given one.
+       *
+       * @param {number} aCP1x - The x coordinate of the first control point.
+       * @param {number} aCP1y - The y coordinate of the first control point.
+       * @param {number} aCP2x - The x coordinate of the second control point.
+       * @param {number} aCP2y - The y coordinate of the second control point.
+       * @param {number} aX - The x coordinate of the end point.
+       * @param {number} aY - The y coordinate of the end point.
+       * @return {Path} A reference to this path.
+       */
+      bezierCurveTo(aCP1x, aCP1y, aCP2x, aCP2y, aX, aY) {
+        const curve = new CubicBezierCurve(
+          this.currentPoint.clone(),
+          new Vector2(aCP1x, aCP1y),
+          new Vector2(aCP2x, aCP2y),
+          new Vector2(aX, aY)
+        );
+        this.curves.push(curve);
+        this.currentPoint.set(aX, aY);
+        return this;
+      }
+      /**
+       * Adds an instance of {@link SplineCurve} to the path by connecting
+       * the current point with the given list of points.
+       *
+       * @param {Array<Vector2>} pts - An array of points in 2D space.
+       * @return {Path} A reference to this path.
+       */
+      splineThru(pts) {
+        const npts = [this.currentPoint.clone()].concat(pts);
+        const curve = new SplineCurve(npts);
+        this.curves.push(curve);
+        this.currentPoint.copy(pts[pts.length - 1]);
+        return this;
+      }
+      /**
+       * Adds an arc as an instance of {@link EllipseCurve} to the path, positioned relative
+       * to the current point.
+       *
+       * @param {number} [aX=0] - The x coordinate of the center of the arc offsetted from the previous curve.
+       * @param {number} [aY=0] - The y coordinate of the center of the arc offsetted from the previous curve.
+       * @param {number} [aRadius=1] - The radius of the arc.
+       * @param {number} [aStartAngle=0] - The start angle in radians.
+       * @param {number} [aEndAngle=Math.PI*2] - The end angle in radians.
+       * @param {boolean} [aClockwise=false] - Whether to sweep the arc clockwise or not.
+       * @return {Path} A reference to this path.
+       */
+      arc(aX, aY, aRadius, aStartAngle, aEndAngle, aClockwise) {
+        const x0 = this.currentPoint.x;
+        const y0 = this.currentPoint.y;
+        this.absarc(
+          aX + x0,
+          aY + y0,
+          aRadius,
+          aStartAngle,
+          aEndAngle,
+          aClockwise
+        );
+        return this;
+      }
+      /**
+       * Adds an absolutely positioned arc as an instance of {@link EllipseCurve} to the path.
+       *
+       * @param {number} [aX=0] - The x coordinate of the center of the arc.
+       * @param {number} [aY=0] - The y coordinate of the center of the arc.
+       * @param {number} [aRadius=1] - The radius of the arc.
+       * @param {number} [aStartAngle=0] - The start angle in radians.
+       * @param {number} [aEndAngle=Math.PI*2] - The end angle in radians.
+       * @param {boolean} [aClockwise=false] - Whether to sweep the arc clockwise or not.
+       * @return {Path} A reference to this path.
+       */
+      absarc(aX, aY, aRadius, aStartAngle, aEndAngle, aClockwise) {
+        this.absellipse(aX, aY, aRadius, aRadius, aStartAngle, aEndAngle, aClockwise);
+        return this;
+      }
+      /**
+       * Adds an ellipse as an instance of {@link EllipseCurve} to the path, positioned relative
+       * to the current point
+       *
+       * @param {number} [aX=0] - The x coordinate of the center of the ellipse offsetted from the previous curve.
+       * @param {number} [aY=0] - The y coordinate of the center of the ellipse offsetted from the previous curve.
+       * @param {number} [xRadius=1] - The radius of the ellipse in the x axis.
+       * @param {number} [yRadius=1] - The radius of the ellipse in the y axis.
+       * @param {number} [aStartAngle=0] - The start angle in radians.
+       * @param {number} [aEndAngle=Math.PI*2] - The end angle in radians.
+       * @param {boolean} [aClockwise=false] - Whether to sweep the ellipse clockwise or not.
+       * @param {number} [aRotation=0] - The rotation angle of the ellipse in radians, counterclockwise from the positive X axis.
+       * @return {Path} A reference to this path.
+       */
+      ellipse(aX, aY, xRadius, yRadius, aStartAngle, aEndAngle, aClockwise, aRotation) {
+        const x0 = this.currentPoint.x;
+        const y0 = this.currentPoint.y;
+        this.absellipse(aX + x0, aY + y0, xRadius, yRadius, aStartAngle, aEndAngle, aClockwise, aRotation);
+        return this;
+      }
+      /**
+       * Adds an absolutely positioned ellipse as an instance of {@link EllipseCurve} to the path.
+       *
+       * @param {number} [aX=0] - The x coordinate of the absolute center of the ellipse.
+       * @param {number} [aY=0] - The y coordinate of the absolute center of the ellipse.
+       * @param {number} [xRadius=1] - The radius of the ellipse in the x axis.
+       * @param {number} [yRadius=1] - The radius of the ellipse in the y axis.
+       * @param {number} [aStartAngle=0] - The start angle in radians.
+       * @param {number} [aEndAngle=Math.PI*2] - The end angle in radians.
+       * @param {boolean} [aClockwise=false] - Whether to sweep the ellipse clockwise or not.
+       * @param {number} [aRotation=0] - The rotation angle of the ellipse in radians, counterclockwise from the positive X axis.
+       * @return {Path} A reference to this path.
+       */
+      absellipse(aX, aY, xRadius, yRadius, aStartAngle, aEndAngle, aClockwise, aRotation) {
+        const curve = new EllipseCurve(aX, aY, xRadius, yRadius, aStartAngle, aEndAngle, aClockwise, aRotation);
+        if (this.curves.length > 0) {
+          const firstPoint = curve.getPoint(0);
+          if (!firstPoint.equals(this.currentPoint)) {
+            this.lineTo(firstPoint.x, firstPoint.y);
+          }
+        }
+        this.curves.push(curve);
+        const lastPoint = curve.getPoint(1);
+        this.currentPoint.copy(lastPoint);
+        return this;
+      }
+      copy(source) {
+        super.copy(source);
+        this.currentPoint.copy(source.currentPoint);
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.currentPoint = this.currentPoint.toArray();
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.currentPoint.fromArray(json.currentPoint);
+        return this;
+      }
+    };
+    Shape = class extends Path {
+      /**
+       * Constructs a new shape.
+       *
+       * @param {Array<Vector2>} [points] - An array of 2D points defining the shape.
+       */
+      constructor(points) {
+        super(points);
+        this.uuid = generateUUID();
+        this.type = "Shape";
+        this.holes = [];
+      }
+      /**
+       * Returns an array representing each contour of the holes
+       * as a list of 2D points.
+       *
+       * @param {number} divisions - The fineness of the result.
+       * @return {Array<Array<Vector2>>} The holes as a series of 2D points.
+       */
+      getPointsHoles(divisions) {
+        const holesPts = [];
+        for (let i2 = 0, l = this.holes.length; i2 < l; i2++) {
+          holesPts[i2] = this.holes[i2].getPoints(divisions);
+        }
+        return holesPts;
+      }
+      // get points of shape and holes (keypoints based on segments parameter)
+      /**
+       * Returns an object that holds contour data for the shape and its holes as
+       * arrays of 2D points.
+       *
+       * @param {number} divisions - The fineness of the result.
+       * @return {{shape:Array<Vector2>,holes:Array<Array<Vector2>>}} An object with contour data.
+       */
+      extractPoints(divisions) {
+        return {
+          shape: this.getPoints(divisions),
+          holes: this.getPointsHoles(divisions)
+        };
+      }
+      copy(source) {
+        super.copy(source);
+        this.holes = [];
+        for (let i2 = 0, l = source.holes.length; i2 < l; i2++) {
+          const hole = source.holes[i2];
+          this.holes.push(hole.clone());
+        }
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        data.uuid = this.uuid;
+        data.holes = [];
+        for (let i2 = 0, l = this.holes.length; i2 < l; i2++) {
+          const hole = this.holes[i2];
+          data.holes.push(hole.toJSON());
+        }
+        return data;
+      }
+      fromJSON(json) {
+        super.fromJSON(json);
+        this.uuid = json.uuid;
+        this.holes = [];
+        for (let i2 = 0, l = json.holes.length; i2 < l; i2++) {
+          const hole = json.holes[i2];
+          this.holes.push(new Path().fromJSON(hole));
+        }
+        return this;
+      }
+    };
+    Earcut = class {
+      /**
+       * Triangulates the given shape definition by returning an array of triangles.
+       *
+       * @param {Array<number>} data - An array with 2D points.
+       * @param {Array<number>} holeIndices - An array with indices defining holes.
+       * @param {number} [dim=2] - The number of coordinates per vertex in the input array.
+       * @return {Array<number>} An array representing the triangulated faces. Each face is defined by three consecutive numbers
+       * representing vertex indices.
+       */
+      static triangulate(data, holeIndices, dim = 2) {
+        return earcut(data, holeIndices, dim);
+      }
+    };
+    ShapeUtils = class _ShapeUtils {
+      /**
+       * Calculate area of a ( 2D ) contour polygon.
+       *
+       * @param {Array<Vector2>} contour - An array of 2D points.
+       * @return {number} The area.
+       */
+      static area(contour) {
+        const n = contour.length;
+        let a = 0;
+        for (let p = n - 1, q = 0; q < n; p = q++) {
+          a += contour[p].x * contour[q].y - contour[q].x * contour[p].y;
+        }
+        return a * 0.5;
+      }
+      /**
+       * Returns `true` if the given contour uses a clockwise winding order.
+       *
+       * @param {Array<Vector2>} pts - An array of 2D points defining a polygon.
+       * @return {boolean} Whether the given contour uses a clockwise winding order or not.
+       */
+      static isClockWise(pts) {
+        return _ShapeUtils.area(pts) < 0;
+      }
+      /**
+       * Triangulates the given shape definition.
+       *
+       * @param {Array<Vector2>} contour - An array of 2D points defining the contour.
+       * @param {Array<Array<Vector2>>} holes - An array that holds arrays of 2D points defining the holes.
+       * @return {Array<Array<number>>} An array that holds for each face definition an array with three indices.
+       */
+      static triangulateShape(contour, holes) {
+        const vertices = [];
+        const holeIndices = [];
+        const faces = [];
+        removeDupEndPts(contour);
+        addContour(vertices, contour);
+        let holeIndex = contour.length;
+        holes.forEach(removeDupEndPts);
+        for (let i2 = 0; i2 < holes.length; i2++) {
+          holeIndices.push(holeIndex);
+          holeIndex += holes[i2].length;
+          addContour(vertices, holes[i2]);
+        }
+        const triangles = Earcut.triangulate(vertices, holeIndices);
+        for (let i2 = 0; i2 < triangles.length; i2 += 3) {
+          faces.push(triangles.slice(i2, i2 + 3));
+        }
+        return faces;
+      }
+    };
+    ExtrudeGeometry = class _ExtrudeGeometry extends BufferGeometry {
+      /**
+       * Constructs a new extrude geometry.
+       *
+       * @param {Shape|Array<Shape>} [shapes] - A shape or an array of shapes.
+       * @param {ExtrudeGeometry~Options} [options] - The extrude settings.
+       */
+      constructor(shapes = new Shape([new Vector2(0.5, 0.5), new Vector2(-0.5, 0.5), new Vector2(-0.5, -0.5), new Vector2(0.5, -0.5)]), options = {}) {
+        super();
+        this.type = "ExtrudeGeometry";
+        this.parameters = {
+          shapes,
+          options
+        };
+        shapes = Array.isArray(shapes) ? shapes : [shapes];
+        const scope = this;
+        const verticesArray = [];
+        const uvArray = [];
+        for (let i2 = 0, l = shapes.length; i2 < l; i2++) {
+          const shape = shapes[i2];
+          addShape(shape);
+        }
+        this.setAttribute("position", new Float32BufferAttribute(verticesArray, 3));
+        this.setAttribute("uv", new Float32BufferAttribute(uvArray, 2));
+        this.computeVertexNormals();
+        function addShape(shape) {
+          const placeholder = [];
+          const curveSegments = options.curveSegments !== void 0 ? options.curveSegments : 12;
+          const steps = options.steps !== void 0 ? options.steps : 1;
+          const depth2 = options.depth !== void 0 ? options.depth : 1;
+          let bevelEnabled = options.bevelEnabled !== void 0 ? options.bevelEnabled : true;
+          let bevelThickness = options.bevelThickness !== void 0 ? options.bevelThickness : 0.2;
+          let bevelSize = options.bevelSize !== void 0 ? options.bevelSize : bevelThickness - 0.1;
+          let bevelOffset = options.bevelOffset !== void 0 ? options.bevelOffset : 0;
+          let bevelSegments = options.bevelSegments !== void 0 ? options.bevelSegments : 3;
+          const extrudePath = options.extrudePath;
+          const uvgen = options.UVGenerator !== void 0 ? options.UVGenerator : WorldUVGenerator;
+          let extrudePts, extrudeByPath = false;
+          let splineTube, binormal, normal, position2;
+          if (extrudePath) {
+            extrudePts = extrudePath.getSpacedPoints(steps);
+            extrudeByPath = true;
+            bevelEnabled = false;
+            splineTube = extrudePath.computeFrenetFrames(steps, false);
+            binormal = new Vector3();
+            normal = new Vector3();
+            position2 = new Vector3();
+          }
+          if (!bevelEnabled) {
+            bevelSegments = 0;
+            bevelThickness = 0;
+            bevelSize = 0;
+            bevelOffset = 0;
+          }
+          const shapePoints = shape.extractPoints(curveSegments);
+          let vertices = shapePoints.shape;
+          const holes = shapePoints.holes;
+          const reverse = !ShapeUtils.isClockWise(vertices);
+          if (reverse) {
+            vertices = vertices.reverse();
+            for (let h = 0, hl = holes.length; h < hl; h++) {
+              const ahole = holes[h];
+              if (ShapeUtils.isClockWise(ahole)) {
+                holes[h] = ahole.reverse();
+              }
+            }
+          }
+          function mergeOverlappingPoints(points) {
+            const THRESHOLD = 1e-10;
+            const THRESHOLD_SQ = THRESHOLD * THRESHOLD;
+            let prevPos = points[0];
+            for (let i2 = 1; i2 <= points.length; i2++) {
+              const currentIndex = i2 % points.length;
+              const currentPos = points[currentIndex];
+              const dx = currentPos.x - prevPos.x;
+              const dy = currentPos.y - prevPos.y;
+              const distSq = dx * dx + dy * dy;
+              const scalingFactorSqrt = Math.max(
+                Math.abs(currentPos.x),
+                Math.abs(currentPos.y),
+                Math.abs(prevPos.x),
+                Math.abs(prevPos.y)
+              );
+              const thresholdSqScaled = THRESHOLD_SQ * scalingFactorSqrt * scalingFactorSqrt;
+              if (distSq <= thresholdSqScaled) {
+                points.splice(currentIndex, 1);
+                i2--;
+                continue;
+              }
+              prevPos = currentPos;
+            }
+          }
+          mergeOverlappingPoints(vertices);
+          holes.forEach(mergeOverlappingPoints);
+          const numHoles = holes.length;
+          const contour = vertices;
+          for (let h = 0; h < numHoles; h++) {
+            const ahole = holes[h];
+            vertices = vertices.concat(ahole);
+          }
+          function scalePt2(pt, vec, size) {
+            if (!vec) console.error("THREE.ExtrudeGeometry: vec does not exist");
+            return pt.clone().addScaledVector(vec, size);
+          }
+          const vlen = vertices.length;
+          function getBevelVec(inPt, inPrev, inNext) {
+            let v_trans_x, v_trans_y, shrink_by;
+            const v_prev_x = inPt.x - inPrev.x, v_prev_y = inPt.y - inPrev.y;
+            const v_next_x = inNext.x - inPt.x, v_next_y = inNext.y - inPt.y;
+            const v_prev_lensq = v_prev_x * v_prev_x + v_prev_y * v_prev_y;
+            const collinear0 = v_prev_x * v_next_y - v_prev_y * v_next_x;
+            if (Math.abs(collinear0) > Number.EPSILON) {
+              const v_prev_len = Math.sqrt(v_prev_lensq);
+              const v_next_len = Math.sqrt(v_next_x * v_next_x + v_next_y * v_next_y);
+              const ptPrevShift_x = inPrev.x - v_prev_y / v_prev_len;
+              const ptPrevShift_y = inPrev.y + v_prev_x / v_prev_len;
+              const ptNextShift_x = inNext.x - v_next_y / v_next_len;
+              const ptNextShift_y = inNext.y + v_next_x / v_next_len;
+              const sf = ((ptNextShift_x - ptPrevShift_x) * v_next_y - (ptNextShift_y - ptPrevShift_y) * v_next_x) / (v_prev_x * v_next_y - v_prev_y * v_next_x);
+              v_trans_x = ptPrevShift_x + v_prev_x * sf - inPt.x;
+              v_trans_y = ptPrevShift_y + v_prev_y * sf - inPt.y;
+              const v_trans_lensq = v_trans_x * v_trans_x + v_trans_y * v_trans_y;
+              if (v_trans_lensq <= 2) {
+                return new Vector2(v_trans_x, v_trans_y);
+              } else {
+                shrink_by = Math.sqrt(v_trans_lensq / 2);
+              }
+            } else {
+              let direction_eq = false;
+              if (v_prev_x > Number.EPSILON) {
+                if (v_next_x > Number.EPSILON) {
+                  direction_eq = true;
+                }
+              } else {
+                if (v_prev_x < -Number.EPSILON) {
+                  if (v_next_x < -Number.EPSILON) {
+                    direction_eq = true;
+                  }
+                } else {
+                  if (Math.sign(v_prev_y) === Math.sign(v_next_y)) {
+                    direction_eq = true;
+                  }
+                }
+              }
+              if (direction_eq) {
+                v_trans_x = -v_prev_y;
+                v_trans_y = v_prev_x;
+                shrink_by = Math.sqrt(v_prev_lensq);
+              } else {
+                v_trans_x = v_prev_x;
+                v_trans_y = v_prev_y;
+                shrink_by = Math.sqrt(v_prev_lensq / 2);
+              }
+            }
+            return new Vector2(v_trans_x / shrink_by, v_trans_y / shrink_by);
+          }
+          const contourMovements = [];
+          for (let i2 = 0, il = contour.length, j = il - 1, k = i2 + 1; i2 < il; i2++, j++, k++) {
+            if (j === il) j = 0;
+            if (k === il) k = 0;
+            contourMovements[i2] = getBevelVec(contour[i2], contour[j], contour[k]);
+          }
+          const holesMovements = [];
+          let oneHoleMovements, verticesMovements = contourMovements.concat();
+          for (let h = 0, hl = numHoles; h < hl; h++) {
+            const ahole = holes[h];
+            oneHoleMovements = [];
+            for (let i2 = 0, il = ahole.length, j = il - 1, k = i2 + 1; i2 < il; i2++, j++, k++) {
+              if (j === il) j = 0;
+              if (k === il) k = 0;
+              oneHoleMovements[i2] = getBevelVec(ahole[i2], ahole[j], ahole[k]);
+            }
+            holesMovements.push(oneHoleMovements);
+            verticesMovements = verticesMovements.concat(oneHoleMovements);
+          }
+          let faces;
+          if (bevelSegments === 0) {
+            faces = ShapeUtils.triangulateShape(contour, holes);
+          } else {
+            const contractedContourVertices = [];
+            const expandedHoleVertices = [];
+            for (let b = 0; b < bevelSegments; b++) {
+              const t2 = b / bevelSegments;
+              const z = bevelThickness * Math.cos(t2 * Math.PI / 2);
+              const bs2 = bevelSize * Math.sin(t2 * Math.PI / 2) + bevelOffset;
+              for (let i2 = 0, il = contour.length; i2 < il; i2++) {
+                const vert = scalePt2(contour[i2], contourMovements[i2], bs2);
+                v(vert.x, vert.y, -z);
+                if (t2 === 0) contractedContourVertices.push(vert);
+              }
+              for (let h = 0, hl = numHoles; h < hl; h++) {
+                const ahole = holes[h];
+                oneHoleMovements = holesMovements[h];
+                const oneHoleVertices = [];
+                for (let i2 = 0, il = ahole.length; i2 < il; i2++) {
+                  const vert = scalePt2(ahole[i2], oneHoleMovements[i2], bs2);
+                  v(vert.x, vert.y, -z);
+                  if (t2 === 0) oneHoleVertices.push(vert);
+                }
+                if (t2 === 0) expandedHoleVertices.push(oneHoleVertices);
+              }
+            }
+            faces = ShapeUtils.triangulateShape(contractedContourVertices, expandedHoleVertices);
+          }
+          const flen = faces.length;
+          const bs = bevelSize + bevelOffset;
+          for (let i2 = 0; i2 < vlen; i2++) {
+            const vert = bevelEnabled ? scalePt2(vertices[i2], verticesMovements[i2], bs) : vertices[i2];
+            if (!extrudeByPath) {
+              v(vert.x, vert.y, 0);
+            } else {
+              normal.copy(splineTube.normals[0]).multiplyScalar(vert.x);
+              binormal.copy(splineTube.binormals[0]).multiplyScalar(vert.y);
+              position2.copy(extrudePts[0]).add(normal).add(binormal);
+              v(position2.x, position2.y, position2.z);
+            }
+          }
+          for (let s = 1; s <= steps; s++) {
+            for (let i2 = 0; i2 < vlen; i2++) {
+              const vert = bevelEnabled ? scalePt2(vertices[i2], verticesMovements[i2], bs) : vertices[i2];
+              if (!extrudeByPath) {
+                v(vert.x, vert.y, depth2 / steps * s);
+              } else {
+                normal.copy(splineTube.normals[s]).multiplyScalar(vert.x);
+                binormal.copy(splineTube.binormals[s]).multiplyScalar(vert.y);
+                position2.copy(extrudePts[s]).add(normal).add(binormal);
+                v(position2.x, position2.y, position2.z);
+              }
+            }
+          }
+          for (let b = bevelSegments - 1; b >= 0; b--) {
+            const t2 = b / bevelSegments;
+            const z = bevelThickness * Math.cos(t2 * Math.PI / 2);
+            const bs2 = bevelSize * Math.sin(t2 * Math.PI / 2) + bevelOffset;
+            for (let i2 = 0, il = contour.length; i2 < il; i2++) {
+              const vert = scalePt2(contour[i2], contourMovements[i2], bs2);
+              v(vert.x, vert.y, depth2 + z);
+            }
+            for (let h = 0, hl = holes.length; h < hl; h++) {
+              const ahole = holes[h];
+              oneHoleMovements = holesMovements[h];
+              for (let i2 = 0, il = ahole.length; i2 < il; i2++) {
+                const vert = scalePt2(ahole[i2], oneHoleMovements[i2], bs2);
+                if (!extrudeByPath) {
+                  v(vert.x, vert.y, depth2 + z);
+                } else {
+                  v(vert.x, vert.y + extrudePts[steps - 1].y, extrudePts[steps - 1].x + z);
+                }
+              }
+            }
+          }
+          buildLidFaces();
+          buildSideFaces();
+          function buildLidFaces() {
+            const start = verticesArray.length / 3;
+            if (bevelEnabled) {
+              let layer2 = 0;
+              let offset = vlen * layer2;
+              for (let i2 = 0; i2 < flen; i2++) {
+                const face = faces[i2];
+                f3(face[2] + offset, face[1] + offset, face[0] + offset);
+              }
+              layer2 = steps + bevelSegments * 2;
+              offset = vlen * layer2;
+              for (let i2 = 0; i2 < flen; i2++) {
+                const face = faces[i2];
+                f3(face[0] + offset, face[1] + offset, face[2] + offset);
+              }
+            } else {
+              for (let i2 = 0; i2 < flen; i2++) {
+                const face = faces[i2];
+                f3(face[2], face[1], face[0]);
+              }
+              for (let i2 = 0; i2 < flen; i2++) {
+                const face = faces[i2];
+                f3(face[0] + vlen * steps, face[1] + vlen * steps, face[2] + vlen * steps);
+              }
+            }
+            scope.addGroup(start, verticesArray.length / 3 - start, 0);
+          }
+          function buildSideFaces() {
+            const start = verticesArray.length / 3;
+            let layeroffset = 0;
+            sidewalls(contour, layeroffset);
+            layeroffset += contour.length;
+            for (let h = 0, hl = holes.length; h < hl; h++) {
+              const ahole = holes[h];
+              sidewalls(ahole, layeroffset);
+              layeroffset += ahole.length;
+            }
+            scope.addGroup(start, verticesArray.length / 3 - start, 1);
+          }
+          function sidewalls(contour2, layeroffset) {
+            let i2 = contour2.length;
+            while (--i2 >= 0) {
+              const j = i2;
+              let k = i2 - 1;
+              if (k < 0) k = contour2.length - 1;
+              for (let s = 0, sl = steps + bevelSegments * 2; s < sl; s++) {
+                const slen1 = vlen * s;
+                const slen2 = vlen * (s + 1);
+                const a = layeroffset + j + slen1, b = layeroffset + k + slen1, c = layeroffset + k + slen2, d = layeroffset + j + slen2;
+                f4(a, b, c, d);
+              }
+            }
+          }
+          function v(x, y, z) {
+            placeholder.push(x);
+            placeholder.push(y);
+            placeholder.push(z);
+          }
+          function f3(a, b, c) {
+            addVertex(a);
+            addVertex(b);
+            addVertex(c);
+            const nextIndex = verticesArray.length / 3;
+            const uvs = uvgen.generateTopUV(scope, verticesArray, nextIndex - 3, nextIndex - 2, nextIndex - 1);
+            addUV(uvs[0]);
+            addUV(uvs[1]);
+            addUV(uvs[2]);
+          }
+          function f4(a, b, c, d) {
+            addVertex(a);
+            addVertex(b);
+            addVertex(d);
+            addVertex(b);
+            addVertex(c);
+            addVertex(d);
+            const nextIndex = verticesArray.length / 3;
+            const uvs = uvgen.generateSideWallUV(scope, verticesArray, nextIndex - 6, nextIndex - 3, nextIndex - 2, nextIndex - 1);
+            addUV(uvs[0]);
+            addUV(uvs[1]);
+            addUV(uvs[3]);
+            addUV(uvs[1]);
+            addUV(uvs[2]);
+            addUV(uvs[3]);
+          }
+          function addVertex(index) {
+            verticesArray.push(placeholder[index * 3 + 0]);
+            verticesArray.push(placeholder[index * 3 + 1]);
+            verticesArray.push(placeholder[index * 3 + 2]);
+          }
+          function addUV(vector2) {
+            uvArray.push(vector2.x);
+            uvArray.push(vector2.y);
+          }
+        }
+      }
+      copy(source) {
+        super.copy(source);
+        this.parameters = Object.assign({}, source.parameters);
+        return this;
+      }
+      toJSON() {
+        const data = super.toJSON();
+        const shapes = this.parameters.shapes;
+        const options = this.parameters.options;
+        return toJSON$1(shapes, options, data);
+      }
+      /**
+       * Factory method for creating an instance of this class from the given
+       * JSON object.
+       *
+       * @param {Object} data - A JSON object representing the serialized geometry.
+       * @param {Array<Shape>} shapes - An array of shapes.
+       * @return {ExtrudeGeometry} A new instance.
+       */
+      static fromJSON(data, shapes) {
+        const geometryShapes = [];
+        for (let j = 0, jl = data.shapes.length; j < jl; j++) {
+          const shape = shapes[data.shapes[j]];
+          geometryShapes.push(shape);
+        }
+        const extrudePath = data.options.extrudePath;
+        if (extrudePath !== void 0) {
+          data.options.extrudePath = new Curves[extrudePath.type]().fromJSON(extrudePath);
+        }
+        return new _ExtrudeGeometry(geometryShapes, data.options);
+      }
+    };
+    WorldUVGenerator = {
+      generateTopUV: function(geometry, vertices, indexA, indexB, indexC) {
+        const a_x = vertices[indexA * 3];
+        const a_y = vertices[indexA * 3 + 1];
+        const b_x = vertices[indexB * 3];
+        const b_y = vertices[indexB * 3 + 1];
+        const c_x = vertices[indexC * 3];
+        const c_y = vertices[indexC * 3 + 1];
+        return [
+          new Vector2(a_x, a_y),
+          new Vector2(b_x, b_y),
+          new Vector2(c_x, c_y)
+        ];
+      },
+      generateSideWallUV: function(geometry, vertices, indexA, indexB, indexC, indexD) {
+        const a_x = vertices[indexA * 3];
+        const a_y = vertices[indexA * 3 + 1];
+        const a_z = vertices[indexA * 3 + 2];
+        const b_x = vertices[indexB * 3];
+        const b_y = vertices[indexB * 3 + 1];
+        const b_z = vertices[indexB * 3 + 2];
+        const c_x = vertices[indexC * 3];
+        const c_y = vertices[indexC * 3 + 1];
+        const c_z = vertices[indexC * 3 + 2];
+        const d_x = vertices[indexD * 3];
+        const d_y = vertices[indexD * 3 + 1];
+        const d_z = vertices[indexD * 3 + 2];
+        if (Math.abs(a_y - b_y) < Math.abs(a_x - b_x)) {
+          return [
+            new Vector2(a_x, 1 - a_z),
+            new Vector2(b_x, 1 - b_z),
+            new Vector2(c_x, 1 - c_z),
+            new Vector2(d_x, 1 - d_z)
+          ];
+        } else {
+          return [
+            new Vector2(a_y, 1 - a_z),
+            new Vector2(b_y, 1 - b_z),
+            new Vector2(c_y, 1 - c_z),
+            new Vector2(d_y, 1 - d_z)
+          ];
+        }
+      }
+    };
+    IcosahedronGeometry = class _IcosahedronGeometry extends PolyhedronGeometry {
+      /**
+       * Constructs a new icosahedron geometry.
+       *
+       * @param {number} [radius=1] - Radius of the icosahedron.
+       * @param {number} [detail=0] - Setting this to a value greater than `0` adds vertices making it no longer a icosahedron.
+       */
+      constructor(radius = 1, detail = 0) {
+        const t2 = (1 + Math.sqrt(5)) / 2;
+        const vertices = [
+          -1,
+          t2,
+          0,
+          1,
+          t2,
+          0,
+          -1,
+          -t2,
+          0,
+          1,
+          -t2,
+          0,
+          0,
+          -1,
+          t2,
+          0,
+          1,
+          t2,
+          0,
+          -1,
+          -t2,
+          0,
+          1,
+          -t2,
+          t2,
+          0,
+          -1,
+          t2,
+          0,
+          1,
+          -t2,
+          0,
+          -1,
+          -t2,
+          0,
+          1
+        ];
+        const indices = [
+          0,
+          11,
+          5,
+          0,
+          5,
+          1,
+          0,
+          1,
+          7,
+          0,
+          7,
+          10,
+          0,
+          10,
+          11,
+          1,
+          5,
+          9,
+          5,
+          11,
+          4,
+          11,
+          10,
+          2,
+          10,
+          7,
+          6,
+          7,
+          1,
+          8,
+          3,
+          9,
+          4,
+          3,
+          4,
+          2,
+          3,
+          2,
+          6,
+          3,
+          6,
+          8,
+          3,
+          8,
+          9,
+          4,
+          9,
+          5,
+          2,
+          4,
+          11,
+          6,
+          2,
+          10,
+          8,
+          6,
+          7,
+          9,
+          8,
+          1
+        ];
+        super(vertices, indices, radius, detail);
+        this.type = "IcosahedronGeometry";
+        this.parameters = {
+          radius,
+          detail
+        };
+      }
+      /**
+       * Factory method for creating an instance of this class from the given
+       * JSON object.
+       *
+       * @param {Object} data - A JSON object representing the serialized geometry.
+       * @return {IcosahedronGeometry} A new instance.
+       */
+      static fromJSON(data) {
+        return new _IcosahedronGeometry(data.radius, data.detail);
       }
     };
     PlaneGeometry = class _PlaneGeometry extends BufferGeometry {
@@ -14199,6 +17898,82 @@ var init_three_core = __esm({
        */
       static fromJSON(data) {
         return new _SphereGeometry(data.radius, data.widthSegments, data.heightSegments, data.phiStart, data.phiLength, data.thetaStart, data.thetaLength);
+      }
+    };
+    TorusGeometry = class _TorusGeometry extends BufferGeometry {
+      /**
+       * Constructs a new torus geometry.
+       *
+       * @param {number} [radius=1] - Radius of the torus, from the center of the torus to the center of the tube.
+       * @param {number} [tube=0.4] - Radius of the tube. Must be smaller than `radius`.
+       * @param {number} [radialSegments=12] - The number of radial segments.
+       * @param {number} [tubularSegments=48] - The number of tubular segments.
+       * @param {number} [arc=Math.PI*2] - Central angle in radians.
+       */
+      constructor(radius = 1, tube = 0.4, radialSegments = 12, tubularSegments = 48, arc = Math.PI * 2) {
+        super();
+        this.type = "TorusGeometry";
+        this.parameters = {
+          radius,
+          tube,
+          radialSegments,
+          tubularSegments,
+          arc
+        };
+        radialSegments = Math.floor(radialSegments);
+        tubularSegments = Math.floor(tubularSegments);
+        const indices = [];
+        const vertices = [];
+        const normals = [];
+        const uvs = [];
+        const center = new Vector3();
+        const vertex2 = new Vector3();
+        const normal = new Vector3();
+        for (let j = 0; j <= radialSegments; j++) {
+          for (let i2 = 0; i2 <= tubularSegments; i2++) {
+            const u = i2 / tubularSegments * arc;
+            const v = j / radialSegments * Math.PI * 2;
+            vertex2.x = (radius + tube * Math.cos(v)) * Math.cos(u);
+            vertex2.y = (radius + tube * Math.cos(v)) * Math.sin(u);
+            vertex2.z = tube * Math.sin(v);
+            vertices.push(vertex2.x, vertex2.y, vertex2.z);
+            center.x = radius * Math.cos(u);
+            center.y = radius * Math.sin(u);
+            normal.subVectors(vertex2, center).normalize();
+            normals.push(normal.x, normal.y, normal.z);
+            uvs.push(i2 / tubularSegments);
+            uvs.push(j / radialSegments);
+          }
+        }
+        for (let j = 1; j <= radialSegments; j++) {
+          for (let i2 = 1; i2 <= tubularSegments; i2++) {
+            const a = (tubularSegments + 1) * j + i2 - 1;
+            const b = (tubularSegments + 1) * (j - 1) + i2 - 1;
+            const c = (tubularSegments + 1) * (j - 1) + i2;
+            const d = (tubularSegments + 1) * j + i2;
+            indices.push(a, b, d);
+            indices.push(b, c, d);
+          }
+        }
+        this.setIndex(indices);
+        this.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+        this.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+        this.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+      }
+      copy(source) {
+        super.copy(source);
+        this.parameters = Object.assign({}, source.parameters);
+        return this;
+      }
+      /**
+       * Factory method for creating an instance of this class from the given
+       * JSON object.
+       *
+       * @param {Object} data - A JSON object representing the serialized geometry.
+       * @return {TorusGeometry} A new instance.
+       */
+      static fromJSON(data) {
+        return new _TorusGeometry(data.radius, data.tube, data.radialSegments, data.tubularSegments, data.arc);
       }
     };
     MeshStandardMaterial = class extends Material {
@@ -16313,6 +20088,129 @@ var init_three_core = __esm({
       ]
     ];
     _controlInterpolantsResultBuffer = new Float32Array(1);
+    _matrix = /* @__PURE__ */ new Matrix4();
+    Raycaster = class {
+      /**
+       * Constructs a new raycaster.
+       *
+       * @param {Vector3} origin - The origin vector where the ray casts from.
+       * @param {Vector3} direction - The (normalized) direction vector that gives direction to the ray.
+       * @param {number} [near=0] - All results returned are further away than near. Near can't be negative.
+       * @param {number} [far=Infinity] - All results returned are closer than far. Far can't be lower than near.
+       */
+      constructor(origin, direction, near2 = 0, far = Infinity) {
+        this.ray = new Ray(origin, direction);
+        this.near = near2;
+        this.far = far;
+        this.camera = null;
+        this.layers = new Layers();
+        this.params = {
+          Mesh: {},
+          Line: { threshold: 1 },
+          LOD: {},
+          Points: { threshold: 1 },
+          Sprite: {}
+        };
+      }
+      /**
+       * Updates the ray with a new origin and direction by copying the values from the arguments.
+       *
+       * @param {Vector3} origin - The origin vector where the ray casts from.
+       * @param {Vector3} direction - The (normalized) direction vector that gives direction to the ray.
+       */
+      set(origin, direction) {
+        this.ray.set(origin, direction);
+      }
+      /**
+       * Uses the given coordinates and camera to compute a new origin and direction for the internal ray.
+       *
+       * @param {Vector2} coords - 2D coordinates of the mouse, in normalized device coordinates (NDC).
+       * X and Y components should be between `-1` and `1`.
+       * @param {Camera} camera - The camera from which the ray should originate.
+       */
+      setFromCamera(coords, camera) {
+        if (camera.isPerspectiveCamera) {
+          this.ray.origin.setFromMatrixPosition(camera.matrixWorld);
+          this.ray.direction.set(coords.x, coords.y, 0.5).unproject(camera).sub(this.ray.origin).normalize();
+          this.camera = camera;
+        } else if (camera.isOrthographicCamera) {
+          this.ray.origin.set(coords.x, coords.y, (camera.near + camera.far) / (camera.near - camera.far)).unproject(camera);
+          this.ray.direction.set(0, 0, -1).transformDirection(camera.matrixWorld);
+          this.camera = camera;
+        } else {
+          console.error("THREE.Raycaster: Unsupported camera type: " + camera.type);
+        }
+      }
+      /**
+       * Uses the given WebXR controller to compute a new origin and direction for the internal ray.
+       *
+       * @param {WebXRController} controller - The controller to copy the position and direction from.
+       * @return {Raycaster} A reference to this raycaster.
+       */
+      setFromXRController(controller) {
+        _matrix.identity().extractRotation(controller.matrixWorld);
+        this.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        this.ray.direction.set(0, 0, -1).applyMatrix4(_matrix);
+        return this;
+      }
+      /**
+       * The intersection point of a raycaster intersection test.
+       * @typedef {Object} Raycaster~Intersection
+       * @property {number} distance - The distance from the ray's origin to the intersection point.
+       * @property {number} distanceToRay -  Some 3D objects e.g. {@link Points} provide the distance of the
+       * intersection to the nearest point on the ray. For other objects it will be `undefined`.
+       * @property {Vector3} point - The intersection point, in world coordinates.
+       * @property {Object} face - The face that has been intersected.
+       * @property {number} faceIndex - The face index.
+       * @property {Object3D} object - The 3D object that has been intersected.
+       * @property {Vector2} uv - U,V coordinates at point of intersection.
+       * @property {Vector2} uv1 - Second set of U,V coordinates at point of intersection.
+       * @property {Vector3} uv1 - Interpolated normal vector at point of intersection.
+       * @property {number} instanceId - The index number of the instance where the ray
+       * intersects the {@link InstancedMesh}.
+       */
+      /**
+       * Checks all intersection between the ray and the object with or without the
+       * descendants. Intersections are returned sorted by distance, closest first.
+       *
+       * `Raycaster` delegates to the `raycast()` method of the passed 3D object, when
+       * evaluating whether the ray intersects the object or not. This allows meshes to respond
+       * differently to ray casting than lines or points.
+       *
+       * Note that for meshes, faces must be pointed towards the origin of the ray in order
+       * to be detected; intersections of the ray passing through the back of a face will not
+       * be detected. To raycast against both faces of an object, you'll want to set  {@link Material#side}
+       * to `THREE.DoubleSide`.
+       *
+       * @param {Object3D} object - The 3D object to check for intersection with the ray.
+       * @param {boolean} [recursive=true] - If set to `true`, it also checks all descendants.
+       * Otherwise it only checks intersection with the object.
+       * @param {Array<Raycaster~Intersection>} [intersects=[]] The target array that holds the result of the method.
+       * @return {Array<Raycaster~Intersection>} An array holding the intersection points.
+       */
+      intersectObject(object, recursive = true, intersects2 = []) {
+        intersect(object, this, intersects2, recursive);
+        intersects2.sort(ascSort);
+        return intersects2;
+      }
+      /**
+       * Checks all intersection between the ray and the objects with or without
+       * the descendants. Intersections are returned sorted by distance, closest first.
+       *
+       * @param {Array<Object3D>} objects - The 3D objects to check for intersection with the ray.
+       * @param {boolean} [recursive=true] - If set to `true`, it also checks all descendants.
+       * Otherwise it only checks intersection with the object.
+       * @param {Array<Raycaster~Intersection>} [intersects=[]] The target array that holds the result of the method.
+       * @return {Array<Raycaster~Intersection>} An array holding the intersection points.
+       */
+      intersectObjects(objects, recursive = true, intersects2 = []) {
+        for (let i2 = 0, l = objects.length; i2 < l; i2++) {
+          intersect(objects[i2], this, intersects2, recursive);
+        }
+        intersects2.sort(ascSort);
+        return intersects2;
+      }
+    };
     if (typeof __THREE_DEVTOOLS__ !== "undefined") {
       __THREE_DEVTOOLS__.dispatchEvent(new CustomEvent("register", { detail: {
         revision: REVISION
@@ -26446,6 +30344,525 @@ void main() {
   }
 });
 
+// desktop/film-suite/src/planning/previz-kit.js
+function kitOf(name2) {
+  const words2 = String(name2 || "").toLowerCase().match(/[a-z]+/g) || [];
+  for (const [kind, keys] of KIT) if (keys.some((k) => words2.includes(k))) return kind;
+  return null;
+}
+function rng(seedText) {
+  let h = 2166136261;
+  for (const c of String(seedText)) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return () => {
+    h = Math.imul(h ^ h >>> 15, 2246822507);
+    h = Math.imul(h ^ h >>> 13, 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+}
+function lightCone(len, rad, color, strength) {
+  const geo = new ConeGeometry(rad, len, 48, 12, true);
+  geo.translate(0, -len / 2, 0);
+  const m = new ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: AdditiveBlending,
+    side: DoubleSide,
+    fog: false,
+    uniforms: { c: { value: new Color(color) }, k: { value: strength }, L: { value: len } },
+    vertexShader: "varying float vT; varying vec3 vN; varying vec3 vV; uniform float L; void main(){ vT = clamp(-position.y / L, 0.0, 1.0); vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }",
+    fragmentShader: "varying float vT; varying vec3 vN; varying vec3 vV; uniform vec3 c; uniform float k; void main(){ float edge = pow(abs(dot(normalize(vN), normalize(vV))), 1.6); float fall = pow(1.0 - vT, 2.2) * smoothstep(0.0, 0.04, vT); gl_FragColor = vec4(c * k * edge * fall, 1.0); }"
+  });
+  const mesh = new Mesh(geo, m);
+  mesh.userData.glow = true;
+  mesh.renderOrder = 2;
+  return mesh;
+}
+function streak() {
+  if (streakTex) return streakTex;
+  const c = document.createElement("canvas");
+  c.width = 32;
+  c.height = 128;
+  const g = c.getContext("2d"), img = g.createImageData(32, 128);
+  for (let y = 0; y < 128; y++) for (let x = 0; x < 32; x++) {
+    const u = (x - 15.5) / 16, v = y / 127, a = Math.exp(-u * u * 6) * Math.sin(Math.PI * v) ** 1.5 * (0.6 + 0.4 * Math.sin(y * 1.7) ** 2), i2 = (y * 32 + x) * 4;
+    img.data[i2] = img.data[i2 + 1] = img.data[i2 + 2] = 255;
+    img.data[i2 + 3] = Math.round(255 * a);
+  }
+  g.putImageData(img, 0, 0);
+  streakTex = new CanvasTexture(c);
+  return streakTex;
+}
+function halo(size, color, strength = 1) {
+  if (!haloTex) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    r.addColorStop(0, "rgba(255,255,255,1)");
+    r.addColorStop(0.25, "rgba(255,255,255,0.45)");
+    r.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = r;
+    g.fillRect(0, 0, 64, 64);
+    haloTex = new CanvasTexture(c);
+  }
+  const s = new Sprite(new SpriteMaterial({ map: haloTex, color: new Color(color).multiplyScalar(strength), blending: AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
+  s.scale.set(size, size, 1);
+  s.userData.glow = true;
+  s.renderOrder = 3;
+  return s;
+}
+function water(w, h, d, rig, seed) {
+  w = Math.max(w, 700);
+  d = Math.max(d, 700);
+  const geo = new PlaneGeometry(w, d, 140, 140);
+  geo.rotateX(-Math.PI / 2);
+  const p = geo.attributes.position, r = rng(seed), a = r() * 6, b = r() * 6;
+  for (let i2 = 0; i2 < p.count; i2++) {
+    const x = p.getX(i2), z = p.getZ(i2);
+    p.setY(i2, 0.05 * Math.sin(x * 0.9 + a) * Math.cos(z * 0.7 + b) + 0.025 * Math.sin(x * 2.3 + z * 1.7));
+  }
+  geo.computeVertexNormals();
+  const sky = rig.sky ? new Color(rig.sky[2]).lerp(new Color(rig.sky[0]), 0.35) : new Color(1713203);
+  const night = rig.time === "night", m = new Mesh(geo, mat(sky.clone().multiplyScalar(0.55).getHex(), 0.74, { metalness: 0.04, vertexColors: true, emissive: sky.clone().multiplyScalar(night ? 0.12 : 0.22) }));
+  {
+    const col = new Float32Array(p.count * 3), far = new Color(rig.sky ? rig.sky[2] : 2898782).lerp(new Color(rig.sky ? rig.sky[1] : 2898782), 0.5), near2 = new Color(1, 1, 1), t2 = new Color();
+    for (let i2 = 0; i2 < p.count; i2++) {
+      const r22 = Math.hypot(p.getX(i2), p.getZ(i2)), k = Math.min(1, Math.max(0, (r22 - 25) / 140));
+      t2.copy(near2).lerp(far.clone().multiplyScalar(1.6), k);
+      col[i2 * 3] = t2.r;
+      col[i2 * 3 + 1] = t2.g;
+      col[i2 * 3 + 2] = t2.b;
+    }
+    geo.setAttribute("color", new BufferAttribute(col, 3));
+  }
+  m.receiveShadow = false;
+  m.position.y = h / 2;
+  m.userData.water = true;
+  if (rig.sky && !night && rig.key && rig.key.from) {
+    const kf = rig.key.from, a2 = Math.atan2(kf[0], kf[2]);
+    const path = new Mesh(new PlaneGeometry(6, 220), new MeshBasicMaterial({ map: streak(), color: new Color(rig.key.color).multiplyScalar(0.3), transparent: true, blending: AdditiveBlending, depthWrite: false, fog: false }));
+    path.rotation.x = -Math.PI / 2;
+    path.userData.glow = true;
+    const pg = at(new Group(), 0, h / 2 + 0.02, 0, a2);
+    path.position.set(0, 0, 110);
+    pg.add(path);
+    m.add(pg);
+    pg.position.y = 0;
+  }
+  const g = new Group();
+  g.add(m);
+  if (night) {
+    for (let i2 = 0; i2 < 14; i2++) {
+      const s = new Mesh(new PlaneGeometry(3 + r() * 4, 1 + r() * 0.6), new MeshBasicMaterial({ map: streak(), color: 9085136, transparent: true, opacity: 0.28, blending: AdditiveBlending, depthWrite: false, fog: false }));
+      s.rotation.x = -Math.PI / 2;
+      s.userData.glow = true;
+      g.add(at(s, (r() - 0.5) * 40, h / 2 + 0.06, 9 + r() * 14));
+    }
+  }
+  return g;
+}
+function pier(w, h, d, rig, seed) {
+  const g = new Group(), r = rng(seed), deckT = 0.12, plank = 0.24, n = Math.max(2, Math.floor(d / (plank + 0.025)));
+  const pm = new InstancedMesh(new BoxGeometry(w, deckT, plank), mat(C.wood, 0.92), n), M = new Matrix4(), col = new Color();
+  for (let i2 = 0; i2 < n; i2++) {
+    M.makeTranslation(0, h / 2 - deckT / 2 + (r() - 0.5) * 8e-3, -d / 2 + (i2 + 0.5) * (d / n));
+    pm.setMatrixAt(i2, M);
+    pm.setColorAt(i2, col.setHex(C.wood).multiplyScalar(0.86 + r() * 0.24));
+  }
+  shade(pm);
+  g.add(pm);
+  for (const sx of [-1, 1]) g.add(shade(at(new Mesh(new BoxGeometry(0.18, 0.22, d), mat(C.woodDark)), sx * (w / 2 - 0.25), h / 2 - deckT - 0.11, 0)));
+  const post2 = Math.max(2, Math.round(d / 2.4));
+  for (let i2 = 0; i2 <= post2; i2++) for (const sx of [-1, 1]) {
+    const L = h + 2.2, m = new Mesh(new CylinderGeometry(0.13, 0.15, L, 10), mat(C.woodDark, 0.95));
+    g.add(shade(at(m, sx * (w / 2 - 0.05), h / 2 - L / 2 + 0.05, -d / 2 + i2 * d / post2)));
+  }
+  return g;
+}
+function hullShape(w, d) {
+  const s = new Shape(), bow = Math.min(d * 0.22, 2.4);
+  s.moveTo(-w / 2, -d / 2 + 0.4);
+  s.quadraticCurveTo(-w / 2, -d / 2, -w / 2 + 0.4, -d / 2);
+  s.lineTo(w / 2 - 0.4, -d / 2);
+  s.quadraticCurveTo(w / 2, -d / 2, w / 2, -d / 2 + 0.4);
+  s.lineTo(w / 2, d / 2 - bow);
+  s.quadraticCurveTo(w / 2 * 0.8, d / 2 - bow * 0.2, 0, d / 2);
+  s.quadraticCurveTo(-w / 2 * 0.8, d / 2 - bow * 0.2, -w / 2, d / 2 - bow);
+  s.closePath();
+  return s;
+}
+function hull(w, hh, d, top2) {
+  const g = new Group();
+  const geo = new ExtrudeGeometry(hullShape(w, d), { depth: hh, bevelEnabled: false });
+  geo.rotateX(Math.PI / 2);
+  g.add(shade(at(new Mesh(geo, mat(C.hull, 0.8)), 0, top2, 0)));
+  const band2 = new ExtrudeGeometry(hullShape(w + 0.06, d + 0.06), { depth: 0.22, bevelEnabled: false });
+  band2.rotateX(Math.PI / 2);
+  g.add(shade(at(new Mesh(band2, mat(C.band, 0.85)), 0, top2 - 0.1, 0)));
+  const deck = new Mesh(new ExtrudeGeometry(hullShape(w - 0.2, d - 0.2), { depth: 0.02, bevelEnabled: false }).rotateX(Math.PI / 2), mat(C.wood, 0.9));
+  deck.receiveShadow = true;
+  g.add(at(deck, 0, top2 - 5e-3, 0));
+  return g;
+}
+function windows(g, w, y, z, n, h, matW, side = 1, depthX = null) {
+  for (let i2 = 0; i2 < n; i2++) {
+    const k = (i2 + 0.5) / n - 0.5, m = new Mesh(new PlaneGeometry(w / n * 0.62, h), matW);
+    if (depthX == null) at(m, k * w, y, z + side * 0.012, side > 0 ? 0 : Math.PI);
+    else at(m, depthX + side * 0.012, y, z + k * w, side * Math.PI / 2);
+    g.add(m);
+  }
+}
+function ferry(w, h, d, rig, seed, lit) {
+  const g = new Group(), hh = h * 0.42, top2 = -h / 2 + hh;
+  g.add(hull(w, hh, d, top2));
+  const dh = h * 0.3, hw = w * 0.78, hd = d * 0.46, hz = -d * 0.1;
+  g.add(shade(at(new Mesh(new BoxGeometry(hw, dh, hd), mat(C.paint, 0.85)), 0, top2 + dh / 2, hz)));
+  const win = lit ? new MeshBasicMaterial({ color: C.warm, toneMapped: false }) : mat(C.glassNight, 0.3);
+  for (const sx of [-1, 1]) windows(g, hd * 0.85, top2 + dh * 0.58, hz, 5, dh * 0.32, win, sx, sx * hw / 2);
+  windows(g, hw * 0.8, top2 + dh * 0.58, hz + hd / 2, 3, dh * 0.32, win, 1);
+  const wh = h * 0.2, ww = hw * 0.62, wd = hd * 0.36, wz = hz + hd * 0.18;
+  g.add(shade(at(new Mesh(new BoxGeometry(ww, wh, wd), mat(C.paint, 0.85)), 0, top2 + dh + wh / 2, wz)));
+  windows(g, ww * 0.9, top2 + dh + wh * 0.55, wz + wd / 2, 3, wh * 0.45, win, 1);
+  g.add(shade(at(new Mesh(new BoxGeometry(ww + 0.2, 0.08, wd + 0.2), mat(C.metal)), 0, top2 + dh + wh + 0.04, wz)));
+  g.add(shade(at(new Mesh(new CylinderGeometry(0.22, 0.26, h * 0.22, 14), mat(C.band, 0.8)), 0, top2 + dh + h * 0.11, hz - hd * 0.32)));
+  for (const sx of [-1, 1]) {
+    g.add(shade(at(new Mesh(new BoxGeometry(0.05, 0.05, d * 0.7), mat(C.metal)), sx * (w / 2 - 0.08), top2 + 0.9, -d * 0.05)));
+    for (let i2 = 0; i2 <= 8; i2++) g.add(shade(at(new Mesh(new BoxGeometry(0.04, 0.9, 0.04), mat(C.metal)), sx * (w / 2 - 0.08), top2 + 0.45, -d * 0.4 + i2 * d * 0.0875)));
+  }
+  if (lit) {
+    const l = new PointLight(C.warm, 3, 6, 2);
+    l.position.set(0, top2 + dh * 0.6, hz + hd / 2 + 0.6);
+    g.add(l);
+    for (const sx of [-1, 1]) {
+      const hs = halo(hd * 1.1, 16760944, 0.22);
+      hs.material.depthTest = false;
+      hs.renderOrder = -0.5;
+      g.add(at(hs, sx * (hw / 2 + 0.2), top2 + dh * 0.58, hz));
+      const r = new Mesh(new PlaneGeometry(hd * 0.8, 6), new MeshBasicMaterial({ map: streak(), color: 16758106, transparent: true, opacity: 0.6, blending: AdditiveBlending, depthWrite: false, fog: false }));
+      r.rotation.x = -Math.PI / 2;
+      r.rotation.z = Math.PI / 2;
+      r.userData.glow = true;
+      g.add(at(r, sx * (w / 2 + 3), -h / 2 - 0.02, hz));
+    }
+  }
+  return g;
+}
+function lighthouse(w, h, d, rig, seed, t2) {
+  const g = new Group(), y0 = -h / 2, towerH = h * 0.8, rb = w * 0.5, rt = w * 0.33;
+  const bands = [[0, 0.3, C.paint], [0.3, 0.42, C.band], [0.42, 0.72, C.paint], [0.72, 0.84, C.band], [0.84, 1, C.paint]];
+  for (const [a2, b, c] of bands) {
+    const ra = rb + (rt - rb) * a2, rb2 = rb + (rt - rb) * b, m = new Mesh(new CylinderGeometry(rb2, ra, towerH * (b - a2), 28), mat(c, 0.85));
+    g.add(shade(at(m, 0, y0 + towerH * (a2 + b) / 2, 0)));
+  }
+  const gy = y0 + towerH;
+  g.add(shade(at(new Mesh(new CylinderGeometry(rt * 1.45, rt * 1.45, 0.18, 28), mat(C.metal)), 0, gy + 0.09, 0)));
+  const rail = at(new Mesh(new TorusGeometry(rt * 1.4, 0.03, 6, 32), mat(C.metal)), 0, gy + 0.9, 0);
+  rail.rotation.x = Math.PI / 2;
+  g.add(rail);
+  const lanternH = h * 0.09;
+  g.add(at(new Mesh(new CylinderGeometry(rt * 0.85, rt * 0.85, lanternH, 20), new MeshBasicMaterial({ color: 16773577 })), 0, gy + 0.18 + lanternH / 2, 0));
+  g.add(shade(at(new Mesh(new ConeGeometry(rt * 1.05, h * 0.07, 20), mat(C.metal)), 0, gy + 0.18 + lanternH + h * 0.035, 0)));
+  const ly = gy + 0.18 + lanternH / 2, a = (115 - 70 * (t2 || 0)) * Math.PI / 180, L = 46;
+  const pivot = at(new Group(), 0, ly, 0, a);
+  const beam = lightCone(L, 3.4, 16773320, 0.4);
+  beam.rotation.set(-Math.PI / 2 + 0.12, 0, 0);
+  pivot.add(beam);
+  const core = lightCone(L * 0.55, 1.1, 16774876, 0.5);
+  core.rotation.set(-Math.PI / 2 + 0.12, 0, 0);
+  pivot.add(core);
+  g.add(pivot);
+  const h1 = halo(rt * 9, 16770992, 1), h2 = halo(rt * 22, 16760944, 0.25);
+  h1.material.depthTest = h2.material.depthTest = false;
+  g.add(at(h1, 0, ly, 0), at(h2, 0, ly, 0));
+  const glint = new Mesh(new PlaneGeometry(2.6, 30), new MeshBasicMaterial({ map: streak(), color: 16769960, transparent: true, opacity: 0.5, blending: AdditiveBlending, depthWrite: false, fog: false }));
+  glint.rotation.x = -Math.PI / 2;
+  glint.userData.glow = true;
+  const gp = at(new Group(), 0, y0 - 0.72, 0, a);
+  glint.position.set(0, 0, 22);
+  gp.add(glint);
+  g.add(gp);
+  const wash = new PointLight(12569574, 30, h * 1.4, 1.2);
+  wash.position.set(w * 2.5, y0 + h * 0.45, w * 3);
+  g.add(wash);
+  const glow = new PointLight(16769704, 40, 30, 1.6);
+  glow.position.set(0, ly, 0);
+  g.add(glow);
+  const spot = new SpotLight(16773320, 900, 90, 0.11, 0.6, 1.4);
+  spot.position.set(0, ly, 0);
+  spot.target.position.set(Math.sin(a) * 40, -6, Math.cos(a) * 40);
+  g.add(spot, spot.target);
+  return g;
+}
+function rocks(w, h, d, rig, seed, n = 5) {
+  const g = new Group(), r = rng(seed);
+  for (let i2 = 0; i2 < n; i2++) {
+    const geo = new IcosahedronGeometry(1, 1), p = geo.attributes.position;
+    for (let k = 0; k < p.count; k++) {
+      const s = 0.8 + r() * 0.4;
+      p.setXYZ(k, p.getX(k) * s, p.getY(k) * s * 0.75, p.getZ(k) * s);
+    }
+    geo.computeVertexNormals();
+    const sz = 0.35 + r() * 0.4, m = new Mesh(geo, mat(r() < 0.5 ? C.stone : C.stoneDark, 0.97));
+    m.userData.flat = true;
+    m.scale.set(w * sz * 0.5, h * (0.6 + r() * 0.5), d * sz * 0.5);
+    g.add(shade(at(m, (r() - 0.5) * w * 0.6, -h / 2 + m.scale.y * 0.55, (r() - 0.5) * d * 0.6, r() * 6.3)));
+  }
+  return g;
+}
+function shore(w, h, d, rig, seed) {
+  const g = new Group(), r = rng(seed), geo = new PlaneGeometry(w, d, 48, 48);
+  geo.rotateX(-Math.PI / 2);
+  const p = geo.attributes.position;
+  for (let i2 = 0; i2 < p.count; i2++) {
+    const x = p.getX(i2) / (w / 2), z = p.getZ(i2) / (d / 2), edge = Math.max(Math.abs(x), Math.abs(z));
+    p.setY(i2, h / 2 - Math.pow(edge, 4) * (h + 0.6) + 0.12 * Math.sin(p.getX(i2) * 1.3 + r() * 0.3) * Math.cos(p.getZ(i2) * 1.1));
+  }
+  geo.computeVertexNormals();
+  g.add(shade(new Mesh(geo, mat(C.stoneDark, 0.97))));
+  for (const [ox, oz, ow, od] of [[0, d / 2 - 0.8, w, 2], [-w / 2 + 0.8, 0, 2, d], [w / 2 - 0.8, 0, 2, d]]) {
+    const e = rocks(ow, 1, od, rig, seed + ox + oz, 10);
+    e.position.set(ox, h / 2 - 0.35, oz);
+    g.add(e);
+  }
+  return g;
+}
+function cabin(w, h, d, rig, seed) {
+  const g = new Group(), inner = mat(6181448, 0.92, { side: BackSide }), outer = mat(C.paint, 0.85, { side: FrontSide });
+  const room2 = shade(new Mesh(new BoxGeometry(w, h + 0.01, d), inner));
+  room2.position.y = 5e-3 - 0.01;
+  room2.castShadow = false;
+  g.add(room2);
+  const shell = shade(new Mesh(new BoxGeometry(w + 0.14, h + 0.12, d + 0.14), outer));
+  shell.position.y = 0.06;
+  g.add(shell);
+  const inWin = new MeshBasicMaterial({ map: nightPane(), color: 9079434 }), outWin = new MeshBasicMaterial({ color: C.warm, toneMapped: false });
+  windows(g, w * 0.8, h * 0.18, -d / 2 + 0.02, 3, h * 0.28, inWin, 1);
+  for (let i2 = 0; i2 < 3; i2++) {
+    const x = ((i2 + 0.5) / 3 - 0.5) * w * 0.8, pw = w * 0.8 / 3 * 0.62, ph = h * 0.28, fm = mat(C.woodDark, 0.8);
+    for (const [fw, fh, fx, fy] of [[pw + 0.08, 0.05, 0, ph / 2 + 0.02], [pw + 0.08, 0.06, 0, -ph / 2 - 0.02], [0.05, ph + 0.06, -pw / 2 - 0.02, 0], [0.05, ph + 0.06, pw / 2 + 0.02, 0]])
+      g.add(shade(at(new Mesh(new BoxGeometry(fw, fh, 0.04), fm), x + fx, h * 0.18 + fy, -d / 2 + 0.03)));
+  }
+  for (const [bw, bd, bx, bz] of [[w - 0.02, 0.03, 0, -d / 2 + 0.03], [0.03, d - 0.02, -w / 2 + 0.03, 0], [0.03, d - 0.02, w / 2 - 0.03, 0]])
+    g.add(shade(at(new Mesh(new BoxGeometry(bw, 0.9, bd), mat(C.woodDark, 0.85)), bx, -h / 2 + 0.45, bz)));
+  windows(g, w * 0.8, h * 0.18, -d / 2 - 0.08, 3, h * 0.28, outWin, -1);
+  for (const sx of [-1, 1]) {
+    windows(g, d * 0.6, h * 0.18, 0, 2, h * 0.28, inWin, -sx, sx * (w / 2 - 0.02));
+    windows(g, d * 0.6, h * 0.18, 0, 2, h * 0.28, outWin, sx, sx * (w / 2 + 0.08));
+  }
+  g.add(shade(at(new Mesh(new BoxGeometry(w + 0.4, 0.1, d + 0.4), mat(C.metal)), 0, h / 2 + 0.17, 0)));
+  g.add(shade(at(new Mesh(new CylinderGeometry(0.3, 0.36, 1.4, 14), mat(C.band, 0.8)), 0, h / 2 + 0.9, -d / 2 - 0.9)));
+  const wh = 1, ww = w * 0.6, wd = d * 0.45;
+  g.add(shade(at(new Mesh(new BoxGeometry(ww, wh, wd), mat(C.paint, 0.85, { side: FrontSide })), 0, h / 2 + 0.22 + wh / 2, 0.2)));
+  windows(g, ww * 0.9, h / 2 + 0.22 + wh * 0.55, 0.2 + wd / 2, 3, wh * 0.45, outWin, 1);
+  return g;
+}
+function nightPane() {
+  if (nightTex) return nightTex;
+  const c = document.createElement("canvas");
+  c.width = 64;
+  c.height = 64;
+  const g = c.getContext("2d"), sky = g.createLinearGradient(0, 0, 0, 40);
+  sky.addColorStop(0, "#060a16");
+  sky.addColorStop(1, "#16203a");
+  g.fillStyle = sky;
+  g.fillRect(0, 0, 64, 40);
+  g.fillStyle = "#4a5878";
+  g.fillRect(0, 39, 64, 1);
+  const sea = g.createLinearGradient(0, 41, 0, 64);
+  sea.addColorStop(0, "#0e1528");
+  sea.addColorStop(1, "#04060c");
+  g.fillStyle = sea;
+  g.fillRect(0, 41, 64, 23);
+  nightTex = new CanvasTexture(c);
+  return nightTex;
+}
+function lamp(w, h, d, rig) {
+  const g = new Group(), cl = Math.max(0.4, (rig.ceil || 0.8) - h * 0.32);
+  g.add(at(new Mesh(new CylinderGeometry(8e-3, 8e-3, cl, 6), mat(C.brass, 0.5, { emissive: new Color(3811344) })), 0, h * 0.32 + cl / 2, 0));
+  g.add(at(new Mesh(new CylinderGeometry(0.06, 0.08, 0.04, 16), mat(C.brass, 0.5, { metalness: 0.3 })), 0, (rig.ceil || 0.5) - 0.02, 0));
+  const s = new Mesh(new ConeGeometry(w * 0.5, h * 0.55, 24, 1, true), mat(C.brass, 0.5, { metalness: 0.3, side: FrontSide, emissive: new Color(3022863) }));
+  s.castShadow = false;
+  const inside = new Mesh(new ConeGeometry(w * 0.49, h * 0.54, 24, 1, true), new MeshBasicMaterial({ color: 16765066, side: BackSide, toneMapped: false }));
+  g.add(at(s, 0, h * 0.05, 0), at(inside, 0, h * 0.05, 0));
+  g.add(at(new Mesh(new SphereGeometry(w * 0.16, 16, 12), new MeshBasicMaterial({ color: 16774880, toneMapped: false })), 0, -h * 0.16, 0));
+  g.add(at(halo(w * 0.7, 16767392, 0.55), 0, -h * 0.24, 0));
+  const cone = lightCone(1.7, w * 2.4, 16758630, 0.11);
+  cone.position.set(0, -h * 0.2, 0);
+  g.add(cone);
+  const pool = new SpotLight(16763274, 3.5, 4, 0.7, 0.6, 2);
+  pool.position.set(0, -h * 0.1, 0);
+  pool.target.position.set(0, -3, 0);
+  pool.castShadow = true;
+  g.add(pool, pool.target);
+  return g;
+}
+function console_(w, h, d) {
+  const g = new Group();
+  g.add(shade(new Mesh(new BoxGeometry(w, h * 0.85, d), mat(C.woodDark, 0.9))));
+  const top2 = shade(new Mesh(new BoxGeometry(w, 0.06, d * 1.05), mat(C.wood, 0.85)));
+  top2.position.set(0, h * 0.43, 0.02);
+  top2.rotation.x = 0.28;
+  g.add(top2);
+  const wheel = new Group(), wr = Math.min(0.32, h * 0.32);
+  wheel.add(shade(new Mesh(new TorusGeometry(wr, 0.025, 8, 28), mat(C.wood, 0.8))));
+  for (let i2 = 0; i2 < 8; i2++) {
+    const sp = new Mesh(new CylinderGeometry(0.012, 0.012, wr * 2.3, 6), mat(C.wood, 0.8));
+    sp.rotation.z = i2 * Math.PI / 8;
+    wheel.add(sp);
+  }
+  wheel.position.set(-w * 0.18, h * 0.25, d / 2 + 0.12);
+  g.add(wheel);
+  {
+    const brass = mat(13935944, 0.3, { metalness: 0.6, emissive: new Color(4862992) }), kz = d * 0.3, ky = h * 0.43 + 0.03 - kz * Math.tan(0.28);
+    const plate = new Mesh(new CylinderGeometry(0.035, 0.035, 0.012, 20), brass);
+    plate.rotation.x = 0.28;
+    g.add(at(plate, w * 0.25, ky, kz));
+    g.add(at(new Mesh(new CylinderGeometry(8e-3, 8e-3, 0.05, 8), brass), w * 0.25, ky + 0.025, kz));
+    const bow = new Mesh(new TorusGeometry(0.032, 0.011, 8, 20), brass);
+    g.add(at(bow, w * 0.25, ky + 0.08, kz, 0.5));
+  }
+  for (const x of [0.05, 0.3]) {
+    const dial = new Mesh(new CylinderGeometry(0.06, 0.06, 0.02, 20), mat(C.metal, 0.5));
+    dial.rotation.x = Math.PI / 2 - 0.28;
+    g.add(at(dial, w * x - w * 0.05, h * 0.47, -d * 0.1));
+  }
+  return g;
+}
+function bollard(w, h) {
+  const g = new Group();
+  g.add(shade(at(new Mesh(new CylinderGeometry(w * 0.4, w * 0.45, h * 0.8, 14), mat(C.metal, 0.6)), 0, -h * 0.1, 0)));
+  g.add(shade(at(new Mesh(new CylinderGeometry(w * 0.5, w * 0.42, h * 0.2, 14), mat(C.metal, 0.6)), 0, h * 0.4, 0)));
+  return g;
+}
+function rope(w, h) {
+  const g = new Group(), n = 3;
+  for (let i2 = 0; i2 < n; i2++) {
+    const t2 = new Mesh(new TorusGeometry(w * 0.36 - i2 * 0.02, h / (n * 2), 8, 24), mat(C.rope, 0.95));
+    t2.rotation.x = Math.PI / 2;
+    g.add(shade(at(t2, 0, -h / 2 + h / (n * 2) + i2 * h / n, 0)));
+  }
+  return g;
+}
+function suitcase(w, h, d) {
+  const g = new Group();
+  g.add(shade(new Mesh(new BoxGeometry(w, h, d), mat(C.leather, 0.8))));
+  for (const sx of [-0.3, 0.3]) g.add(shade(at(new Mesh(new BoxGeometry(0.04, h + 0.01, d + 0.01), mat(C.woodDark, 0.8)), sx * w, 0, 0)));
+  const hd = new Mesh(new TorusGeometry(0.07, 0.014, 6, 14, Math.PI), mat(C.woodDark));
+  g.add(shade(at(hd, 0, h / 2, 0)));
+  return g;
+}
+function crate(w, h, d) {
+  const g = new Group();
+  g.add(shade(new Mesh(new BoxGeometry(w * 0.96, h * 0.96, d * 0.96), mat(C.wood, 0.95))));
+  for (const y of [-1, 1]) for (const z of [-1, 1]) g.add(shade(at(new Mesh(new BoxGeometry(w, 0.05, 0.05), mat(C.woodDark)), 0, y * (h / 2 - 0.025), z * (d / 2 - 0.025))));
+  return g;
+}
+function bench(w, h, d) {
+  const g = new Group();
+  g.add(shade(at(new Mesh(new BoxGeometry(w, 0.06, d), mat(C.wood)), 0, h / 2 - 0.03, 0)));
+  for (const sx of [-1, 1]) g.add(shade(at(new Mesh(new BoxGeometry(0.06, h - 0.06, d * 0.85), mat(C.woodDark)), sx * (w / 2 - 0.08), -0.03, 0)));
+  return g;
+}
+function table(w, h, d) {
+  const g = new Group();
+  g.add(shade(at(new Mesh(new BoxGeometry(w, 0.05, d), mat(C.wood)), 0, h / 2 - 0.025, 0)));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(shade(at(new Mesh(new BoxGeometry(0.05, h - 0.05, 0.05), mat(C.woodDark)), sx * (w / 2 - 0.06), -0.025, sz * (d / 2 - 0.06))));
+  return g;
+}
+function chair(w, h, d) {
+  const g = new Group(), seat = Math.min(h, 0.46);
+  g.add(shade(at(new Mesh(new BoxGeometry(w, 0.05, d), mat(C.woodDark)), 0, -h / 2 + seat, 0)));
+  if (h > seat + 0.1) g.add(shade(at(new Mesh(new BoxGeometry(w, h - seat, 0.05), mat(C.woodDark)), 0, -h / 2 + seat + (h - seat) / 2, -d / 2 + 0.025)));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(shade(at(new Mesh(new BoxGeometry(0.04, seat, 0.04), mat(C.woodDark)), sx * (w / 2 - 0.03), -h / 2 + seat / 2, sz * (d / 2 - 0.03))));
+  return g;
+}
+function kitPiece(box, rig, t2 = 0, { lit = false } = {}) {
+  const kind = kitOf(box.name);
+  if (!kind) return null;
+  const [w, h, d] = box.size, seed = box.id || box.name;
+  const make = {
+    water,
+    pier,
+    ferry: (a, b, c) => ferry(a, b, c, rig, seed, lit),
+    hull: (a, b, c) => {
+      const g2 = new Group();
+      g2.add(hull(a, b, c, b / 2));
+      return g2;
+    },
+    lighthouse: (a, b, c) => lighthouse(a, b, c, rig, seed, t2),
+    rocks,
+    shore,
+    cabin,
+    lamp: (a, b, c) => lamp(a, b, c, { ...rig, ceil: box.ceil }),
+    console: console_,
+    bollard,
+    rope,
+    suitcase,
+    crate,
+    bench,
+    table,
+    chair
+  }[kind];
+  const g = make(w, h, d, rig, seed);
+  g.position.set(...box.pos);
+  g.rotation.y = (box.yaw || 0) * Math.PI / 180;
+  g.userData.kit = kind;
+  return g;
+}
+var KIT, SEATS, C, mat, shade, at, streakTex, haloTex, nightTex;
+var init_previz_kit = __esm({
+  "desktop/film-suite/src/planning/previz-kit.js"() {
+    init_three_module();
+    KIT = [
+      ["hull", ["hull"]],
+      ["lamp", ["lamp", "lantern"]],
+      ["lighthouse", ["lighthouse"]],
+      ["ferry", ["ferry", "boat"]],
+      ["pier", ["pier", "jetty", "dock"]],
+      ["water", ["water", "sea"]],
+      ["shore", ["shore"]],
+      ["rocks", ["rocks", "rock"]],
+      ["cabin", ["cabin", "room"]],
+      ["bollard", ["bollard"]],
+      ["rope", ["rope"]],
+      ["suitcase", ["suitcase"]],
+      ["crate", ["crate"]],
+      ["bench", ["bench"]],
+      ["chair", ["chair"]],
+      ["table", ["table"]],
+      ["console", ["console", "desk"]]
+    ];
+    SEATS = /* @__PURE__ */ new Set(["suitcase", "bench", "crate", "chair"]);
+    C = {
+      wood: 8219480,
+      woodDark: 5917759,
+      stone: 6973282,
+      stoneDark: 5196872,
+      paint: 12170926,
+      hull: 4014924,
+      band: 9386802,
+      metal: 4474442,
+      brass: 11044687,
+      rope: 10850156,
+      leather: 7230272,
+      glassNight: 1911364,
+      warm: 16766362
+    };
+    mat = (color, rough = 0.9, extra = {}) => new MeshStandardMaterial({ color, roughness: rough, metalness: 0, ...extra });
+    shade = (m) => {
+      m.castShadow = m.receiveShadow = true;
+      return m;
+    };
+    at = (o, x, y, z, ry = 0) => {
+      o.position.set(x, y, z);
+      o.rotation.y = ry;
+      return o;
+    };
+    streakTex = null;
+    haloTex = null;
+    nightTex = null;
+  }
+});
+
 // desktop/film-suite/src/planning/previz-render.js
 var previz_render_exports = {};
 __export(previz_render_exports, {
@@ -26490,9 +30907,54 @@ function shadowBlob(group, w, d) {
   m.userData.blob = true;
   group.add(m);
 }
-function mannequin(pose, tone = PAL.skin, band2 = null) {
-  const g = new Group(), skin = clay(tone), k = SKELETON[pose] || SKELETON.stand;
+function headGeo() {
+  if (HEAD_GEO) return HEAD_GEO;
+  const g = new SphereGeometry(1, 96, 72), p = g.attributes.position, col = new Float32Array(p.count * 3);
+  for (let i2 = 0; i2 < p.count; i2++) {
+    let x = p.getX(i2), y = p.getY(i2), z = p.getZ(i2);
+    const front = Math.max(0, z);
+    if (y < 0.1) {
+      const k = Math.pow((0.1 - y) / 1.1, 1.4);
+      x *= 1 - 0.34 * k;
+      z *= 1 - 0.12 * k;
+    }
+    if (y < -0.55) z += 0.1 * front * Math.min(1, (-0.55 - y) / 0.3) * Math.exp(-(x * x) / 0.08);
+    z -= 0.06 * front * Math.exp(-(x * x) / 0.5) * Math.exp(-((y - 0.45) ** 2) / 0.1);
+    let occ = 0;
+    z += 0.045 * front * Math.exp(-((y - 0.12) ** 2) / 0.012) * Math.exp(-(x * x) / 0.35);
+    for (const sx of [-1, 1]) {
+      const e = Math.sqrt(((x - sx * 0.3) / 0.17) ** 2 + ((y + 0.01) / 0.11) ** 2), q = Math.max(0, Math.min(1, (1 - e) / 0.35)), s = front * q * q * (3 - 2 * q);
+      z -= 0.045 * s;
+      occ = Math.max(occ, s);
+    }
+    {
+      const t2 = (0.08 - y) / 0.5, rise = Math.min(1, Math.max(0, t2 / 0.8)), fade = Math.max(0, Math.min(1, (y + 0.46) / 0.26)), prof = (y < 0.08 ? rise * rise * (3 - 2 * rise) : 0) * fade * fade * (3 - 2 * fade);
+      z += 0.1 * front * prof * Math.exp(-(x * x) / 0.02);
+    }
+    p.setXYZ(i2, x, y, z);
+    col[i2 * 3] = col[i2 * 3 + 1] = col[i2 * 3 + 2] = 1 - 0.1 * occ;
+  }
+  g.setAttribute("color", new BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  HEAD_GEO = g;
+  return g;
+}
+function reachArm(k, side, to) {
+  const S = new Vector3(...k["shoulder" + side]), E0 = new Vector3(...k["elbow" + side]), W0 = new Vector3(...k["wrist" + side]);
+  const L1 = E0.distanceTo(S), L2 = W0.distanceTo(E0), T = new Vector3(...to), d = T.clone().sub(S), D = Math.min(d.length(), L1 + L2 - 5e-3) - 0.04;
+  const u = d.normalize(), W2 = S.clone().addScaledVector(u, D);
+  const pole = new Vector3(side === "R" ? 0.6 : -0.6, -1, -0.2), p = pole.sub(u.clone().multiplyScalar(pole.dot(u))).normalize();
+  const a = Math.max(0, Math.min(D, (L1 * L1 - L2 * L2 + D * D) / (2 * D))), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+  const E = S.clone().addScaledVector(u, a).addScaledVector(p, h);
+  return { ...k, ["elbow" + side]: E.toArray(), ["wrist" + side]: W2.toArray() };
+}
+function mannequin(pose, tone = PAL.skin, band2 = null, { chair: withChair = true, reach = null } = {}) {
+  const g = new Group(), skin = clay(tone), k = reach ? reachArm(SKELETON[pose] || SKELETON.stand, reach.side, reach.to) : SKELETON[pose] || SKELETON.stand;
+  const top2 = band2 == null ? skin : clay(new Color(band2).lerp(new Color(9342088), 0.5).getHex());
+  const legs = band2 == null ? skin : clay(new Color(band2).lerp(new Color(3947584), 0.72).getHex());
+  const CLOTH = { chest: top2, trapezius: top2, deltoidL: top2, deltoidR: top2, upperArmL: top2, upperArmR: top2, forearmL: top2, forearmR: top2, pelvis: legs, thighL: legs, thighR: legs, shinL: legs, shinR: legs };
   const put = (name2, m) => {
+    if (CLOTH[name2]) m.material = CLOTH[name2];
     m.name = name2;
     m.userData.part = name2;
     m.castShadow = m.receiveShadow = true;
@@ -26507,22 +30969,38 @@ function mannequin(pose, tone = PAL.skin, band2 = null) {
     m.quaternion.copy(new Quaternion().setFromUnitVectors(UP, d.normalize()));
     return put(name2, m);
   };
-  const ball = (name2, at, sx, sy, sz, mat = skin) => {
-    const m = new Mesh(new SphereGeometry(1, 28, 18), mat);
-    m.position.set(...at);
+  const ball = (name2, at2, sx, sy, sz, mat2 = skin) => {
+    const m = new Mesh(new SphereGeometry(1, 28, 18), mat2);
+    m.position.set(...at2);
     m.scale.set(sx, sy, sz);
     return put(name2, m);
   };
   const [hx, hy, hz] = k.head;
-  ball("head", [hx, hy + 0.01, hz - 0.01], 0.092, 0.112, 0.104);
-  ball("jaw", [hx, hy - 0.055, hz + 0.012], 0.06, 0.05, 0.062);
-  ball("brow", [hx, hy + 0.028, hz + 0.072], 0.052, 0.012, 0.022).castShadow = false;
+  const headMat = skin.clone();
+  headMat.vertexColors = true;
+  headMat.emissive = new Color(tone).multiplyScalar(0.12);
+  const head2 = new Mesh(headGeo(), headMat);
+  head2.position.set(hx, hy + 5e-3, hz - 6e-3);
+  head2.scale.set(0.088, 0.118, 0.1);
+  put("head", head2);
+  head2.receiveShadow = false;
+  const brow = ball("brow", [hx, hy + 0.016, hz + 0.07], 0.04, 9e-3, 0.012);
+  brow.castShadow = false;
+  brow.visible = false;
   const nose = new Mesh(new SphereGeometry(1, 16, 12), skin);
-  nose.scale.set(0.015, 0.021, 0.026);
-  nose.position.set(hx, hy - 0.012, hz + 0.1);
+  nose.scale.set(8e-3, 0.02, 0.02);
+  nose.position.set(hx, hy - 0.026, hz + 0.085);
+  nose.rotation.x = -0.22;
   put("nose", nose).castShadow = false;
-  for (const sx of [-1, 1]) ball("ear", [hx + sx * 0.09, hy - 5e-3, hz - 5e-3], 0.012, 0.026, 0.02).castShadow = false;
-  limb("neck", k.neck0, k.neck1, 0.048);
+  nose.visible = false;
+  for (const sx of [-1, 1]) ball("ear", [hx + sx * 0.084, hy - 0.012, hz - 0.03], 0.01, 0.022, 0.015).castShadow = false;
+  {
+    const n0 = V(k.neck0), top3 = new Vector3(hx, hy - 0.03, hz - 0.02), base2 = new Vector3(n0.x, n0.y - 0.05, n0.z - 5e-3), dn = top3.clone().sub(base2);
+    const neck = new Mesh(new CylinderGeometry(0.044, 0.056, dn.length(), 32, 1, true), skin);
+    neck.position.copy(base2).addScaledVector(dn, 0.5);
+    neck.quaternion.copy(new Quaternion().setFromUnitVectors(UP, dn.normalize()));
+    put("neck", neck).castShadow = false;
+  }
   const chest = limb("chest", k.chest0, k.chest1, 0.15);
   chest.scale.set(1.18, 1, 0.72);
   limb("trapezius", [k.shoulderL[0] * 0.8, k.shoulderL[1] + 5e-3, k.shoulderL[2] - 0.01], [k.shoulderR[0] * 0.8, k.shoulderR[1] + 5e-3, k.shoulderR[2] - 0.01], 0.06);
@@ -26532,24 +31010,36 @@ function mannequin(pose, tone = PAL.skin, band2 = null) {
   for (const s of ["L", "R"]) {
     limb("upperArm" + s, k["shoulder" + s], k["elbow" + s], 0.05);
     limb("forearm" + s, k["elbow" + s], k["wrist" + s], 0.042);
-    const w = V(k["wrist" + s]), e = V(k["elbow" + s]);
-    ball("hand" + s, w.addScaledVector(w.clone().sub(e).normalize(), 0.06).toArray(), 0.04, 0.065, 0.03);
+    {
+      const w = V(k["wrist" + s]), e = V(k["elbow" + s]), dir = w.clone().sub(e).normalize(), hm = clay(new Color(tone).multiplyScalar(0.82).getHex());
+      const palm = new Mesh(new SphereGeometry(1, 20, 14), hm);
+      palm.scale.set(0.034, 0.042, 0.024);
+      palm.position.copy(w).addScaledVector(dir, 0.04);
+      palm.quaternion.copy(new Quaternion().setFromUnitVectors(UP, dir));
+      put("hand" + s, palm);
+      const th = new Mesh(new CapsuleGeometry(0.01, 0.03, 4, 8), hm), side = new Vector3(s === "L" ? 1 : -1, 0, 0.4).normalize();
+      th.position.copy(w).addScaledVector(dir, 0.03).addScaledVector(side, 0.03);
+      th.quaternion.copy(new Quaternion().setFromUnitVectors(UP, dir.clone().add(side.multiplyScalar(0.6)).normalize()));
+      th.castShadow = true;
+      th.userData.part = "thumb";
+      g.add(th);
+    }
     limb("thigh" + s, k["hip" + s], k["knee" + s], 0.072);
     limb("shin" + s, k["knee" + s], k["ankle" + s], 0.058);
     const f2 = new Mesh(new BoxGeometry(0.09, 0.07, 0.24), skin);
     f2.position.set(k["ankle" + s][0], Math.max(0.035, k["ankle" + s][1] - 0.045), k["ankle" + s][2] + 0.06);
     put("foot" + s, f2);
   }
-  if (pose === "sit") {
-    const chair = clay(PAL.chair);
+  if (pose === "sit" && withChair) {
+    const chair2 = clay(PAL.chair);
     for (const [w, h, d, x, y, z] of [[0.46, 0.05, 0.46, 0, 0.475, 0.06], [0.46, 0.55, 0.05, 0, 0.75, -0.17]]) {
-      const m = new Mesh(new BoxGeometry(w, h, d), chair);
+      const m = new Mesh(new BoxGeometry(w, h, d), chair2);
       m.position.set(x, y, z);
       m.castShadow = m.receiveShadow = true;
       g.add(m);
     }
     for (const [dx, dz] of [[-0.2, -0.15], [0.2, -0.15], [-0.2, 0.26], [0.2, 0.26]]) {
-      const l = new Mesh(new BoxGeometry(0.04, 0.46, 0.04), chair);
+      const l = new Mesh(new BoxGeometry(0.04, 0.46, 0.04), chair2);
       l.position.set(dx, 0.23, dz);
       l.castShadow = true;
       g.add(l);
@@ -26561,22 +31051,61 @@ function mannequin(pose, tone = PAL.skin, band2 = null) {
     b.scale.set(1, 1, 0.72);
     put("band", b);
   }
+  if (pose === "coil") {
+    const rm2 = clay(10850156), [lx, ly, lz] = k.wristL, [rx, ry, rz] = k.wristR, cx = (lx + rx) / 2, cy = (ly + ry) / 2 - 0.05, cz = (lz + rz) / 2 + 0.05;
+    for (let i2 = 0; i2 < 3; i2++) {
+      const c = new Mesh(new TorusGeometry(0.13 - i2 * 0.01, 0.017, 8, 28), rm2);
+      c.position.set(rx - 0.02 + 0.015 * i2, ry - 0.12 - 0.01 * i2, rz - 0.01 * i2);
+      c.rotation.set(0.15 + 0.08 * i2, 0.4, 0.08 * i2);
+      c.castShadow = true;
+      c.userData.part = "rope";
+      g.add(c);
+    }
+    const tail2 = new Mesh(new CylinderGeometry(0.014, 0.014, ly - 0.02, 6), rm2);
+    tail2.position.set(lx - 0.02, (ly - 0.02) / 2, lz + 0.02);
+    tail2.rotation.z = 0.08;
+    tail2.castShadow = true;
+    tail2.userData.part = "rope";
+    g.add(tail2);
+  }
   shadowBlob(g, 0.75, 0.75);
   return g;
+}
+function turnHead(g, pose, deg, pitch = 0) {
+  const a = Math.max(-55, Math.min(55, deg)) * DEG, k = SKELETON[pose] || SKELETON.stand, [hx, hy, hz] = k.head;
+  if (!a && !pitch) return;
+  const spin = (set, ang, cx, cz) => {
+    const q = new Quaternion().setFromAxisAngle(UP, ang);
+    for (const m of g.children) if (set.has(m.userData.part)) {
+      const v = new Vector3(m.position.x - cx, 0, m.position.z - cz).applyQuaternion(q);
+      m.position.x = cx + v.x;
+      m.position.z = cz + v.z;
+      m.quaternion.premultiply(q);
+    }
+  };
+  spin(UPPER_PARTS, a * 0.25, k.pelvis[0], k.pelvis[2]);
+  spin(HEAD_PARTS, a, hx, hz);
+  if (pitch) {
+    const axis = new Vector3(Math.cos(a), 0, -Math.sin(a)), q = new Quaternion().setFromAxisAngle(axis, Math.max(0, Math.min(0.35, pitch))), piv = new Vector3(hx, hy - 0.09, hz);
+    for (const m of g.children) if (HEAD_PARTS.has(m.userData.part)) {
+      m.position.sub(piv).applyQuaternion(q).add(piv);
+      m.quaternion.premultiply(q);
+    }
+  }
 }
 function skyDome(rig) {
   const geo = new SphereGeometry(180, 48, 24), pos2 = geo.attributes.position, col = new Float32Array(pos2.count * 3);
   const [zen, sun, away] = rig.sky.map((c) => new Color(c)), k = rig.key.from, sl = Math.hypot(k[0], k[2]) || 1;
-  const tmp = new Color(), fogC = skyFog(rig);
+  const tmp2 = new Color(), fogC = skyFog(rig);
   for (let i2 = 0; i2 < pos2.count; i2++) {
     const x = pos2.getX(i2), y = pos2.getY(i2), z = pos2.getZ(i2), l = Math.hypot(x, y, z) || 1;
     const up = Math.max(0, y / l), side = (x / l * (k[0] / sl) + z / l * (k[2] / sl) + 1) / 2;
     const horizon = away.clone().lerp(sun, 0.1 + 0.9 * Math.pow(side, 1.6));
     const q = Math.min(1, up / 0.03), haze = q * q * (3 - 2 * q);
-    tmp.copy(fogC).lerp(horizon, haze).lerp(zen, Math.pow(up, 0.45) * haze);
-    col[i2 * 3] = tmp.r;
-    col[i2 * 3 + 1] = tmp.g;
-    col[i2 * 3 + 2] = tmp.b;
+    tmp2.copy(fogC).lerp(horizon, haze).lerp(zen, Math.pow(up, 0.45) * haze);
+    col[i2 * 3] = tmp2.r;
+    col[i2 * 3 + 1] = tmp2.g;
+    col[i2 * 3 + 2] = tmp2.b;
   }
   geo.setAttribute("color", new BufferAttribute(col, 3));
   const m = new Mesh(geo, new MeshBasicMaterial({ vertexColors: true, side: BackSide, fog: false, depthWrite: false }));
@@ -26587,7 +31116,18 @@ function skyDome(rig) {
 function lights(S, rig, ext, centre = [0, 0]) {
   S.add(new HemisphereLight(rig.hemi[0], rig.hemi[1], rig.hemi[2]));
   const k = rig.key;
-  if (k.point) {
+  if (k.point && k.down) {
+    const key = new SpotLight(k.color, k.intensity, k.distance, 1.5, 0.45, k.decay);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.bias = -2e-3;
+    key.shadow.normalBias = 0.02;
+    key.shadow.camera.near = 0.2;
+    S.add(key);
+    const spill = new PointLight(k.color, k.intensity * 0.45, 3.2, 2);
+    spill.position.set(k.point[0], k.point[1] - 0.04, k.point[2]);
+    S.add(spill);
+  } else if (k.point) {
     const key = new PointLight(k.color, k.intensity, k.distance, k.decay);
     key.position.set(...k.point);
     key.castShadow = true;
@@ -26596,18 +31136,20 @@ function lights(S, rig, ext, centre = [0, 0]) {
     key.shadow.normalBias = 0.02;
     key.shadow.camera.near = 0.2;
     S.add(key);
-    const bulb = new Mesh(new SphereGeometry(0.09, 20, 14), new MeshBasicMaterial({ color: k.color }));
-    bulb.position.set(...k.point);
-    S.add(bulb);
+    if (k.bulb !== false) {
+      const bulb = new Mesh(new SphereGeometry(0.09, 20, 14), new MeshBasicMaterial({ color: k.color }));
+      bulb.position.set(...k.point);
+      S.add(bulb);
+    }
   } else {
     const [cx, cz] = centre, d = Math.hypot(...k.from) || 1, D = 40;
-    const key = new SpotLight(k.color, k.intensity, 0, 0.19, 0.9, 0);
+    const key = new SpotLight(k.color, k.intensity, 0, rig.wide ? 0.42 : 0.19, rig.wide ? 0.5 : 0.9, 0);
     key.position.set(cx + k.from[0] / d * D, k.from[1] / d * D, cz + k.from[2] / d * D);
     key.target.position.set(cx, 0.9, cz - 0.6);
     S.add(key.target);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
-    Object.assign(key.shadow.camera, { near: D - 7, far: D + 14 });
+    Object.assign(key.shadow.camera, { near: rig.wide ? D - 20 : D - 7, far: rig.wide ? D + 40 : D + 14 });
     S.add(key);
   }
   for (const l of [rig.fill, rig.rim]) {
@@ -26617,14 +31159,51 @@ function lights(S, rig, ext, centre = [0, 0]) {
   }
 }
 function build(frame, parts = null) {
-  const rig = frame.light, ext = rig.ext;
+  const kits = frame.boxes.map((b) => kitOf(b.name)), has3 = (k) => kits.includes(k);
+  const big3 = has3("water") || has3("lighthouse") || has3("shore"), lampBox = frame.boxes.find((b) => kitOf(b.name) === "lamp");
+  let rig = frame.light;
+  if (big3) rig = { ...rig, fog: [Math.max(rig.fog[0], 28), Math.max(rig.fog[1], 150)], wide: true, hemi: [rig.hemi[0], rig.hemi[1], rig.hemi[2] * (rig.time === "night" ? 2.2 : 1.2)] };
+  if (lampBox && rig.key.point) rig = {
+    ...rig,
+    key: { ...rig.key, point: [lampBox.pos[0], lampBox.pos[1] - 0.14, lampBox.pos[2]], intensity: rig.key.intensity * 0.3, distance: 5, decay: 2, bulb: false },
+    hemi: [rig.hemi[0], rig.hemi[1], rig.hemi[2] * 0.15],
+    fill: { ...rig.fill, intensity: rig.fill.intensity * 0.2 },
+    rim: { ...rig.rim, intensity: rig.rim.intensity * 0.25 }
+  };
+  const room2 = frame.boxes.find((b) => kitOf(b.name) === "cabin"), cp = frame.camera && frame.camera.pos;
+  const inside = Boolean(room2 && cp && Math.abs(cp[0] - room2.pos[0]) < room2.size[0] / 2 && Math.abs(cp[2] - room2.pos[2]) < room2.size[2] / 2 && cp[1] < room2.pos[1] + room2.size[1] / 2);
+  if (big3 && rig.key.point && rig.time === "night" && !inside) rig = { ...rig, moon: true };
+  if (inside) rig = {
+    ...rig,
+    fog: [30, 60],
+    hemi: [6968388, 2760728, 0.45],
+    // (w39-p2-previz4, sheet 3.1: "a black void": the lamp's bounce off the wood lifts the walls and the window frames)
+    fill: { ...rig.fill, intensity: 0 },
+    rim: { ...rig.rim, intensity: 0 },
+    key: { ...rig.key, color: 16756838, intensity: rig.key.intensity * 0.55 * 0.7, distance: 6, down: true }
+  };
+  const hullOut = Boolean(room2 && frame.boxes.some((b) => kitOf(b.name) === "hull") && !inside);
+  if (hullOut) rig = { ...rig, key: { ...rig.key, intensity: 0 }, hemi: [5925522, 1053726, rig.hemi[2] * 1.6] };
+  if (has3("water")) rig = { ...rig, fog: [rig.fog[0], Math.min(rig.fog[1], 170)] };
+  const ext = rig.ext;
   const S = new Scene();
   S.background = new Color(rig.bg);
   S.fog = new Fog(rig.sky ? skyFog(rig) : rig.bg, rig.fog[0], rig.fog[1]);
   lights(S, rig, ext, centreOf(frame));
+  if (rig.moon) {
+    const m = new DirectionalLight(11123944, 1.6);
+    m.position.set(-20, 30, 25);
+    S.add(m);
+    const rimL = new DirectionalLight(13162239, 2.2);
+    rimL.position.set(4, 30, -40);
+    S.add(rimL);
+    S.background = new Color(857124);
+    S.fog.color = new Color(1713728);
+  }
   if (rig.sky) S.add(skyDome(rig));
   const fw = frame.floor.w, fd = frame.floor.d;
-  if (ext) {
+  const open = has3("water") || has3("shore") || has3("pier");
+  if (ext && !open) {
     const gr = new Mesh(new PlaneGeometry(400, 400), bounce(rig.ground, rig));
     gr.rotation.x = -Math.PI / 2;
     gr.position.y = -2e-3;
@@ -26633,8 +31212,36 @@ function build(frame, parts = null) {
   }
   const floor = new Mesh(new PlaneGeometry(fw, fd), bounce(ext ? rig.ground : rig.floor, rig));
   const lines = new LineBasicMaterial({ color: PAL.line, transparent: true, opacity: 0.55 });
-  if (!ext) for (let x = -fw / 2 + 0.4; x < fw / 2; x += 0.4) S.add(new Line(new BufferGeometry().setFromPoints([new Vector3(x, 2e-3, -fd / 2), new Vector3(x, 2e-3, fd / 2)]), lines));
-  for (const b of frame.boxes) {
+  if (!ext && !open) for (let x = -fw / 2 + 0.4; x < fw / 2; x += 0.4) S.add(new Line(new BufferGeometry().setFromPoints([new Vector3(x, 2e-3, -fd / 2), new Vector3(x, 2e-3, fd / 2)]), lines));
+  const hullBox = frame.boxes.find((b) => kitOf(b.name) === "hull");
+  let boxes = frame.boxes;
+  if (room2 && hullBox && !inside) {
+    const k = hullBox.size[2] / 10.5, fh = 3.6 * k;
+    boxes = frame.boxes.filter((b) => b !== hullBox && b.pos[1] + b.size[1] / 2 > hullBox.pos[1] + hullBox.size[1] / 2 + 3 || ["water"].includes(kitOf(b.name)));
+    boxes.push({ id: hullBox.id, name: "Ferry", pos: [hullBox.pos[0], 0.08 * fh, hullBox.pos[2]], size: [3.4 * k, fh, hullBox.size[2]], yaw: hullBox.yaw || 0 });
+  }
+  const cpos = frame.camera && frame.camera.pos, wb = frame.boxes.find((b) => kitOf(b.name) === "water");
+  if (lampBox && cpos && wb) {
+    for (const b of boxes) if (kitOf(b.name) === "ferry") {
+      const wy = wb.pos[1] + wb.size[1] / 2 + 0.07, dx = cpos[0] - b.pos[0], dz = cpos[2] - b.pos[2], a = Math.atan2(dx, dz);
+      for (const o of [-0.3, 0, 0.3]) {
+        const L = 9, col = new Mesh(new PlaneGeometry(0.5, L), new MeshBasicMaterial({ map: streak(), color: 16757594, transparent: true, opacity: 0.75, blending: AdditiveBlending, depthWrite: false, fog: false }));
+        col.rotation.x = -Math.PI / 2;
+        const gq = new Group();
+        gq.add(col);
+        col.position.set(o * b.size[2] * 0.5, 0, L / 2 + b.size[0] * 0.5);
+        gq.position.set(b.pos[0], wy, b.pos[2]);
+        gq.rotation.y = a;
+        S.add(gq);
+      }
+    }
+  }
+  for (const b of boxes) {
+    const piece2 = kitPiece(kitOf(b.name) === "lamp" && room2 ? { ...b, ceil: room2.pos[1] + room2.size[1] / 2 - b.pos[1] } : b, rig, frame.t || 0, { lit: Boolean(lampBox) });
+    if (piece2) {
+      S.add(piece2);
+      continue;
+    }
     const g = new Group();
     const m = new Mesh(new BoxGeometry(...b.size), /wall/i.test(b.name) ? bounce(rig.wall, rig, 1.6) : clay(PAL.box));
     m.castShadow = m.receiveShadow = true;
@@ -26649,8 +31256,26 @@ function build(frame, parts = null) {
     g.rotation.y = (b.yaw || 0) * DEG;
     S.add(g);
   }
+  const tones = figureTones(frame.figures);
   frame.figures.forEach((f2, i2) => {
-    const g = mannequin(f2.pose, rig.clay || PAL.skin, figureTone(i2));
+    const seat = f2.pose === "sit" && frame.boxes.some((b) => SEATS.has(kitOf(b.name)) && Math.hypot(b.pos[0] - f2.pos[0], b.pos[2] - f2.pos[1]) < 0.5);
+    let reach = null;
+    if (f2.pose === "stand") {
+      for (const b of frame.boxes) if (kitOf(b.name) === "console") {
+        const ya = (b.yaw || 0) * DEG, kx = b.size[0] * 0.25, kz = b.size[2] * 0.3;
+        const key = new Vector3(b.pos[0] + kx * Math.cos(ya) + kz * Math.sin(ya) - f2.pos[0], b.pos[1] + b.size[1] * 0.43 + 0.03 - kz * Math.tan(0.28) + 0.06, b.pos[2] - kx * Math.sin(ya) + kz * Math.cos(ya) - f2.pos[1]).applyAxisAngle(UP, -(f2.yaw || 0) * DEG);
+        const side = key.x >= 0 ? "R" : "L", sh = new Vector3(...SKELETON.stand["shoulder" + side]);
+        if (key.distanceTo(sh) < 0.72 && key.z > 0) reach = { side, to: key.clone().add(new Vector3(side === "R" ? -0.03 : 0.03, 0.03, 0)).toArray() };
+      }
+    }
+    const g = mannequin(f2.pose, rig.clay || PAL.skin, tones[i2], { chair: !seat, reach });
+    const near2 = frame.figures.filter((o) => o !== f2).map((o) => [Math.hypot(o.pos[0] - f2.pos[0], o.pos[1] - f2.pos[1]), o]).sort((a, b) => a[0] - b[0])[0];
+    if (reach) turnHead(g, f2.pose, 0, 0.3);
+    else if (near2 && near2[0] < 6) {
+      const o = near2[1], want = Math.atan2(o.pos[0] - f2.pos[0], o.pos[1] - f2.pos[1]) / DEG, d = ((want - (f2.yaw || 0)) % 360 + 540) % 360 - 180;
+      const drop2 = (MANNEQUIN[f2.pose] || MANNEQUIN.stand).eye - (MANNEQUIN[o.pose] || MANNEQUIN.stand).eye;
+      turnHead(g, f2.pose, d, Math.atan2(drop2, near2[0]));
+    }
     g.position.set(f2.pos[0], 0, f2.pos[1]);
     g.rotation.y = (f2.yaw || 0) * DEG;
     g.userData.figure = f2.id;
@@ -26670,7 +31295,7 @@ function build(frame, parts = null) {
 }
 function cameraOf(frame, aspect2) {
   const c = frame.camera;
-  const cam = new PerspectiveCamera(c.fov, aspect2 || c.aspect, 0.05, 200);
+  const cam = new PerspectiveCamera(c.fov, aspect2 || c.aspect, 0.05, 600);
   cam.position.set(...c.pos);
   cam.up.set(0, 1, 0);
   cam.lookAt(new Vector3(...c.at));
@@ -26695,7 +31320,7 @@ function render(S, cam, W2, H2, canvas2) {
   dispose(S);
 }
 function shotInto(canvas2, scene, shot, t2 = 0, { normal = false } = {}) {
-  const frame = evaluate(scene, shot, t2);
+  const frame = { ...evaluate(scene, shot, t2), t: t2 };
   const W2 = canvas2.width, H2 = canvas2.height;
   const S = build(frame);
   if (normal) {
@@ -26710,7 +31335,7 @@ function shotInto(canvas2, scene, shot, t2 = 0, { normal = false } = {}) {
   return frame;
 }
 function viewInto(canvas2, scene, shot, t2 = 0) {
-  const frame = evaluate(scene, shot, t2);
+  const frame = { ...evaluate(scene, shot, t2), t: t2 };
   const W2 = canvas2.width, H2 = canvas2.height, a = frame.camera.aspect;
   const air = Math.min(16, W2 * 0.04, H2 * 0.04);
   let fw = W2 - 2 * air, fh = fw / a;
@@ -26725,34 +31350,57 @@ function viewInto(canvas2, scene, shot, t2 = 0) {
   cam.updateProjectionMatrix();
   cam.updateMatrixWorld();
   const parts = {};
-  render(build(frame, parts), cam, W2, H2, canvas2);
+  const S = build(frame, parts);
+  const covered = /* @__PURE__ */ new Set(), ray = new Raycaster(), solid = [];
+  S.traverse((o) => {
+    if (o.isMesh && !o.userData.blob && !o.userData.sky && !o.userData.water) {
+      let p = o, fig = false;
+      while (p) {
+        if (p.userData && p.userData.figure) {
+          fig = true;
+          break;
+        }
+        p = p.parent;
+      }
+      if (!fig && !(o.material && o.material.transparent)) solid.push(o);
+    }
+  });
+  S.updateMatrixWorld(true);
+  for (const f2 of frame.figures) {
+    const head2 = new Vector3(f2.pos[0], (MANNEQUIN[f2.pose] || MANNEQUIN.stand).top - 0.12, f2.pos[1]), dir = head2.clone().sub(cam.position), far = dir.length();
+    ray.set(cam.position, dir.normalize());
+    ray.far = far - 0.25;
+    if (ray.intersectObjects(solid, false).length) covered.add(f2.id);
+  }
+  render(S, cam, W2, H2, canvas2);
   const fw3 = new Vector3();
   cam.getWorldDirection(fw3);
   fw3.y = 0;
   fw3.normalize();
   const hz = new Vector3(cam.position.x + fw3.x * 170, cam.position.y, cam.position.z + fw3.z * 170).project(cam);
   const horizon = { y: (1 - hz.y) / 2 * H2, sky: Boolean(frame.light.sky) };
-  return { frame, rect, horizon, face: parts.face || null, light: frame.light.id, figures: projectFigures(frame, cam, W2, H2).map((f2) => ({ ...f2, parts: parts[f2.id] || [] })) };
+  const kit = [...new Set(S.children.filter((o) => o.userData && o.userData.kit).map((o) => o.userData.kit))].sort().join(",");
+  return { frame, rect, horizon, kit, face: parts.face || null, light: frame.light.id, figures: projectFigures(frame, cam, W2, H2).map((f2) => ({ ...f2, covered: covered.has(f2.id), parts: parts[f2.id] || [] })) };
 }
 function projectFigures(frame, cam, W2, H2) {
   const right = new Vector3().setFromMatrixColumn(cam.matrixWorld, 0).setY(0).normalize();
-  const px = (p) => {
+  const px2 = (p) => {
     const v = new Vector3(...p).project(cam);
     return { x: (v.x + 1) / 2 * W2, y: (1 - v.y) / 2 * H2, z: v.z };
   };
   return frame.figures.map((f2) => {
     const m = MANNEQUIN[f2.pose] || MANNEQUIN.stand, hy = m.top - 0.115, [x, z] = f2.pos;
-    const pts = [[x, m.top, z], [x, m.top - 0.23, z], [x + right.x * 0.115, hy, z + right.z * 0.115], [x - right.x * 0.115, hy, z - right.z * 0.115]].map(px);
-    const feet = px([x, 0, z]), tag = px([x, m.top + 0.12, z]);
-    const near2 = px([x + right.x * 0.3, 0, z + right.z * 0.3]), open = px([x + right.x * 1.2, 0, z + right.z * 1.2]);
+    const pts = [[x, m.top, z], [x, m.top - 0.23, z], [x + right.x * 0.115, hy, z + right.z * 0.115], [x - right.x * 0.115, hy, z - right.z * 0.115]].map(px2);
+    const feet = px2([x, 0, z]), tag = px2([x, m.top + 0.12, z]);
+    const near2 = px2([x + right.x * 0.3, 0, z + right.z * 0.3]), open = px2([x + right.x * 1.2, 0, z + right.z * 1.2]);
     const front = pts.every((q) => q.z < 1 && q.z > -1);
     const [lx, lz] = keyFrom(frame.light, x, z);
-    const cast2 = px([x + lx * 0.8, 0, z + lz * 0.8]), litFloor = px([x - lx * 0.8, 0, z - lz * 0.8]);
+    const cast2 = px2([x + lx * 0.8, 0, z + lz * 0.8]), litFloor = px2([x - lx * 0.8, 0, z - lz * 0.8]);
     const cx = cam.position.x - x, cz = cam.position.z - z, cl = Math.hypot(cx, cz) || 1, hc = m.top - 0.118;
-    const side = (s) => px([x + s * 0.06 * Math.sign(-(lx * right.x + lz * right.z) || 1) * right.x + cx / cl * 0.07, hc + 0.03, z + s * 0.06 * Math.sign(-(lx * right.x + lz * right.z) || 1) * right.z + cz / cl * 0.07]);
-    const lit = side(1), shade = side(-1);
+    const side = (s) => px2([x + s * 0.06 * Math.sign(-(lx * right.x + lz * right.z) || 1) * right.x + cx / cl * 0.07, hc + 0.03, z + s * 0.06 * Math.sign(-(lx * right.x + lz * right.z) || 1) * right.z + cz / cl * 0.07]);
+    const lit = side(1), shade2 = side(-1);
     const sgn = Math.sign(-(lx * right.x + lz * right.z) || 1);
-    const edge = px([x - sgn * 0.083 * right.x + cx / cl * 0.02, hc + 0.02, z - sgn * 0.083 * right.z + cz / cl * 0.02]);
+    const edge = px2([x - sgn * 0.083 * right.x + cx / cl * 0.02, hc + 0.02, z - sgn * 0.083 * right.z + cz / cl * 0.02]);
     const wl = frame.boxes.find((b) => /wall/i.test(b.name) && !(b.yaw || 0)), K = frame.light.key;
     let wallCast = null, wallLit = null;
     if (wl && !K.point) {
@@ -26760,16 +31408,16 @@ function projectFigures(frame, cam, W2, H2) {
       const P = [ccx + K.from[0] / d * 40, K.from[1] / d * 40, ccz + K.from[2] / d * 40], Q3 = [x, m.top - 0.4, z];
       const s = (fz - P[2]) / (Q3[2] - P[2]), c = [P[0] + (Q3[0] - P[0]) * s, P[1] + (Q3[1] - P[1]) * s];
       if (s > 1 && c[1] > 0.15 && c[1] < wl.pos[1] + wl.size[1] / 2 - 0.1 && Math.abs(c[0] - wl.pos[0]) < wl.size[0] / 2 - 0.5) {
-        wallCast = px([c[0], c[1], fz]);
-        wallLit = px([c[0] + Math.sign(c[0] - P[0]) * 0.75, c[1], fz]);
+        wallCast = px2([c[0], c[1], fz]);
+        wallLit = px2([c[0] + Math.sign(c[0] - P[0]) * 0.75, c[1], fz]);
       }
     }
-    const bp = [[x + right.x * 0.24, m.top - 0.3, z + right.z * 0.24], [x - right.x * 0.24, m.top - 0.3, z - right.z * 0.24], [x + right.x * 0.2, 0, z + right.z * 0.2], [x - right.x * 0.2, 0, z - right.z * 0.2], [x, m.top, z]].map(px);
+    const bp = [[x + right.x * 0.24, m.top - 0.3, z + right.z * 0.24], [x - right.x * 0.24, m.top - 0.3, z - right.z * 0.24], [x + right.x * 0.2, 0, z + right.z * 0.2], [x - right.x * 0.2, 0, z - right.z * 0.2], [x, m.top, z]].map(px2);
     const body2 = { x0: Math.min(...bp.map((q) => q.x)), x1: Math.max(...bp.map((q) => q.x)), y0: Math.min(...bp.map((q) => q.y)), y1: Math.max(...bp.map((q) => q.y)) };
     const depth2 = Math.hypot(cam.position.x - x, cam.position.z - z);
-    const ring = [0, 1, 2, 3, 4, 5, 6, 7].map((i2) => px([x + Math.sin(i2 * Math.PI / 4) * 0.2, 0, z + Math.cos(i2 * Math.PI / 4) * 0.2]));
-    const bandAt = px([x + cx / cl * 0.12, (SKELETON[f2.pose] || SKELETON.stand).pelvis[1] + 0.07, z + cz / cl * 0.12]);
-    return { id: f2.id, name: f2.name || "Figure", front, depth: depth2, body: body2, cast: { x: cast2.x, y: cast2.y }, litFloor: { x: litFloor.x, y: litFloor.y }, lit: { x: lit.x, y: lit.y }, shade: { x: shade.x, y: shade.y }, edge: { x: edge.x, y: edge.y }, band: { x: bandAt.x, y: bandAt.y }, ring: ring.map((q) => ({ x: q.x, y: q.y })), wallCast: wallCast && { x: wallCast.x, y: wallCast.y }, wallLit: wallLit && { x: wallLit.x, y: wallLit.y }, head: { x0: Math.min(...pts.map((q) => q.x)), x1: Math.max(...pts.map((q) => q.x)), y0: Math.min(...pts.map((q) => q.y)), y1: Math.max(...pts.map((q) => q.y)) }, feet: { x: feet.x, y: feet.y }, tag: { x: tag.x, y: tag.y }, shadow: { x: near2.x, y: near2.y }, floor: { x: open.x, y: open.y } };
+    const ring = [0, 1, 2, 3, 4, 5, 6, 7].map((i2) => px2([x + Math.sin(i2 * Math.PI / 4) * 0.2, 0, z + Math.cos(i2 * Math.PI / 4) * 0.2]));
+    const bandAt = px2([x + cx / cl * 0.12, (SKELETON[f2.pose] || SKELETON.stand).pelvis[1] + 0.07, z + cz / cl * 0.12]);
+    return { id: f2.id, name: f2.name || "Figure", front, depth: depth2, body: body2, cast: { x: cast2.x, y: cast2.y }, litFloor: { x: litFloor.x, y: litFloor.y }, lit: { x: lit.x, y: lit.y }, shade: { x: shade2.x, y: shade2.y }, edge: { x: edge.x, y: edge.y }, band: { x: bandAt.x, y: bandAt.y }, ring: ring.map((q) => ({ x: q.x, y: q.y })), wallCast: wallCast && { x: wallCast.x, y: wallCast.y }, wallLit: wallLit && { x: wallLit.x, y: wallLit.y }, head: { x0: Math.min(...pts.map((q) => q.x)), x1: Math.max(...pts.map((q) => q.x)), y0: Math.min(...pts.map((q) => q.y)), y1: Math.max(...pts.map((q) => q.y)) }, feet: { x: feet.x, y: feet.y }, tag: { x: tag.x, y: tag.y }, shadow: { x: near2.x, y: near2.y }, floor: { x: open.x, y: open.y } };
   });
 }
 function topInto(canvas2, scene, shot, t2 = 0, { fit: fit4 = null } = {}) {
@@ -26797,7 +31445,7 @@ function topInto(canvas2, scene, shot, t2 = 0, { fit: fit4 = null } = {}) {
   render(S, cam, W2, H2, canvas2);
   const scale = H2 / 2 / half;
   const fx0 = W2 / 2 + (-fl.w / 2 - cx) * scale, fz0 = H2 / 2 + (-fl.d / 2 - cz) * scale;
-  return { frame, floorPx: { x0: Math.max(0, fx0), y0: Math.max(0, fz0), x1: Math.min(W2, fx0 + fl.w * scale), y1: Math.min(H2, fz0 + fl.d * scale) }, toPx: (x, z) => [W2 / 2 + (x - cx) * scale, H2 / 2 + (z - cz) * scale], toWorld: (px, py) => [(px - W2 / 2) / scale + cx, (py - H2 / 2) / scale + cz], scale };
+  return { frame, floorPx: { x0: Math.max(0, fx0), y0: Math.max(0, fz0), x1: Math.min(W2, fx0 + fl.w * scale), y1: Math.min(H2, fz0 + fl.d * scale) }, toPx: (x, z) => [W2 / 2 + (x - cx) * scale, H2 / 2 + (z - cz) * scale], toWorld: (px2, py2) => [(px2 - W2 / 2) / scale + cx, (py2 - H2 / 2) / scale + cz], scale };
 }
 function shotPng(scene, shot, width, height, t2 = 0, normal = false) {
   const c = document.createElement("canvas");
@@ -26806,11 +31454,12 @@ function shotPng(scene, shot, width, height, t2 = 0, normal = false) {
   shotInto(c, scene, shot, t2, { normal });
   return c.toDataURL("image/png").replace(/^data:image\/png;base64,/, "");
 }
-var DEG, PAL, R, blobTex, clay, bounce, UP, skyFog, centreOf;
+var DEG, PAL, R, blobTex, clay, bounce, UP, HEAD_GEO, HEAD_PARTS, UPPER_PARTS, skyFog, centreOf;
 var init_previz_render = __esm({
   "desktop/film-suite/src/planning/previz-render.js"() {
     init_three_module();
     init_previz_eval();
+    init_previz_kit();
     DEG = Math.PI / 180;
     PAL = { line: 5197130, box: 6710890, skin: 12895428, chair: 4868168 };
     R = null;
@@ -26822,6 +31471,9 @@ var init_previz_render = __esm({
       return m;
     };
     UP = new Vector3(0, 1, 0);
+    HEAD_GEO = null;
+    HEAD_PARTS = /* @__PURE__ */ new Set(["head", "brow", "nose", "ear"]);
+    UPPER_PARTS = /* @__PURE__ */ new Set(["chest", "trapezius", "deltoidL", "deltoidR", "upperArmL", "upperArmR", "forearmL", "forearmR", "handL", "handR", "rope"]);
     skyFog = (rig) => new Color(rig.sky[1]).lerp(new Color(rig.sky[2]), 0.55);
     centreOf = (frame) => frame.figures.length ? [frame.figures.reduce((a, f2) => a + f2.pos[0], 0) / frame.figures.length, frame.figures.reduce((a, f2) => a + f2.pos[1], 0) / frame.figures.length] : [0, 0];
   }
@@ -29567,8 +34219,8 @@ var init_dist = __esm({
        - Space (contains only whitespace)
        - Other (anything else)
       */
-      charCategorizer(at) {
-        let chars = this.languageDataAt("wordChars", at);
+      charCategorizer(at2) {
+        let chars = this.languageDataAt("wordChars", at2);
         return makeCategorizer(chars.length ? chars[0] : "");
       }
       /**
@@ -30318,11 +34970,11 @@ var init_dist = __esm({
 });
 
 // ../../../hermes-agent/node_modules/style-mod/src/style-mod.js
-var C, COUNT, SET, top, StyleModule, adoptedSet, StyleSet;
+var C2, COUNT, SET, top, StyleModule, adoptedSet, StyleSet;
 var init_style_mod = __esm({
   "../../../hermes-agent/node_modules/style-mod/src/style-mod.js"() {
-    C = "ͼ";
-    COUNT = typeof Symbol == "undefined" ? "__" + C : Symbol.for(C);
+    C2 = "ͼ";
+    COUNT = typeof Symbol == "undefined" ? "__" + C2 : Symbol.for(C2);
     SET = typeof Symbol == "undefined" ? "__styleSet" + Math.floor(Math.random() * 1e8) : /* @__PURE__ */ Symbol("styleSet");
     top = typeof globalThis != "undefined" ? globalThis : typeof window != "undefined" ? window : {};
     StyleModule = class {
@@ -30371,7 +35023,7 @@ var init_style_mod = __esm({
       static newName() {
         let id = top[COUNT] || 1;
         top[COUNT] = id + 1;
-        return C + id.toString(36);
+        return C2 + id.toString(36);
       }
       // :: (union<Document, ShadowRoot>, union<[StyleModule], StyleModule>, ?{nonce: ?string})
       //
@@ -43002,14 +47654,14 @@ function interestingNode(state, node, bracketProp) {
 function moveBySyntax(state, start, forward) {
   let pos2 = syntaxTree(state).resolveInner(start.head);
   let bracketProp = forward ? NodeProp.closedBy : NodeProp.openedBy;
-  for (let at = start.head; ; ) {
-    let next = forward ? pos2.childAfter(at) : pos2.childBefore(at);
+  for (let at2 = start.head; ; ) {
+    let next = forward ? pos2.childAfter(at2) : pos2.childBefore(at2);
     if (!next)
       break;
     if (interestingNode(state, next, bracketProp))
       pos2 = next;
     else
-      at = forward ? next.to : next.from;
+      at2 = forward ? next.to : next.from;
   }
   let bracket2 = pos2.type.prop(bracketProp), match, newPos;
   if (bracket2 && (match = forward ? matchBrackets(state, pos2.from, 1) : matchBrackets(state, pos2.to, -1)) && match.matched)
@@ -44035,16 +48687,16 @@ function newLine(view, type, { split = false, keepDual = false } = {}) {
   const sel = state.selection.main;
   const line = state.doc.lineAt(sel.head);
   const m = metaOf(state, line.number);
-  const at = split ? sel.from : Math.max(sel.to, line.to);
+  const at2 = split ? sel.from : Math.max(sel.to, line.to);
   const tail2 = split ? state.doc.sliceString(sel.to, line.to) : "";
   const insert2 = type === "parenthetical" && !tail2 ? "\n()" : "\n";
   const dual = keepDual && m.d && ["character", "dialogue", "parenthetical"].includes(type);
   const next = meta2(type, { d: dual });
-  const head2 = at + 1 + (insert2 === "\n()" ? 1 : 0);
+  const head2 = at2 + 1 + (insert2 === "\n()" ? 1 : 0);
   view.dispatch({
-    changes: { from: at, to: split ? sel.to : at, insert: insert2 },
+    changes: { from: at2, to: split ? sel.to : at2, insert: insert2 },
     selection: EditorSelection.cursor(head2),
-    effects: setMetas.of({ pos: at + 1, metas: [next] }),
+    effects: setMetas.of({ pos: at2 + 1, metas: [next] }),
     userEvent: FLOW,
     scrollIntoView: true
   });
@@ -44499,12 +49151,12 @@ function paginate(scenes, m = metrics()) {
     span2[2] += n;
     spans.set(scene, span2);
   };
-  const turn = (at, more) => {
+  const turn = (at2, more) => {
     const ended = state.used;
     state.page++;
     state.used = state.top = more ? 1 : 0;
-    breaks.push({ page: state.page, at: [...at], more, within: false, ended });
-    if (more) mark(at[0], 1);
+    breaks.push({ page: state.page, at: [...at2], more, within: false, ended });
+    if (more) mark(at2[0], 1);
   };
   const place2 = (row2, extra = 0) => {
     let n = row2.n + extra;
@@ -44836,10 +49488,10 @@ var init_layout = __esm({
     });
     markElement = null;
     HermesMarkWidget = class extends WidgetType {
-      constructor(scene, at, digits) {
+      constructor(scene, at2, digits) {
         super();
         this.scene = scene;
-        this.at = at;
+        this.at = at2;
         this.digits = digits;
       }
       eq(o) {
@@ -45384,10 +50036,10 @@ function matches(doc2, query) {
   if (!query) return out;
   const text2 = doc2.toString().toLowerCase();
   const q = query.toLowerCase();
-  let at = text2.indexOf(q);
-  while (at >= 0 && out.length < MAX_HITS) {
-    out.push({ from: at, to: at + q.length });
-    at = text2.indexOf(q, at + q.length);
+  let at2 = text2.indexOf(q);
+  while (at2 >= 0 && out.length < MAX_HITS) {
+    out.push({ from: at2, to: at2 + q.length });
+    at2 = text2.indexOf(q, at2 + q.length);
   }
   return out;
 }
@@ -45574,8 +50226,8 @@ function createSync({ rest: rest2, projectRef, sceneIds = null, onStatus = () =>
         if (d.scene && script.scenes[d.scene] && !script.scenes[d.scene].omitted) {
           if (script.scenes[d.scene].text !== d.text) over.set(d.scene, d);
         } else if (!d.scene) {
-          const at = d.after && script.ids.includes(d.after) ? d.after : "";
-          added.set(at, [...added.get(at) || [], d.text]);
+          const at2 = d.after && script.ids.includes(d.after) ? d.after : "";
+          added.set(at2, [...added.get(at2) || [], d.text]);
         }
       }
     }
@@ -46012,9 +50664,9 @@ function pasteFountain(view, text2) {
 function goToScene(view, sid) {
   const target = scenesOf(view.state).find((s) => s.sid === sid);
   if (!target) return false;
-  const at = view.state.doc.line(target.from).from;
+  const at2 = view.state.doc.line(target.from).from;
   const line = parseFloat(view.dom.ownerDocument.defaultView.getComputedStyle(view.contentDOM).fontSize) || 16;
-  view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "start", yMargin: 6 * line }), userEvent: "select" });
+  view.dispatch({ selection: { anchor: at2 }, effects: EditorView.scrollIntoView(at2, { y: "start", yMargin: 6 * line }), userEvent: "select" });
   return true;
 }
 function goToCue(view, sid, name2) {
@@ -46023,8 +50675,8 @@ function goToCue(view, sid, name2) {
   const want = String(name2 || "").toUpperCase();
   const cue = target.elements.find((e) => e.type === "character" && speakerOf(e.text) === want);
   if (!cue) return false;
-  const at = view.state.doc.line(cue.lines[0]).from;
-  view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "center" }), userEvent: "select" });
+  const at2 = view.state.doc.line(cue.lines[0]).from;
+  view.dispatch({ selection: { anchor: at2 }, effects: EditorView.scrollIntoView(at2, { y: "center" }), userEvent: "select" });
   return true;
 }
 function altDigit(event) {
@@ -46255,8 +50907,8 @@ function createScriptEditor({ parent, rest: rest2, projectRef, sceneIds = null, 
     goToShot: (id) => {
       const shot = listShots().find((s) => s.id === id);
       if (!shot) return false;
-      const at = view.state.doc.line(shot.line).from;
-      view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "center" }), userEvent: "select" });
+      const at2 = view.state.doc.line(shot.line).from;
+      view.dispatch({ selection: { anchor: at2 }, effects: EditorView.scrollIntoView(at2, { y: "center" }), userEvent: "select" });
       return true;
     },
     setTypewriter: (on) => {
@@ -46293,8 +50945,8 @@ function createScriptEditor({ parent, rest: rest2, projectRef, sceneIds = null, 
       const list = reviewList(view.state);
       if (!list.length) return false;
       const i2 = (k % list.length + list.length) % list.length;
-      const at = list[i2].segs[0].from;
-      view.dispatch({ effects: [setReviewCurrent.of(i2), EditorView.scrollIntoView(at, { y: "center" })], annotations: Transaction.addToHistory.of(false) });
+      const at2 = list[i2].segs[0].from;
+      view.dispatch({ effects: [setReviewCurrent.of(i2), EditorView.scrollIntoView(at2, { y: "center" })], annotations: Transaction.addToHistory.of(false) });
       return true;
     },
     /** The scene's stored Fountain with `undoIds` put back to the old text, the others kept (Undo), or with every change
@@ -46349,9 +51001,9 @@ function createScriptEditor({ parent, rest: rest2, projectRef, sceneIds = null, 
         sync.keepDraft();
         return { kept: now };
       }
-      const at = caretOf(view.state);
+      const at2 = caretOf(view.state);
       const n = view.state.doc.lineAt(view.state.selection.main.head).number;
-      const from = (scenesOf(view.state).find((s) => s.sid === at.scene) || { from: n }).from;
+      const from = (scenesOf(view.state).find((s) => s.sid === at2.scene) || { from: n }).from;
       const tw = typewriter.get(view.state);
       const size = view.state.field(pageSizeField), numbered = view.state.field(sceneNumbersField), hmark = view.state.field(hermesMarkField), rv = view.state.field(reviewField);
       view.setState(freshState());
@@ -46361,7 +51013,7 @@ function createScriptEditor({ parent, rest: rest2, projectRef, sceneIds = null, 
       if (Object.keys(rv.scenes).length) view.dispatch({ effects: [setReview.of(rv.scenes), setReviewCurrent.of(rv.current)] });
       if (tw && (!Array.isArray(tw) || tw.length)) view.dispatch({ effects: typewriter.reconfigure(typewriterScrolling) });
       const script = await sync.load(view);
-      const target = scenesOf(view.state).find((s) => s.sid === at.scene);
+      const target = scenesOf(view.state).find((s) => s.sid === at2.scene);
       if (target) {
         const line = Math.min(target.to, target.from + (n - from));
         view.dispatch({ selection: { anchor: view.state.doc.line(line).from }, annotations: Transaction.addToHistory.of(false) });
@@ -47578,7 +52230,7 @@ function CatalogMediaSlot({ wb, target, control }) {
         jsxs("div", { className: "fsh-slot-pic", children: [
           jsx2(CatalogMediaThumb, { path, kind: control.kind }, "t"),
           max > 1 ? jsx2("span", { className: "fsh-slot-n", "aria-hidden": "true", children: String(index + 1) }, "n") : null,
-          jsx2("button", { type: "button", className: "fsh-slot-x", "data-testid": "fsh-slot-remove", title: `Remove ${basename(path)}`, "aria-label": `Remove ${basename(path)} of ${label2}`, onClick: () => setList(items.filter((_, at) => at !== index)), children: "✕" }, "x")
+          jsx2("button", { type: "button", className: "fsh-slot-x", "data-testid": "fsh-slot-remove", title: `Remove ${basename(path)}`, "aria-label": `Remove ${basename(path)} of ${label2}`, onClick: () => setList(items.filter((_, at2) => at2 !== index)), children: "✕" }, "x")
         ] }, "p"),
         max > 1 || roles.length > 1 ? jsxs("div", { className: "fsh-slot-acts", children: [
           max > 1 ? jsx2("button", { type: "button", className: "fsh-slot-mv", "data-testid": "fsh-slot-up", disabled: index === 0, title: "Move earlier", "aria-label": `Move ${basename(path)} earlier`, onClick: () => move2(index, -1), children: "‹" }, "u") : null,
@@ -48300,8 +52952,8 @@ var countPromptWords = (text2) => {
 };
 var wordCountLabel = (count3) => `${count3} ${count3 === 1 ? "word" : "words"}`;
 var imageTileKey = (catalog, axis, key) => {
-  const table = catalog && catalog.key_aliases && catalog.key_aliases[axis];
-  return table && typeof key === "string" && Object.prototype.hasOwnProperty.call(table, key) ? table[key] : key;
+  const table2 = catalog && catalog.key_aliases && catalog.key_aliases[axis];
+  return table2 && typeof key === "string" && Object.prototype.hasOwnProperty.call(table2, key) ? table2[key] : key;
 };
 function compileKrea2Prompt(catalog, selections, intent) {
   const kept = (intent || "").trim();
@@ -48368,6 +53020,7 @@ var FW_ICONS = {
   "x": '<path d="M6 6l12 12M18 6L6 18"/>',
   "dice": '<rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="8.5" cy="8.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.4" fill="currentColor" stroke="none"/>',
   "info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>',
+  "alert": '<path d="M10.3 4.2 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17.2h.01"/>',
   "history": '<path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3L3.5 8.3"/><path d="M3.5 3.5v4.8h4.8M12 7.5V12l3 2"/>',
   "star": '<path d="M12 2.8l2.9 5.8 6.4.9-4.7 4.5 1.2 6.4-5.8-3-5.8 3 1.2-6.4-4.7-4.5 6.4-.9z"/>',
   "restore": '<path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3L3.5 8.3"/><path d="M3.5 3.5v4.8h4.8"/>',
@@ -48386,7 +53039,6 @@ var FW_ICONS = {
   "panel-r": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
   "check": '<path d="M5 12.5l4.5 4.5L19.5 7"/>',
   "nav": '<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="10" y="9" width="7" height="6"/>',
-  "zoom": '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M8 10.5h5M10.5 8v5"/>',
   "ab": '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 3v18"/>',
   "eye": '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
   "eye-off": '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/><path d="M4 4l16 16"/>',
@@ -48409,7 +53061,6 @@ var FW_ICONS = {
   "pc": '<rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M9 20h6M12 16.5V20"/>',
   "grid": '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
   "player": '<rect x="3" y="5" width="18" height="12" rx="1.5"/><path d="M10.5 8.5v5l4-2.5zM3 20h18"/>',
-  "guides": '<rect x="3" y="5" width="18" height="14" rx="1.5"/><rect x="6" y="7.5" width="12" height="9" rx=".5" stroke-dasharray="2 2"/>',
   "video": '<rect x="3" y="6" width="13" height="12" rx="1.5"/><path d="M16 10.5l5-3v9l-5-3"/>',
   "cont": '<path d="M3 6h9v12H3zM15 12h6M18 9l3 3-3 3"/>',
   "snap": '<path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/>',
@@ -48420,7 +53071,7 @@ var FW_ICONS = {
   "nostop": '<circle cx="12" cy="12" r="8.5"/><rect x="9" y="9" width="6" height="6" rx=".8"/><path d="M6 18L18 6"/>',
   "plug": '<path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/>',
   "unlock": '<rect x="5" y="10.5" width="14" height="9.5" rx="1.5"/><path d="M8 10.5V8a4 4 0 0 1 7.6-1.7"/>',
-  "safe": '<rect x="3" y="5" width="18" height="14" rx="1.5"/><rect x="6" y="7.5" width="12" height="9" rx=".5" stroke-dasharray="2 2"/>',
+  "safe": '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M6.5 10.5v-2h2.5M15 8.5h2.5v2M6.5 13.5v2h2.5M15 15.5h2.5v-2"/>',
   "seed-fixed": '<path d="M9 3.5h6M10 3.5l-.5 6L6.5 13h11l-3-3.5-.5-6M12 13v7.5"/>',
   "seed-inc": '<path d="M3 12h7M6.5 8.5v7M15 8l3-2.5v13M15 18.5h6"/>',
   "seed-dec": '<path d="M3 12h7M15 8l3-2.5v13M15 18.5h6"/>',
@@ -48448,26 +53099,48 @@ var FW_ICONS = {
   // Owner 28.10. (SCR-068): the scene-list toggle, the mirror of panel-r.
   "panel-l": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
   // Lane p5e-cut (cut decision 12): Fit to beats as a command icon (a clip snapped onto beat ticks).
-  "fit-beats": '<rect x="4" y="5" width="12" height="6" rx="1"/><path d="M4 15v5M10 15v5M16 15v5M20 4v16"/>',
+  "fit-beats": '<rect x="4" y="4.5" width="12" height="7" rx="1"/><path d="M4 15v5M8 17v3M12 15v5M16 17v3M20 15v5"/>',
   // Lane p6-cut (CUT-099): Snap as a magnet (Lucide magnet, ISC) and Blade as a double-edged razor blade, as the
   // Resolve / Premiere tool rows draw them (the camera and crop shapes read as other tools).
   "magnet": '<path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/><path d="m5 8 4 4"/><path d="m12 15 4 4"/>',
-  "blade": '<rect x="3" y="8" width="18" height="8" rx="1"/><path d="M8 12h8M3 12h2M19 12h2"/>',
+  "blade": '<path d="M9.5 8.5h-6a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h6M14.5 8.5h6a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-6"/><path d="M12 2.5v19"/>',
   // Lane w14-scr (SCR-071): previous change on the Hermes line (Lucide chevron-up, ISC).
   "chev-up": '<path d="m18 15-6-6-6 6"/>',
   // Lane w16-scr (Tafel 4a \"In this scene\"): who is in the scene (Lucide users, ISC).
   "users": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   // Lane w16-tv (D-2 Tafel 2, tafel2-kit variants-d2.js icon set): the Audio Edit tool row's Range, Marker, Beat here,
   // Whole song and Lanes glyphs, drawn on the board.
-  "range": '<path d="M7 5v14M17 5v14M7 12h10"/><path d="M10 9l-3 3 3 3M14 9l3 3-3 3"/>',
+  "range": '<path d="M5.5 4H3v16h2.5M18.5 4H21v16h-2.5"/><rect x="6.5" y="8.5" width="11" height="7" rx="1" fill="currentColor" fill-opacity=".35"/>',
   "flag": '<path d="M6 21V4M6 4h11l-2.5 4L17 12H6"/>',
-  "beat-here": '<path d="M12 3v18"/><path d="M8 7h8M8 17h8" opacity=".55"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/>',
-  "whole": '<path d="M3 5v14M21 5v14M6 12h12M9 9l-3 3 3 3M15 9l3 3-3 3"/>',
-  "lanes": '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  "beat-here": '<path d="M12 8v13M9.5 3.5h5L12 7z"/><path d="M4.5 15v5M8 17v3M16 17v3M19.5 15v5"/>',
+  "whole": '<path d="M3 5v14M21 5v14M7 12h10M10 8.5 6.5 12l3.5 3.5M14 8.5l3.5 3.5-3.5 3.5"/>',
+  "lanes": '<rect x="3" y="4.5" width="18" height="15" rx="1.5"/><path d="M3 12h18M8.5 4.5v15"/>',
   "to-start": '<path d="M6 5v14"/><path d="M18 6l-9 6 9 6z"/>',
   "play-io": '<path d="M5 5v14M19 5v14"/><path d="M9.5 8.5v7l5.5-3.5z" fill="currentColor"/>',
-  "metronome": '<path d="M9.5 3h5l3.5 18H6z"/><path d="M12 16l5-9"/><path d="M8 16h8"/>',
-  "wand": '<path d="M4 20L15 9"/><path d="M14 6l1-2 1 2 2 1-2 1-1 2-1-2-2-1z"/><path d="M19 12.5l.5-1 .5 1 1 .5-1 .5-.5 1-.5-1-1-.5z"/>'
+  "metronome": '<path d="M9.5 3h5l3.5 18H6z"/><path d="M12 16l5-9"/><path d="M8 16h8"/><circle cx="14.6" cy="11.3" r="1.5" fill="currentColor" stroke="none"/>',
+  "wand": '<path d="M4 20L15 9"/><path d="M14 6l1-2 1 2 2 1-2 1-1 2-1-2-2-1z"/><path d="M19 12.5l.5-1 .5 1 1 .5-1 .5-.5 1-.5-1-1-.5z"/>',
+  // Lane w39-p2-icons (docs/studies/w39-icons-STUDY.md, the artist's Cut / Video notes): glyphs an editor names without
+  // a tooltip, drawn in this house style from the shared NLE conventions (no vendor artwork): Select = cursor, Trim = edit
+  // point ][, Blade = notched razor, Slip = content moves inside the clip, Slide = the clip moves between its edges, zoom =
+  // magnifier, Show in folder = folder + out arrow, Open large = expand arrows, Open in Media = the library. One glyph, one meaning.
+  "pointer": '<path d="M6 3.5v15.2l4.1-4 2.9 6.3 2.6-1.2-2.9-6.2h5.6z"/>',
+  "trim": '<path d="M9.5 7H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6"/><path d="M9.5 3.5v17"/><path d="M13 12h8.5M16 8.5 12.5 12l3.5 3.5M18 8.5l3.5 3.5-3.5 3.5"/>',
+  "slip": '<rect x="2.5" y="7" width="19" height="10" rx="1"/><path d="M7 12h10M9 10l-2 2 2 2M15 10l2 2-2 2"/>',
+  "slide": '<rect x="10" y="6" width="4" height="12" rx="1"/><path d="M2.5 12H7M17 12h4.5M6 8 2 12l4 4M18 8l4 4-4 4"/>',
+  "zoom-in": '<circle cx="10" cy="10" r="7"/><path d="M15.2 15.2 20.5 20.5M7 10h6M10 7v6"/>',
+  "zoom-out": '<circle cx="10" cy="10" r="7"/><path d="M15.2 15.2 20.5 20.5M7 10h6"/>',
+  "zoom-range": '<path d="M5.5 4H3v16h2.5M18.5 4H21v16h-2.5"/><circle cx="11" cy="11" r="5"/><path d="M14.6 14.6 17.5 17.5"/>',
+  "marker": '<path d="M7.5 4.5h9v9.5L12 18.5 7.5 14z"/>',
+  "markers": '<path d="M3 5h7v6.5l-3.5 3L3 11.5z"/><path d="M14 6.5h7M14 11.5h7M14 16.5h5"/>',
+  "kf-track": '<path d="M2 12h2M10 12h4M20 12h2"/><path d="M7 6.5l3 5.5-3 5.5-3-5.5zM17 6.5l3 5.5-3 5.5-3-5.5z"/>',
+  "reveal": '<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H8.5l2 2.5h9A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/><path d="M11 17l6-6M12.5 11H17v4.5"/>',
+  "expand": '<path d="M14 4h6v6M20 4l-6.5 6.5M10 20H4v-6M4 20l6.5-6.5"/>',
+  "library": '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M14 20l6-6M15.5 14H20v4.5"/>',
+  "speed": '<path d="M4.2 17a8.5 8.5 0 1 1 15.6 0"/><path d="M12 14.5l4-5"/><circle cx="12" cy="14.5" r="1" fill="currentColor" stroke="none"/>',
+  "range-picture": '<path d="M5.5 4H3v16h2.5M18.5 4H21v16h-2.5"/><rect x="6.5" y="6.5" width="11" height="11" rx="1"/><path d="M7 17l3.5-4 3 3.5"/><circle cx="10" cy="9.8" r="1.3" fill="currentColor" stroke="none"/>',
+  "bar-one": '<path d="M5 4v16"/><path d="M11 8.5 14 6v12.5M11 18.5h6"/>',
+  "list": '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none"/>',
+  "loupe": '<rect x="3" y="3.5" width="18" height="12" rx="1.5"/><rect x="3" y="18" width="4" height="2.5" rx=".5"/><rect x="10" y="18" width="4" height="2.5" rx=".5"/><rect x="17" y="18" width="4" height="2.5" rx=".5"/>'
 };
 function FwIcon({ name: name2, className }) {
   return jsx4("svg", { className: cn4("fw-ic", className), viewBox: "0 0 24 24", "aria-hidden": "true", focusable: "false", dangerouslySetInnerHTML: { __html: FW_ICONS[name2] || "" } });
@@ -48686,9 +53359,9 @@ function FwNumber({ label: label2, value, min, max, step: step2 = 1, integer = f
 }
 function FwSlider({ label: label2, value, min, max, step: step2, onChange, origin = null, track = null, gradient: gradient2 = null }) {
   const v = Number.isFinite(Number(value)) ? Number(value) : min;
-  const at = (n) => Math.max(0, Math.min(100, (n - min) / (max - min || 1) * 100));
-  const pct3 = at(v);
-  const o = origin == null ? null : at(origin);
+  const at2 = (n) => Math.max(0, Math.min(100, (n - min) / (max - min || 1) * 100));
+  const pct3 = at2(v);
+  const o = origin == null ? null : at2(origin);
   const style = o == null ? { "--v": pct3 + "%" } : { "--v": pct3 + "%", "--a": Math.min(o, pct3) + "%", "--b": Math.max(o, pct3) + "%" };
   const cls = (o == null ? "fw-slider" : "fw-slider is-bipolar") + (track === "temp" || track === "tint" || track === "hue" ? ` is-${track}` : "") + (gradient2 ? " is-band" : "");
   if (gradient2) style["--trk"] = gradient2;
@@ -50427,9 +55100,9 @@ function InoutRange({ start, end: end2, duration, viewStart = 0, viewEnd = durat
     if (disabled || !onEdge) return;
     event.preventDefault();
     event.stopPropagation();
-    const at = timeAt(event.clientX);
+    const at2 = timeAt(event.clientX);
     const edgeAt = handle === "in" ? Number(start) : end2 === null || end2 === void 0 ? duration : Number(end2);
-    drag.current = { handle, x: event.clientX, grab: at === null ? 0 : at - edgeAt, moved: false };
+    drag.current = { handle, x: event.clientX, grab: at2 === null ? 0 : at2 - edgeAt, moved: false };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
   const move2 = (event, phase) => {
@@ -50450,14 +55123,14 @@ function InoutRange({ start, end: end2, duration, viewStart = 0, viewEnd = durat
     const applied = onEdge(d.handle, time, { phase, event }) || null;
     const s = applied && Number.isFinite(applied.start) ? applied.start : d.handle === "in" ? time : Number(start);
     const e = applied && applied.end !== void 0 ? applied.end : d.handle === "out" ? time : end2;
-    const at = d.handle === "in" ? s : e === null || e === void 0 ? duration : e;
+    const at2 = d.handle === "in" ? s : e === null || e === void 0 ? duration : e;
     const length = (e === null || e === void 0 ? duration : e) - s;
     if (phase === "end") {
       drag.current = null;
       setTip(null);
       return;
     }
-    setTip({ handle: d.handle, text: inoutTooltip(d.handle, at, length), pct: (at - viewStart) / span2 * 100 });
+    setTip({ handle: d.handle, text: inoutTooltip(d.handle, at2, length), pct: (at2 - viewStart) / span2 * 100 });
   };
   if (g.state === "none") return jsx11("div", { ref: rootRef, className: `io ${className}`, "data-testid": testid, "data-state": "none", "aria-hidden": "true", style: { zIndex: z } });
   const edge = (handle) => {
@@ -50819,7 +55492,105 @@ var MLAYER_CSS = `
 
 // desktop/film-suite/src/music/markers/music-marker-ui.js
 import { atom as atom3, useValue as useValue2 } from "@hermes/plugin-sdk";
-import { jsx as jsx13, jsxs as jsxs11 } from "react/jsx-runtime";
+
+// desktop/film-suite/src/shared/ui/hermes-mark.js
+import { jsx as jsx13 } from "react/jsx-runtime";
+
+// desktop/film-suite/src/shared/ui/hermes-mark-data.js
+var HERMES_MARK_SRC = Object.freeze({
+  light: "data:image/png;base64,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",
+  dark: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAABICAYAAABV7bNHAAAgcklEQVR42u2caZhU1bX3f2eooat6ngF7bhpoaCZRZI44RWNMYq7EOF0TjTHG+TpFEwlejRji9GqMMWpM4tWIxMQYFUUQEHAI2jStAj3TE/RQ1VNNp86w3w812HM36PvhPs97nqcemupzTu+99lr/tdZ/rb0lxr6kjRs3ymvWrDEBbl+7Pl+WOFtYYjVQallmBWDjf8ely7JSDdRJsrTNErz5wLo7mgE2btyorFmzxgLEqEIY7cu1a9fK69atswBu+/k9sxVZvVEgna+oSjqAsCxM00QI8b9COpIkoSgKkiwDYBqmV0K8YlrGI7++9+7Phs95XAFdcMFG5eWX15jXXXddcmLG1PsQ/Nhmt9vCmoZpWpYsS0IIJCEs+csOXAgR/8QmMvh3se9iny8nJNmSJIRlCUlRZNnucKCHwzoSv/d52u967LHH+mNzH1NAUXUzb779ngXOBMczNrt9QTDgB4QJkmxZlmRaFrIkYbPZkGX5mAUSGSzIsoKq2rDZbCiKAoBh6PF7ZFlGURQMw0DXdXRdxzRNJElClqWxlH/Uy7IsdF3HEgJFlpFlWYCwQFISXG70cLgyFNSueOiBuytjMhghoJj0/uuOdSc5nI63ZFlJC4VChqLIqmGYgCA5OZmszAySEhNxuVyoqjKhmUV+LZAkGVVVAAnDNAgGAng83Rxpb6O9rY2BgX56vF50PYxlCVxuNzk5ueTnF5BfWEhu7hTc7kQMwyAUCmKaJrKiTCgmSZIwDJNAIMCAz0dXt4f+/n5AQlUVTNMynE6nallmjxbSznpw/dp/D9YkabD93f7zeyoU1bFDINIMXTdlWVZ0XSc1NYXiokJSU1KwqSrWMNMYVTCWhSVERNMUhbCm0dfXS19vL709XlpaWmhvb8Xr8dDS0szhpsYx3+V0OskvKGThiSdx8uIlzCqfjcvlwu/3YxoGclQDxxOSJEnIkoRuGPT29dHQ2ERvbx82mw3LskzVZlMkpB7T0FY9cO/d1TGZSEIIac2aNXJh4SKXnGDstqn2Ck0LmZIkKaZpkZ83jdKSYhRZxhgEzGNhgmVZCCFISHBhs6l4vV5aW1vo7elBUWRSUlLJycklKzubBJcbXQ/jGxigu7uLvR99yBuv/5PamkNxYB3NGZTNmMnZ53yT1aedQVJyCj5fP5Ikj4tTg8etKgqmZVFX30BzSxuKIiOEMB0Op6Ib4WorqC5ratob2Lhxo6UA6hNPPGEuPXXlw25X4rmBQMBQFFk1TZOZM8ooLSnCNE1MyxoXMIUQWJZFQkICLpeL2tpDPP/nP/I/f3mOd7ZsZtfO7ezcvo13tmxm6ztvs2f3e3QcbSc5JZWMjEycTiflcyo4/cyvk5SYRPX+KnQ9jCzLCCGQI9gBgKe7mw8/2MP7e3aRlpZGWdlMrKhnHUtIg8dtWhFnlZuTjc1mo6urG0VRZF3XDbfLPSVsBVKefvK3/wJUCeCOO9aWSQ7n51bkQVnXdakgP49ZM8sIaWHkCTyIaZrYbDYSXC5qDh7glb9t5N2tWwiHwxMCaGpqKt/57hrOv+BCVEUhHA6TlpZO1b5PWLf2Lrq7OpFlmejY4gAe01aAM848m59edxMut4tgMBgH/QnBWwicDjsHDtZwuLkFm80mAEuWZYQWKl+/fl2NArDka2dscDgTFhp6WFimJaekJjOnfNa4KzJYa5KSkhkY6Ofp3z/Bow9voObQQUzTjA5UQpKGuuuIJ4poRDAYZF/lx1RVfsK8+QvIysrG6+2moLCYk05ezPt7duHz+UaEAEJEgF+WJerratm790MWLjqJzMwsNE2blIeVJAnTtMhIT6ent5dQMCRJEsLhTFDClpW4Z+e2V6Vb166dKpnqQVlWEqNqKi2YP5fMjHR03RgXaxRZxp2YyLvvbuUPv3uc9va26Aor0dUVkxqkLMuYpkl6egb33PcAs+dU4PV6SUtLp66uhltuvJaBgf4hWDL4imFVTm4u997/IEVFRQQCgUkJSQiBzabS7fFSuW8/iqKIiMaaPqEYM5Wly0+/0GF3/oduGEIIS05OTqakqADLEmMKxzRNnE4nQgieePxRnnzi/zAwMBBXbSGsyYRuSJI0xBsGg0F2bN/G/AWLOCEvj77eHk7Izyc3dwo7tm+L3z+WoH0+H20tzcydt4CkpKQJLSD2nGUJEhKceLy9aJomCYFw2J1OQ7cOyRLS15FAlhCmaZGVmYGqqmMOxDRN3G43Hk83t91yI39/5WVkWY6q67GkHzEziUwgPT0DAJtN5We33URHRwcudyI9Xi+rzziTc8/7NpZlxbVi+MSLiopJTkmhs6uDysqPhyzYZLRIVVWyMjMwTQtZQiCBhPR1GZnppmVGQjlZIikpEcsaWzhJSUk0NTVy8/XX8Gl1FYqiDAFQRVEnXDGAzKxsUlJSAYnk5GSWLFvOJZf9gEcff4qKufP471/ehd1uQ1Fk/D4f/3n5lWRlZcexJyZcWVFwu910dBxlxcpTcdgdZGVn8/ln1XEPOLloW5CUlIgckY5kWibITJclwUzTMBDCkm02G66EBKyoSx+OOW63m8aGeu65+84h2BFbhalTpzF12rQhgoiB8WA8iKi1xSX/+UOEsCgpLePKq67hyh9fg2pTWbJ0OUfa2/n7314mJSWNUChEVnY2ay68OIoZNk7Iy484CdMkOSWVhYtOZtnyFdxw821kpGfw/u5dtLe3Y7PZJhRSbDyuhITo/ZZsGgaSYKY8mLKQZRlVVccAMhu9PT08/OAD5BcWodps5OTkoqoqdrsdl8vN8hWr6O7qJCUlFbvdTkFBIZZlxT+DBaeFQkydNo2LL72cb37rO2RmZmHoOn29vfz5T8+yfMUqtr+7lb6+Xhx2Oz6fj9PP/Dp5+QWEwxoVc+ez+JSl2O0O2ttaufD7l7Jy1Wpmz6nAmeBi+7vvsPXtN48pX1RVdfj9NnWsiHN4QqXabGzc+AInLlrMhx/sITMri77eXlJSUxECVq8+nfb2NoLBINk5uRxpD7Bi1amUdRylv6+PYDDI4abGyISdTladeholJaWUlExnf1UlLS3NaFqIpsYGerweOrs6uOX2O6mrrWFOxVwCgQBJSclcdPFldHV1csqSZSQmJfP25jeYXlZGYVExdbU1uBPdfPThHkBi85uvs/r0MzkhL59wODwhYI82d3UymXCCy8X+qn2Ul8+hsKiYeQsW8Mnevbz26itMnTYNTdNYtnIVrS0tOJxOmg83sWTpcspmzOT0s86mrGwmhq6z/lf34HQ6Wfm11eTk5JCSkorT6eRIexsP/WY9ublT6PF6cToT+OiD9wn4/ZSXz6F89hxkWcYwdMrnVPCLO2/D4/Hwve9fwo7tWzl08HNef+1VdF1n+YpVbHl7M3n5+dTWHGLXezu46JLLhziEY7kmFJCiKAT8fnq8HmbPqcBms1NcMp3MjCwyszJpaWnmzDPPoa+vl2+cex4XXnQprS3NpKWlsX3bVrZteQt3gguBYMXKVcyeM5fcKVPw+/wMDPRjGAYrVn6NTRv/SlNjQ3wSkiTxafV+amsOcd63zyczKxtN05gydRopKam8+vdNtLe1Ulo6nS1vbwYgJSWV7JwctGAIS5g4HE727H6Pc849D7c7cVJu/5gEZFkWiYlJ7Nm9k96enjhH09baTEZmBvMXnIiwBA31tezatYPDhxsxdINuTxf791UyY2Y5O7Zv5ZVNLyErCjNnlvP073/H11afRmJiEh2dHZSVzeDT/VXY7Lb44GOqrqgqmqZRXb2fs75+DgG/H6fDyapTV/PZp/v590cfML1sBifk5dHe1kZfXy9NDQ2kpKZSW3MIVVWpq62len8VK1adihEIfLUCiiWJ77y9mbCu8/6eXWRnZ3NCXgHZOTnsfm8HO3e8S35BIW2tLex+b+eQ5+vrarHb7YRCIQA++vD9yPf1tQBkZWWzZ9dOZFnG6/GMiQnV+/fx7fP/A03T6O/vo6ioJK5lLc2HKZsxk9aWFgCamhopLinBZrPR0+MFYM+u91h8ytJjJvjGFZAQIu4hGhsbSElJpXr/PopLStm2dQuZWVm0tbbGB2ma5ogBWJbFCXn5HG5qxDCMIV7MEoLu7i6EEBG+eLQoOfr/1pZm3njtn/xt00scPdLOwkUnU1hUTEN9HaFQCD2sk56egdfrIRDw09nZiWEa8XdWV1fR0tJMUXEJWih0TIKSxzMvp9NJdXUVAb+f5uamuOfSNI221lZkOcIoxmKh4S4dIDk5hYyMzPjk478XX0TSY0Xgse/aWls5cqSNluYmBgb6SU9Px9PdHRd2Z1cHuVOnxiP07q5OBvr74893d3VSvX8fiqwcswaNK0pZljh08ABer4eB/n40TYurbWSy5oQuc8A3wPQZM8Yk2cZlJaMC9Hi6+eTjvZy46GRUVSUUCuJyu+PPej0e3C43qmpDCOIL9kXGblJV+QmaFjpmM5PHFo6Mpmk0NTbEV7i/r2/IHx8Wjo468dbmw5SXV0wqoh3PkzqdTg58/hnBYJBd7+1g5qxyTlx0cvy9fr+f3ClTxlyIhoY6urs6o0IUX15AkiQRDofp7u6MKu6EGd+oQg4GgximwcmnLI2D/rHUs4QQpKam4fF009FxFEmS8Ho8vLt1C/V1tfF7j7S3MXXqtDG1sOPoUZqaGrHZvyIBxYmpWOI6zkslSSIvv2DM1du1czvf+vZ3J51dD9dCr9fDoYMHhkxYkiR6e3vQdR1Jkujp8aKqNuwOxwgBxHLGgwc+R5GVr05Ak9EcKZoxT5k6jXkLFsapgxhNKssyhw4ewO/3sfr0M7EsK15Tk2UFRVHiXiz271haMJJRlIZUr3y+AXKyc8YsQjbU12EYxjHFQvJ4JqMoCgkJCeNWMYiaTVXlx5x11jkUl5RiGEY8RYl5tFdefonZsytIS0uPFPEsC8syMU2TtLR0UlJSx+WTxvNysWXs7DhKdk7OmPc1Nx/G5xtAUVW+dBxkWhbuxCRKSqdTV1szJAUYXEKJraZpmjS3HOaB3zzKn/74NGVlM2hoqGfvvz/gkkt/QHHJdPLy8ymdXkblJ3uxOxw4HQmYpkFKair9fX1UfrKXxoZ6WlqaJ+STBk887s67uyidXhanYIdf3d1ddHd1kV9QgKZpk9KkCSPpU5YsY/Mb/4pDUEy1B1Oly1d8jWuuvYEElwuHw8Gtt99FKBjkH//YxM23/Iy//20jjz36EHn5+cybv5Czv/FN5lTMI+D3R7UoEhv9x/e+T0NdHT++8jJCodCI4HG8/0uSjGEYaJpGRmYmnR0dQ8YpyzJ6OEx7eyvFJSXx9x+3iSmKTCDgY/EpS5k5qxzLMnE6E0hJSY0LqaR0On/+n42cc+55hEIhXC4XhmHQ19dLIOjn+xddRlNjAx99+AEOh4ODBz7npRef54eXfZ9f/uIOOjs78Pl8+HwDBAJ+Bvr6UFV1TDCPRfcFhUVkRtnF4Wjp8XQzZcq0EdoW+7m+rhZZmTxQy+OR6pYlUBSVm265g+SUVEKhIIuXLCU5OQUhBKFgkM7OTo60t1FV9QlejwebLZJ0qqoNTQuRkZHBTbfcTn5BAYqiIMsyK1adSm3NIW687mqq9lVit9vj9OngKHx4Hax8dgXrNzzMFT+6mrXr7uOqn1yLarMNEURHxxFS09JG4Fbsx5pDBzGPAajV8SNpmWAwQGlpGff/+iHuu+du9lV+zOVX/Ig/PPlb2tpa+cWdt+JwOHEnJuJ0JnDa6Weh63o80Jw7fyE5ObkcaW9jX+UnKIrCFVdezafVVeze/R7z5i8YQkOMF20fPdrOhgfu5Uh7O4mJieQXFCExFBP9vojZut1u/H7/oHdEBN/YUE9/fx8Oh3PUxThmN68oCj7fADNmzOSxJ/7AkqUr8Pv9/PK/7ycxMYmi4hLWXHgxba0ttDQfxjEoDomQXAbvv7+bGTPLWbpsBWecdTbvbttCR0cHP7vr7hHqbglrxMAHpxRH2tujLt3H559Vo+vhEWbU4/UyZepQM4u9o7Ozg7bW1ljTwpcnzOKkWSCAy+Xi5ltup621FXdiIukZGbS3tTJj1izS0tNZuerUIVVNy7JwudxkZGTQ2FDPWWefi65HSsuz51RE6unGF1l3TGPHKlkPnmzkZ2lIDS424ba2VsrL51BXWzNUGxQFyzSprTkUp3G/EgEN1oaenh4yMrPw+wYY6O8nFArxxmuvcvVPrqOkdDqhYDDe6hZT7dwpU8nLK4iWoyOBZTAYHDFpRVXp7uyKm9xwIB2KKWLUMFaSJHq8XmRZwuFwommhEd1iBw58xne4YFItWJOPmAb1+glh4ff78fkGSE5OYfnKr7Fk6YoxXaceDhPWtFE7LQZPWJEVOjqPxt22EObx9NqBEPT29ZGTm0vz4aa4sGP1vtqag/h8vgn7iiaFQaMBpqIoDAz0o+s6ScnJzJu/cEghb/jKDm5WiFVhx0psWpubx2kvndQAAejq6CA9PX2Y7sQIuBaOHj2CzW6f0N0fVyOmLMsEAhEPsWTpMpoaGwiHNQ4e+IyB/n4URT1makOSJHRd5/DhpgmT48kmuA6HM6o91hAKWdf1CB08CaA+bgH19/UBkJ2dQ2npdD77dD+FRcVREzzWEouIeksf7W2tExJpkxF2OBxG18MkJLhG5a0+rd6PJMn/b0xMkiS8UWYxEAySO2VqpAvNtHAnJsb5ZybdhUqk06uzg66uzi8toNgVCARISU0dGl9F3/tZdRV+vy++oF+pBkmSRHd3V5Tv7aKrs5O2tlbS0tKx2WwkJSVFcyBr0hqkqjba2loxDGMEqXYs2uhyu+PP+wYGcLlcI7j2WGbf0tKM3e746gVkWYK+nh4A9ldVotpUag8d5KknH+evLzzPO1vewuV243AmTEoThBDIikxDQ/2oApmUNkWfSU5OiXungYF+HA7nyElH+6+r9+/DPgFQy8eDP2E9TEdHRzx0b21p5vQzz2bzG6+xf38lW956k/vv/SUf7Nk14QAGE+vNw1qBB7fKOByOCdqxYg0IX/ROBwIBwmHtC2iQpSH3Vu37ZMJqq3o85mXoOl6vJ66yr/7jFdZceBFrvn8Jq087k5ycHCo/+Zic3NxoK83EQtdCIdpaW0bVmNNOP5M3/vVPtEGx1GQuXdcR1hf0TFJiMv39fXEz+/yzT/F4uklMTBzTm8nH0u0Qi4F8Pl+8Z1CSJN5+6w0QkJdXQEN9LZqmsfDEReTk5EYBW5owrurv78MTFfpgzikrK5uly1aMKDyOZ/6Dr2AogM1uB8CZ4MThcH7haDweGurrhuSPxySg4a14scn09vbQ19MbX/1QMMgLz/+J0884i4UnnoQkSQQCgTihPnH7m43u7m56o7g2uPqxcNFJFBWXTLp1ZTht29/XF29jVhSFBFfCEArl0+oqlHFaDseti1Xvrxpho4qi0OP1xku7sW60LW+/SVVVJQ6HI16Gnqz3URQZT3f3kPgpNuCTFy8hNTWV1NS0SbX29fX2DAkzfD5fvDcg1oM9+KreX0V4nLZhebSSs9udyJ7d71FfV0Nqahpm9A/GEsrm5qa4EGOT0nWd5//0bLwcPdbWp9hWhaEeTKEzmoPFBGtZVtS8VrJvX2UcbMe6YvFOKBQaUxs0TcPpdA5ZgKamBrxe75iNq/JYHuWVTS+RnpE5smoqBIebmkYIVZZlPnh/N3t27yQ9PSNe2YgJRFEU7HYHbrcbu90xBBSlaDw1XBtmV8zlheef4/prfhSPu0abhMPhwG6zT4hRoWCQpOTk+JglSaKvt5eW5qYx8zJ1tF7Erq5O6mproqSSOcTsQqEQdbWHRqU0JUnisUcfIjs7l9KysnjR0TANBgb66e/to6PjKJlZWZSUTMfv98XfE6M/Bgdzu3ftRA+HmTd/IampaezYvnXEtoSYUPrHaTQf3KVrmVa86hErKB5uauLkxUsn14IXyWM0wuEwDfV1nHnWORhGL7Is4XK5aWiop76+bgRfI0RkRTo7jnL9tVcxc1Y5SYlJhEIhBgb68Xo88Uqo05nAdTf+F+d84zx6e70jJhZ7t81m4wc/vIqLLrmMnTu2s2P71tE1IxQ6hjQpktYMLgs1NtYjEKN6W3VkHVVC0zRUVeXNN/7F1885l4LCIsKahsPhZNPGFzGinHOsRSY2wBgeaaEQVZWfjAn+oVCQhzbcT1ZWFgsWLsI0rREpgSzLrF33K5YuW46maeTl5aEoKqYZCxuOnS0QQqDrxggiv72tLTonaSIMilADPV4vycnJeLq7uO2/bmDTSy+yY/s2/nvdz3nn7c3x5vFp0/KYPWfuELcZ54UG8T8x4I2Bb0y1NzxwH93d3bgTE5k67YQhxL1lWZHMXpLo6+vjT398GsuKNWmJ46ZBRisVdXV1fLG3Y5iZqSNfIuH3DTCnYj47d2yjva2VRx/eMMTNxzDgexddzMt/fWEIbgz2WOM1Z8mKQldnJxtffJ4LvncRL/zluRFe7rePPczuXTtpaWmm4+iRr4QGsSwzznnH3tUXbVN2uVwjRC8PNzFngpP+gQGml5VRVjYzntzFalqxQOxnd63Fsqx4mTgxMZHklJTJJ7zR+Grzm69zxeUXIckSZTNmDvFEhmGw998f0nH0yHH1F461cWU4yIfDYYKBwKgUrAzog20yGAxSPnsOm998nYsu+U9OO+MspEER6uw5Ffz2989SNmMmT/3u8bj5TJ12AmnRYG4yAWKM3w4GA6SlpfPbJ5/liiuvjkfRg7cyxEzuy16qqsadwvDQRSAwo6HJkAMJhMRBRVWRJNkyDAOPx8OsWbMpLS3jwQ2/YvmKVfyfJ57ikcef5PkXN/Hb3z+LpmncdP1PCETbaoUQlM+eQ29f76TNQAiBYRjk5xey4aHHSEpKYv7CRXzn/AviHibmCL6qAwwkSYqnM4OxRpYVHA4H/nh6JFuKqiIkDqpY1Co2pcLCEJYl8PsDBIMBrrvxZm66/hrW3X0nZTNmMm/+QpxOB59/9ikf7/13fEUMw6CgsIhpJ+TR19s77p4uBu1idjiczKmYy09+egPZubkE/H4UReGn199EWno6zz37h1G1ZngqMpanHA0LY/vvh192hwOXy8XRjkjXrYQQiqxg6EatKhCbEZxvCSRFken2eMnPC5GUlMyDjzzOIw/+mj2736Pm0MERg4zlPNdefzP/eOXlUTswhg/csiK7e+69f0OkEdOyCAYCceozGAxy2Q+upGzGLP7y3DPU1tag6xpCMCRIjHnKwc1UDocT0zSGFB4HPzOWmaanp6GqNjo7uyL3CyQECMRmZdnqlUctw7pKURRHNOiS0tPScDjsOBxOVp92BvkFhYSCQXq8XuALkMvJncLdv7wPWVF45qnfjRrljtaY3tXZQUnpdEpLp+OPas5g9x4MBJg3fyGFhUW8/dabcfwTQjB12glk5+QQCPrRw/oQ952alkpO7hTmzltAQVERHUePxvsERs2zooty0kmLOfGkxRyqqUVVVaEosmSYug/VuEECuPXn9z6bkOD6QSjoNy1TKMkpSSxaOB/DiHgad5Tn3bP7Pf703DP86KprSEtPp6iohNbWZm649sf09vTEc64xO2EHaVh6Ria/e+pZUlJSIysuBJIs43K5kST4+ysv8/ijDzG9bAZz5y2gvq6GZctX0dJ8mLfffhObamPZilWUz55DWloapmnS3dVFa0szbe1tpKens2Llqbz5+j/Z9d6O6D5ac1SNvvWOn5M7rYDW1lZsNtV0JriVYDDwxw33/vyHKoBi6Ov1sHaZJMkoKqK3t0+qrWuIbAsPaQwMDCDLCicuOpknn3iMl196kcWnLOG1V1/hrc1vEIzWuDMzsyguKeWjD98f09RiWuT1dPPMU09y252/IBwOk5icjGkY7P33Bzz79FPU1dXwgyt/TEXFPLyebs779vk88fgjfLBnN9/45re45NLLmTL1hHjsJElfaIRvYICdO95l08YXueHmW8mdMpVNG18cYaJCCNLT00lNz+TI0aPYbDYhSRJ6WDMVQ18PoKxdu1a97751XacsX5XjdiUu1jTNVFVV7untxWazkZmeHm+xczgdZGVl8fyf/8iHH+zh4IHPMaKgZ7fbufnWn7G/qpLOzo5xt0OKaMDZUF/H8hWryM2dyrvbtrDhgfv46wvPM2tWOQ9seITi4lJCoRAFRcX87LYbqTl4iHX3rueiSy9HVW34/X40TUPXdcLhMKFQKNI8IUksPPEkcnJyeebp33Pr7XfR1NjI4abGISGEEIKVq88gd2p+rEvEdLncakgLPvnr+3/5l7Vr16qTP5pCkQmHdVxuN5Uf72XTyy/S3NSEEIKComJ+eOWPkSWJq6647BhOgZGYv+BEQqEgBz7/jKLiEq657sb4lsy26Hann159BV6Ph988/DgzZs2KHnOhjBtv6eEw2bm5vPg/f0YLaXznuxdw8ffOj+8UkCWZ1Wedw0mLl2GaRvRoioQRR1PIkiSJ8vJysWHD7QNY5sWWZfWoNpsihDBVVeFwcwsfV+6j2+NFURR0TeOkkxfzq/UP8sRTz/LkH57jnvseYP78hbz5+mtDQHOsD0BpaRlCCFpbmymdXsZVP7mWp575C4sWnYynu5uPPnyfOXMq2PDAfRxuauTudfcxa/Zsent64m3Eww8rGPyxOxz09vRw9jnfpLbmIJIk8a3vfBeA4tIyLr3iapYuPzXiACxhqja7YllWD5Z58YYNtw+Ul5cLSZLEcR2P43a5cLtdkaJbNAKVZZk7b7+Zhvp6JFn6ogF9FIDOLyxk9uwKtr7zFut//QiFRcVIskQoGMSZkMCOd7ehKDIVc+dz2UUXMHNWOet/8wihYPCYUo7YqRCv/n0T6ZlZOBwJHDhwgMKSUoRlRaskkuFMcKqWOc7xOBz3AUtSnCgTlkUgEIjyKmMeJYBAYLfb4+43OTklfmZQLLYJ+P04o7uvQ8Egdoc9WgG1jqPtQyDLCsFgEFlWsNtthDVNiMgZHZM/YOmrOKLrWDbyx/60aY5sqIy55JjALEtgCetLdMQIZFmxQAjLtCTFpsqO4zmii6/gkLfxUoAYzXUstfbj3Yw71pZv8WUPefv/xwQOvf4voXRJLJMGvyoAAAAASUVORK5CYII="
+});
+
+// desktop/film-suite/src/shared/ui/hermes-mark.js
+var variant = null;
+var watching = false;
+var probe = null;
+function luminance(css) {
+  const m = /rgba?\(([^)]+)\)/.exec(String(css || ""));
+  if (!m) return null;
+  const rgb = m[1].split(/[ ,/]+/).filter(Boolean).slice(0, 3).map(Number);
+  if (rgb.length < 3 || rgb.some((v) => !Number.isFinite(v))) return null;
+  const f2 = (v) => {
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * f2(rgb[0]) + 0.7152 * f2(rgb[1]) + 0.0722 * f2(rgb[2]);
+}
+function readVariant() {
+  if (typeof document === "undefined" || !document.body) return "dark";
+  if (!probe || !probe.isConnected) {
+    probe = document.createElement("span");
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;overflow:hidden;visibility:hidden;color:var(--ui-base,#e9e7e4)";
+    document.body.appendChild(probe);
+  }
+  const l = luminance(getComputedStyle(probe).color);
+  return l !== null && l < 0.5 ? "light" : "dark";
+}
+function refresh() {
+  const next = readVariant();
+  if (next === variant) return;
+  variant = next;
+  for (const img of document.querySelectorAll("img.fw-hmark")) {
+    img.src = HERMES_MARK_SRC[next];
+    img.setAttribute("data-variant", next);
+  }
+}
+function watch() {
+  if (watching || typeof document === "undefined" || typeof MutationObserver !== "function") return;
+  watching = true;
+  let frame = 0;
+  const bump2 = () => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      refresh();
+    });
+  };
+  const observer = new MutationObserver(bump2);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme", "data-hermes-mode", "data-hermes-theme"] });
+  if (document.head) observer.observe(document.head, { childList: true, subtree: true, characterData: true });
+  const media = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
+  if (media && media.addEventListener) media.addEventListener("change", bump2);
+}
+function hermesMarkVariantOf(ink) {
+  const l = luminance(ink);
+  return l === null ? null : l < 0.5 ? "light" : "dark";
+}
+function hermesMarkVariant() {
+  if (variant === null) variant = readVariant();
+  watch();
+  return variant;
+}
+var MARK_S = "var(--fw-hmark-s,var(--fw-hmark,.875rem))";
+var MARK_SIZE = { width: MARK_S, height: MARK_S, maxWidth: "20px", maxHeight: "20px" };
+function markProps({ at: at2, label: label2, testid, className, decorative }) {
+  const v = hermesMarkVariant();
+  const text2 = label2 || `Changed by Hermes ${at2}`;
+  const own2 = { className: "fw-hmark" + (className ? " " + className : ""), src: HERMES_MARK_SRC[v], "data-variant": v, draggable: false, style: MARK_SIZE };
+  if (testid) own2["data-testid"] = testid;
+  return decorative ? { ...own2, alt: "", "aria-hidden": "true" } : { ...own2, alt: text2, role: "img", "aria-label": text2, title: text2 };
+}
+function HermesMark(props) {
+  return jsx13("img", markProps(props));
+}
+function hermesMarkElement(props) {
+  const el = document.createElement("img");
+  for (const [key, value] of Object.entries(markProps(props))) {
+    if (key === "className") el.className = value;
+    else if (key === "draggable") el.draggable = false;
+    else if (key === "style") Object.assign(el.style, value);
+    else el.setAttribute(key, value);
+  }
+  return el;
+}
+var HERMES_MARK_CSS = `
+.fw-hmark{--fw-hmark-s:var(--fw-hmark,.875rem);display:block;flex:none;box-sizing:border-box;width:var(--fw-hmark-s);height:var(--fw-hmark-s);min-width:0;max-width:none;margin:0;padding:0;border:0;object-fit:contain;user-select:none;-webkit-user-drag:none;pointer-events:auto}
+`;
+
+// desktop/film-suite/src/music/markers/music-marker-ui.js
+import { jsx as jsx14, jsxs as jsxs11 } from "react/jsx-runtime";
 var MUSIC_JUMP_SIZES = [1, 2, 4, 8];
 var MUSIC_FLAG_MAX = 160;
 var MUSIC_FLAG_MIN = 18;
@@ -50832,6 +55603,7 @@ var MUSIC_MARKER_CSS = `
 .mpro-mflag>b{position:absolute;top:2px;left:0;box-sizing:border-box;min-width:${MUSIC_FLAG_MIN}px;block-size:1.125rem;padding:0 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--ui-bg-chrome,var(--fw-track));border:1px solid var(--mp-mk);border-left-width:3px;border-radius:var(--fw-r1,3px);color:var(--ui-text-primary);font-size:var(--fw-fs,.75rem);line-height:var(--fw-lh,1rem);font-weight:600;text-align:center;font-variant-numeric:tabular-nums}
 .mpro-mflag.is-left>b{left:auto;right:0;border-left-width:1px;border-right-width:3px}
 .mpro-mflag.is-hermes,.mpro-mline.is-hermes{border-left-style:dotted}
+.mpro-hmark.fw-hmark{display:inline-block;vertical-align:-3px;margin-right:4px;pointer-events:none}
 .mpro-mlines{position:absolute;left:0;right:0;bottom:0;pointer-events:none;z-index:5}
 .mpro-mline{position:absolute;top:0;bottom:0;width:0;border-left:1px solid var(--mp-mk)}
 .mpro-marks-sec{display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid var(--fw-line)}
@@ -50861,7 +55633,7 @@ function musicFlagLayout(markers, viewStart, viewEnd, width) {
   const out = [];
   let lastRight = 0;
   shown.forEach((item, index) => {
-    const want = Math.min(MUSIC_FLAG_MAX, Math.ceil(musicProTextWidth(item.label) * 1.1) + 8);
+    const want = Math.min(MUSIC_FLAG_MAX, Math.ceil(musicProTextWidth(item.label) * 1.1) + 8 + (item.m.by === "hermes" ? 18 : 0));
     const next = shown[index + 1];
     const room2 = next ? next.x - item.x - 3 : width - item.x;
     const before = item.x - lastRight - 3;
@@ -50873,56 +55645,56 @@ function musicFlagLayout(markers, viewStart, viewEnd, width) {
   return out;
 }
 function MusicMarkerFlags({ markers, viewStart, viewEnd, width }) {
-  return jsx13("div", { className: "mpro-mrow", "data-testid": "mpro-mrow", children: width ? musicFlagLayout(markers, viewStart, viewEnd, width).map(({ m, x, label: label2, left, w }) => jsx13("i", {
+  return jsx14("div", { className: "mpro-mrow", "data-testid": "mpro-mrow", children: width ? musicFlagLayout(markers, viewStart, viewEnd, width).map(({ m, x, label: label2, left, w }) => jsx14("i", {
     className: `mpro-mflag${m.by === "hermes" ? " is-hermes" : ""}${left ? " is-left" : ""}`,
     "data-testid": "mpro-mflag",
     "data-id": m.id,
     "data-t": m.time.toFixed(3),
     style: { left: `${x}px` },
     title: musicMarkerTitle(m),
-    children: jsx13("b", { style: { maxWidth: `${w}px` }, children: label2 })
+    children: jsxs11("b", { style: { maxWidth: `${w}px` }, children: [m.by === "hermes" ? jsx14(HermesMark, { decorative: true, className: "mpro-hmark", testid: "mpro-mflag-hermes" }, "h") : null, label2] })
   }, m.id)) : null });
 }
 function MusicMarkerLines({ markers, viewStart, viewEnd, width, top: top2 = 0 }) {
   if (!width) return null;
   const span2 = Math.max(1e-3, viewEnd - viewStart);
-  return jsx13("div", { className: "mpro-mlines", "data-testid": "mpro-mlines", "aria-hidden": "true", style: { top: `${top2}px` }, children: (markers || []).filter((m) => m.time >= viewStart && m.time <= viewEnd).map((m) => jsx13("i", { className: `mpro-mline${m.by === "hermes" ? " is-hermes" : ""}`, "data-testid": "mpro-mline", "data-id": m.id, "data-t": m.time.toFixed(3), style: { left: `${Math.round((m.time - viewStart) / span2 * width)}px` } }, m.id)) });
+  return jsx14("div", { className: "mpro-mlines", "data-testid": "mpro-mlines", "aria-hidden": "true", style: { top: `${top2}px` }, children: (markers || []).filter((m) => m.time >= viewStart && m.time <= viewEnd).map((m) => jsx14("i", { className: `mpro-mline${m.by === "hermes" ? " is-hermes" : ""}`, "data-testid": "mpro-mline", "data-id": m.id, "data-t": m.time.toFixed(3), style: { left: `${Math.round((m.time - viewStart) / span2 * width)}px` } }, m.id)) });
 }
 function MusicMarkerList({ kit, onSeek }) {
   if (!kit) return null;
   const { markers, unavailable, onAdd, jumpBars, setJumpBars, jumpReason } = kit;
   return jsxs11("section", { className: "mpro-marks-sec", "data-testid": "mpro-markers", "aria-label": "Markers", children: [
     jsxs11("div", { className: "mpro-marks-head", children: [
-      jsx13("h3", { className: "fim-label", children: "Markers" }, "h"),
+      jsx14("h3", { className: "fim-label", children: "Markers" }, "h"),
       // w36-disabled GEM-204: off stays focusable (aria-disabled + guard) and names action + reason.
-      jsx13("button", { type: "button", className: "fim-btn mpro-btn", "data-testid": "mpro-marker-add", "aria-keyshortcuts": "M", "aria-disabled": unavailable ? "true" : void 0, title: unavailable ? `Add marker · ${unavailable}` : "Marker at the playhead (M) · Shift+1–9 sets a cue, 1–9 jumps to it", onClick: (event) => {
+      jsx14("button", { type: "button", className: "fim-btn mpro-btn", "data-testid": "mpro-marker-add", "aria-keyshortcuts": "M", "aria-disabled": unavailable ? "true" : void 0, title: unavailable ? `Add marker · ${unavailable}` : "Marker at the playhead (M) · Shift+1–9 sets a cue, 1–9 jumps to it", onClick: (event) => {
         if (unavailable) {
           event.preventDefault();
           return;
         }
         onAdd(event);
       }, children: "Add marker" }, "a"),
-      jsx13("span", { className: "mpro-grow" }, "g"),
+      jsx14("span", { className: "mpro-grow" }, "g"),
       jsxs11("label", { className: "mpro-jump", title: jumpReason || "Ctrl+←/→ one bar · Alt+←/→ this many bars", children: [
-        jsx13("span", { children: "Jump" }, "t"),
-        jsx13("select", { "data-testid": "mpro-jump-size", "aria-label": "Bars per Alt+arrow jump", value: String(jumpBars), onChange: (event) => setJumpBars(Number(event.target.value)), children: MUSIC_JUMP_SIZES.map((n) => jsx13("option", { value: String(n), children: `${n} ${n === 1 ? "bar" : "bars"}` }, n)) }, "s")
+        jsx14("span", { children: "Jump" }, "t"),
+        jsx14("select", { "data-testid": "mpro-jump-size", "aria-label": "Bars per Alt+arrow jump", value: String(jumpBars), onChange: (event) => setJumpBars(Number(event.target.value)), children: MUSIC_JUMP_SIZES.map((n) => jsx14("option", { value: String(n), children: `${n} ${n === 1 ? "bar" : "bars"}` }, n)) }, "s")
       ] }, "j")
     ] }, "head"),
-    markers.length ? jsx13("ul", { className: "mpro-marks-list", "data-testid": "mpro-marker-list", children: markers.map((m) => jsx13("li", { children: jsxs11("button", { type: "button", className: "mpro-mk-row", "data-testid": "mpro-marker-row", "data-id": m.id, "aria-label": `${m.cue ? `Hot cue ${m.cue}` : musicMarkerLabel(m)} at ${formatMusicTime(m.time, true)}`, title: `${musicMarkerTitle(m)} · go there`, onClick: () => onSeek(m.time), children: [
-      jsx13("span", { className: "mpro-mk-n", "data-testid": "mpro-marker-name", children: musicMarkerLabel(m) }, "n"),
-      jsx13("span", { className: "mpro-mk-t", children: formatMusicTime(m.time, true) }, "t")
-    ] }) }, m.id)) }) : jsx13("p", { className: "mpro-note", "data-testid": "mpro-markers-empty", children: unavailable || "No markers" }, "e")
+    markers.length ? jsx14("ul", { className: "mpro-marks-list", "data-testid": "mpro-marker-list", children: markers.map((m) => jsx14("li", { children: jsxs11("button", { type: "button", className: "mpro-mk-row", "data-testid": "mpro-marker-row", "data-id": m.id, "aria-label": `${m.cue ? `Hot cue ${m.cue}` : musicMarkerLabel(m)} at ${formatMusicTime(m.time, true)}`, title: `${musicMarkerTitle(m)} · go there`, onClick: () => onSeek(m.time), children: [
+      jsx14("span", { className: "mpro-mk-n", "data-testid": "mpro-marker-name", children: musicMarkerLabel(m) }, "n"),
+      jsx14("span", { className: "mpro-mk-t", children: formatMusicTime(m.time, true) }, "t")
+    ] }) }, m.id)) }) : jsx14("p", { className: "mpro-note", "data-testid": "mpro-markers-empty", children: unavailable || "No markers" }, "e")
   ] });
 }
 var MMK_MODES = [{ id: "marks", text: "Marks", title: "List sections and markers" }, { id: "bars", text: "Bars", title: "List bars" }, { id: "beats", text: "Beats", title: "List beats" }];
 function musicMarkerRows(mode, { markers = [], sections = [], bars = [], beats = [], barStarts = null }) {
-  const at = (list, name2) => (Array.isArray(list) ? list : []).map((v, i2) => ({ time: musicEventTime(v), i: i2 })).filter((x) => x.time !== null).map((x) => ({ id: `${mode}:${x.i}`, time: x.time, name: name2(x.i) }));
+  const at2 = (list, name2) => (Array.isArray(list) ? list : []).map((v, i2) => ({ time: musicEventTime(v), i: i2 })).filter((x) => x.time !== null).map((x) => ({ id: `${mode}:${x.i}`, time: x.time, name: name2(x.i) }));
   if (mode === "bars" && Array.isArray(barStarts) && barStarts.length) {
-    const one = barStarts[0], pick = at(bars, () => "Pickup").filter((r) => r.time < one - 1e-3).map((r, k) => ({ ...r, id: `pickup:${k}` }));
-    return [...pick, ...at(barStarts, (i2) => `Bar ${i2 + 1}`)];
+    const one = barStarts[0], pick = at2(bars, () => "Pickup").filter((r) => r.time < one - 1e-3).map((r, k) => ({ ...r, id: `pickup:${k}` }));
+    return [...pick, ...at2(barStarts, (i2) => `Bar ${i2 + 1}`)];
   }
-  if (mode === "bars") return at(bars, (i2) => `Bar ${i2 + 1}`);
-  if (mode === "beats") return at(beats, (i2) => `Beat ${i2 + 1}`);
+  if (mode === "bars") return at2(bars, (i2) => `Bar ${i2 + 1}`);
+  if (mode === "beats") return at2(beats, (i2) => `Beat ${i2 + 1}`);
   const secs = (Array.isArray(sections) ? sections : []).map((v, i2) => ({ id: `sec:${i2}`, time: musicEventTime(v), name: v && v.label || `Section ${i2 + 1}`, kind: "section" })).filter((x) => x.time !== null);
   const marks2 = (markers || []).map((m) => ({ id: m.id, time: m.time, name: musicMarkerLabel(m), kind: "marker", m }));
   return [...secs, ...marks2].sort((a, b) => a.time - b.time);
@@ -50964,10 +55736,10 @@ function MusicMarkerSection({ kit, onSeek, playhead = 0, sections, bars, beats, 
   rows.forEach((r, i2) => {
     if (r.time <= (Number(playhead) || 0) + 1e-3) cur = i2;
   });
-  const prow2 = (label2, ctl, key, title) => jsxs11("div", { className: "fw-prow", title, children: [jsx13("span", { className: "fw-lbl", children: label2 }, "l"), jsx13("div", { className: "fw-pctl", children: ctl }, "c")] }, key);
+  const prow2 = (label2, ctl, key, title) => jsxs11("div", { className: "fw-prow", title, children: [jsx14("span", { className: "fw-lbl", children: label2 }, "l"), jsx14("div", { className: "fw-pctl", children: ctl }, "c")] }, key);
   return jsxs11("div", { className: "mmk", "data-testid": "mpro-markers", "data-mode": mode, "aria-label": "Markers", children: [
-    prow2("List", jsx13("div", { className: "fw-seg is-fill", role: "group", "aria-label": "List", "data-testid": "mpro-marker-modes", children: MMK_MODES.map((o) => jsx13("button", { type: "button", className: "fw-seg-b", "aria-pressed": mode === o.id, title: o.title, "data-mode": o.id, onClick: () => setMode(o.id), children: o.text }, o.id)) }), "list"),
-    rows.length ? jsx13("ul", { className: "mmk-list", "data-testid": "mpro-marker-list", children: rows.map((r, i2) => jsx13("li", { children: jsxs11("button", {
+    prow2("List", jsx14("div", { className: "fw-seg is-fill", role: "group", "aria-label": "List", "data-testid": "mpro-marker-modes", children: MMK_MODES.map((o) => jsx14("button", { type: "button", className: "fw-seg-b", "aria-pressed": mode === o.id, title: o.title, "data-mode": o.id, onClick: () => setMode(o.id), children: o.text }, o.id)) }), "list"),
+    rows.length ? jsx14("ul", { className: "mmk-list", "data-testid": "mpro-marker-list", children: rows.map((r, i2) => jsx14("li", { children: jsxs11("button", {
       type: "button",
       className: `fw-b mpro-mmk mmk-row${showBar ? " has-bar" : ""}${i2 === cur ? " is-cur" : ""}${r.m && r.m.by === "hermes" ? " is-hermes" : ""}`,
       "data-testid": r.kind === "marker" ? "mpro-marker-row" : "mpro-list-row",
@@ -50976,21 +55748,21 @@ function MusicMarkerSection({ kit, onSeek, playhead = 0, sections, bars, beats, 
       "aria-label": `${r.m && r.m.cue ? `Hot cue ${r.m.cue}` : r.name} at ${formatMusicTime(r.time, true)}`,
       title: `${r.m ? musicMarkerTitle(r.m) : `${r.name} · ${formatMusicTime(r.time, true)}`} · go there`,
       onClick: () => onSeek(r.time),
-      children: [jsx13("span", { className: "mmk-n", "data-testid": r.kind === "marker" ? "mpro-marker-name" : void 0, children: r.name }, "n"), showBar ? jsx13("span", { className: "mmk-b", "data-testid": "mmk-bar", title: "Bar", children: mmkBar(r.time, barStarts) }, "b") : null, jsx13("span", { className: "mmk-t", children: formatMusicTime(r.time, true) }, "t")]
+      children: [jsxs11("span", { className: "mmk-n", "data-testid": r.kind === "marker" ? "mpro-marker-name" : void 0, children: [r.m && r.m.by === "hermes" ? jsx14(HermesMark, { decorative: true, className: "mpro-hmark", testid: "mmk-hermes" }, "h") : null, r.name] }, "n"), showBar ? jsx14("span", { className: "mmk-b", "data-testid": "mmk-bar", title: "Bar", children: mmkBar(r.time, barStarts) }, "b") : null, jsx14("span", { className: "mmk-t", children: formatMusicTime(r.time, true) }, "t")]
     }) }, r.id)) }, "ul") : null,
     // w32-fix5 AUD-151: with the meter unsure there are no bars; the jump goes by beats and says so.
-    prow2("Jump", jsx13("select", { className: "fw-select", "data-testid": "mpro-jump-size", "data-unit": jumpReason ? "beat" : "bar", "aria-label": jumpReason ? "Beats per Alt+arrow jump" : "Bars per Alt+arrow jump", title: jumpReason || "Ctrl+←/→ one bar · Alt+←/→ this many bars", value: String(jumpBars), onChange: (event) => setJumpBars(Number(event.target.value)), children: MUSIC_JUMP_SIZES.map((n) => jsx13("option", { value: String(n), children: jumpReason ? `${n} ${n === 1 ? "beat" : "beats"}` : `${n} ${n === 1 ? "bar" : "bars"}` }, n)) }), "jump")
+    prow2("Jump", jsx14("select", { className: "fw-select", "data-testid": "mpro-jump-size", "data-unit": jumpReason ? "beat" : "bar", "aria-label": jumpReason ? "Beats per Alt+arrow jump" : "Bars per Alt+arrow jump", title: jumpReason || "Ctrl+←/→ one bar · Alt+←/→ this many bars", value: String(jumpBars), onChange: (event) => setJumpBars(Number(event.target.value)), children: MUSIC_JUMP_SIZES.map((n) => jsx14("option", { value: String(n), children: jumpReason ? `${n} ${n === 1 ? "beat" : "beats"}` : `${n} ${n === 1 ? "bar" : "bars"}` }, n)) }), "jump")
   ] });
 }
 function MusicMarkerAdd({ kit }) {
   if (!kit) return null;
-  return jsx13("button", { type: "button", className: "fw-btn fw-btn-ghost fw-btn-icon", "data-testid": "mpro-marker-add", "aria-label": "Add marker", "aria-keyshortcuts": "M", "aria-disabled": kit.unavailable ? "true" : void 0, title: kit.unavailable ? `Add marker (M) · ${kit.unavailable}` : "Marker at the playhead (M) · Shift+1–9 sets a cue, 1–9 jumps to it", onClick: (event) => {
+  return jsx14("button", { type: "button", className: "fw-btn fw-btn-ghost fw-btn-icon", "data-testid": "mpro-marker-add", "aria-label": "Add marker", "aria-keyshortcuts": "M", "aria-disabled": kit.unavailable ? "true" : void 0, title: kit.unavailable ? `Add marker (M) · ${kit.unavailable}` : "Marker at the playhead (M) · Shift+1–9 sets a cue, 1–9 jumps to it", onClick: (event) => {
     if (kit.unavailable) {
       event.preventDefault();
       return;
     }
     kit.onAdd(event);
-  }, children: jsx13(FwIcon, { name: "plus" }) });
+  }, children: jsx14(FwIcon, { name: "plus" }) });
 }
 
 // desktop/film-suite/src/music/map/song-map-rows.js
@@ -51029,15 +55801,15 @@ function boxSigma(sigma) {
   if (Number.isNaN(sigma) || sigma <= 0.3) return 0;
   return Math.sqrt(boxRadii(sigma).reduce((s, r) => s + ((2 * r + 1) ** 2 - 1) / 12, 0));
 }
-function boxLine(a, off, n, stride, r, tmp) {
+function boxLine(a, off, n, stride, r, tmp2) {
   if (r === 0 || n === 0) return;
-  for (let i2 = 0; i2 < n; i2++) tmp[i2] = a[off + i2 * stride];
+  for (let i2 = 0; i2 < n; i2++) tmp2[i2] = a[off + i2 * stride];
   const last2 = n - 1, inv = 1 / (2 * r + 1);
   let acc = 0;
-  for (let i2 = 0; i2 <= 2 * r; i2++) acc += tmp[Math.min(Math.max(i2 - r, 0), last2)];
+  for (let i2 = 0; i2 <= 2 * r; i2++) acc += tmp2[Math.min(Math.max(i2 - r, 0), last2)];
   for (let x = 0; x < n; x++) {
     a[off + x * stride] = acc * inv;
-    acc += tmp[Math.min(x + r + 1, last2)] - tmp[Math.max(x - r, 0)];
+    acc += tmp2[Math.min(x + r + 1, last2)] - tmp2[Math.max(x - r, 0)];
   }
 }
 function boxColumns(a, w, h, r, src, acc) {
@@ -51060,8 +55832,8 @@ function boxColumns(a, w, h, r, src, acc) {
 function gaussian(p, w, h, sigma) {
   const out = Float32Array.from(p);
   if (Number.isNaN(sigma) || sigma <= 0.3 || !w || !h) return out;
-  const radii = boxRadii(Math.min(sigma, Math.max(w, h) * 2)), tmp = new Float64Array(Math.max(w, h));
-  for (let y = 0; y < h; y++) for (const r of radii) boxLine(out, y * w, w, 1, r, tmp);
+  const radii = boxRadii(Math.min(sigma, Math.max(w, h) * 2)), tmp2 = new Float64Array(Math.max(w, h));
+  for (let y = 0; y < h; y++) for (const r of radii) boxLine(out, y * w, w, 1, r, tmp2);
   const src = new Float32Array(out.length), acc = new Float64Array(w);
   for (const r of radii) boxColumns(out, w, h, r, src, acc);
   return out;
@@ -51081,18 +55853,18 @@ function weights(src, dst, filter) {
 }
 function resize(p, w, h, nw, nh, filter) {
   if (w === nw && h === nh) return Float32Array.from(p);
-  const wx = weights(w, nw, filter), wy = weights(h, nh, filter), tmp = new Float32Array(nw * h), out = new Float32Array(nw * nh);
+  const wx = weights(w, nw, filter), wy = weights(h, nh, filter), tmp2 = new Float32Array(nw * h), out = new Float32Array(nw * nh);
   for (let y = 0; y < h; y++) for (let x = 0; x < nw; x++) {
     const [lo, ws] = wx[x];
     let a = 0;
     for (let k = 0; k < ws.length; k++) a += p[y * w + lo + k] * ws[k];
-    tmp[y * nw + x] = a;
+    tmp2[y * nw + x] = a;
   }
   for (let y = 0; y < nh; y++) {
     const [lo, ws] = wy[y];
     for (let x = 0; x < nw; x++) {
       let a = 0;
-      for (let k = 0; k < ws.length; k++) a += tmp[(lo + k) * nw + x] * ws[k];
+      for (let k = 0; k < ws.length; k++) a += tmp2[(lo + k) * nw + x] * ws[k];
       out[y * nw + x] = a;
     }
   }
@@ -51115,15 +55887,15 @@ function medianHV(p, w, h, r) {
     win[i2] = v;
   };
   const pass = (src, n, lines, step2, stride) => {
-    const out = new Float32Array(src.length), at = (off, x) => src[off + Math.min(Math.max(x, 0), n - 1) * step2];
+    const out = new Float32Array(src.length), at2 = (off, x) => src[off + Math.min(Math.max(x, 0), n - 1) * step2];
     for (let l = 0; l < lines; l++) {
       const off = l * stride;
-      for (let j = 0; j < k; j++) insert2(at(off, j - r), j);
+      for (let j = 0; j < k; j++) insert2(at2(off, j - r), j);
       for (let x = 0; x < n; x++) {
         out[off + x * step2] = win[r];
         if (x + 1 < n) {
-          remove2(at(off, x - r));
-          insert2(at(off, x + r + 1), k - 1);
+          remove2(at2(off, x - r));
+          insert2(at2(off, x + r + 1), k - 1);
         }
       }
     }
@@ -51199,8 +55971,8 @@ function distance2(hit2, w, h) {
   }
   return grid;
 }
-function growPlane(p, w, h, px) {
-  if (!px) return p;
+function growPlane(p, w, h, px2) {
+  if (!px2) return p;
   const n = w * h, inside = new Uint8Array(n), outside = new Uint8Array(n);
   for (let i2 = 0; i2 < n; i2++) {
     const on = p[i2] >= 0.5;
@@ -51210,7 +55982,7 @@ function growPlane(p, w, h, px) {
   const toIn = distance2(inside, w, h), toOut = distance2(outside, w, h), out = new Float32Array(n);
   for (let i2 = 0; i2 < n; i2++) {
     const sd = inside[i2] ? Math.sqrt(toOut[i2]) - 0.5 : 0.5 - Math.sqrt(toIn[i2]);
-    out[i2] = Math.min(Math.max(sd + px + 0.5, 0), 1);
+    out[i2] = Math.min(Math.max(sd + px2 + 0.5, 0), 1);
   }
   return out;
 }
@@ -51293,9 +56065,9 @@ function selDist2(mask, w, h, target) {
   for (let i2 = 0; i2 < hit2.length; i2++) hit2[i2] = mask[i2] >= 128 === target ? 1 : 0;
   return distance2(hit2, w, h);
 }
-function selGrow(mask, w, h, px) {
-  const r22 = px * px, out = new Uint8Array(mask.length);
-  if (px > 0) {
+function selGrow(mask, w, h, px2) {
+  const r22 = px2 * px2, out = new Uint8Array(mask.length);
+  if (px2 > 0) {
     const d = selDist2(mask, w, h, true);
     for (let i2 = 0; i2 < out.length; i2++) out[i2] = d[i2] <= r22 ? mask[i2] >= 128 ? mask[i2] : 255 : mask[i2];
   } else {
@@ -51309,12 +56081,12 @@ function selBox(a, w, h, r, passes) {
   const b = new Float32Array(a.length);
   const box = (src, dst, len, count3, stride, step2) => {
     for (let c = 0; c < count3; c++) {
-      const base2 = c * stride, at = (i2) => base2 + Math.max(0, Math.min(len - 1, i2)) * step2;
+      const base2 = c * stride, at2 = (i2) => base2 + Math.max(0, Math.min(len - 1, i2)) * step2;
       let sum2 = 0;
-      for (let i2 = -r; i2 <= r; i2++) sum2 += src[at(i2)];
+      for (let i2 = -r; i2 <= r; i2++) sum2 += src[at2(i2)];
       for (let i2 = 0; i2 < len; i2++) {
         dst[base2 + i2 * step2] = sum2 / (2 * r + 1);
-        sum2 += src[at(i2 + r + 1)] - src[at(i2 - r)];
+        sum2 += src[at2(i2 + r + 1)] - src[at2(i2 - r)];
       }
     }
   };
@@ -51329,8 +56101,8 @@ var selToBytes = (a) => {
   for (let i2 = 0; i2 < out.length; i2++) out[i2] = Math.max(0, Math.min(255, Math.round(a[i2])));
   return out;
 };
-function selFeather(mask, w, h, px) {
-  const r = Math.max(1, Math.round(0.6 * px - 0.5)), a = Float32Array.from(mask);
+function selFeather(mask, w, h, px2) {
+  const r = Math.max(1, Math.round(0.6 * px2 - 0.5)), a = Float32Array.from(mask);
   return selToBytes(selBox(a, w, h, r, 3));
 }
 function selStroke(mask, w, h, x0, y0, x1, y1, size, hardness, erase, cap3 = 1) {
@@ -51381,12 +56153,12 @@ function selXform(mask, w, h, box, t2) {
   const pts = [[box[0], box[1]], [box[0] + box[2], box[1]], [box[0], box[1] + box[3]], [box[0] + box[2], box[1] + box[3]]].map(([x, y]) => selXfPoint(box, t2, x, y));
   const xa = Math.max(0, Math.floor(Math.min(...pts.map((p) => p[0])) - 2)), xb = Math.min(w - 1, Math.ceil(Math.max(...pts.map((p) => p[0])) + 2));
   const ya = Math.max(0, Math.floor(Math.min(...pts.map((p) => p[1])) - 2)), yb = Math.min(h - 1, Math.ceil(Math.max(...pts.map((p) => p[1])) + 2));
-  const at = (x, y) => x < 0 || y < 0 || x >= w || y >= h ? 0 : mask[y * w + x];
+  const at2 = (x, y) => x < 0 || y < 0 || x >= w || y >= h ? 0 : mask[y * w + x];
   for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
-    const px = x + 0.5 - cx - t2.tx, py = y + 0.5 - cy - t2.ty;
-    const lx = (c * px + s * py) / t2.sx + cx - 0.5, ly = (-s * px + c * py) / t2.sy + cy - 0.5;
+    const px2 = x + 0.5 - cx - t2.tx, py2 = y + 0.5 - cy - t2.ty;
+    const lx = (c * px2 + s * py2) / t2.sx + cx - 0.5, ly = (-s * px2 + c * py2) / t2.sy + cy - 0.5;
     const x0 = Math.floor(lx), y0 = Math.floor(ly), fx = lx - x0, fy = ly - y0;
-    const v = (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) + (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
+    const v = (at2(x0, y0) * (1 - fx) + at2(x0 + 1, y0) * fx) * (1 - fy) + (at2(x0, y0 + 1) * (1 - fx) + at2(x0 + 1, y0 + 1) * fx) * fy;
     out[y * w + x] = Math.round(v);
   }
   return out;
@@ -51396,13 +56168,13 @@ function selSigned(mask, w, h) {
   for (let i2 = 0; i2 < out.length; i2++) out[i2] = mask[i2] >= 128 ? Math.sqrt(din[i2]) - 0.5 : 0.5 - Math.sqrt(dout[i2]);
   return out;
 }
-function selBorder(mask, w, h, px) {
-  const sd = selSigned(mask, w, h), out = new Uint8Array(w * h), half = px / 2;
+function selBorder(mask, w, h, px2) {
+  const sd = selSigned(mask, w, h), out = new Uint8Array(w * h), half = px2 / 2;
   for (let i2 = 0; i2 < out.length; i2++) out[i2] = Math.round(255 * Math.max(0, Math.min(1, half - Math.abs(sd[i2]) + 0.5)));
   return out;
 }
-function selSmooth(mask, w, h, px) {
-  const a = selBox(Float32Array.from(mask), w, h, Math.max(1, Math.round(px)), 2);
+function selSmooth(mask, w, h, px2) {
+  const a = selBox(Float32Array.from(mask), w, h, Math.max(1, Math.round(px2)), 2);
   for (let i2 = 0; i2 < a.length; i2++) a[i2] = (a[i2] - 127.5) * 3 + 127.5;
   return selToBytes(a);
 }
@@ -51411,9 +56183,9 @@ function selContrast(mask, pct3) {
   for (let i2 = 0; i2 < out.length; i2++) out[i2] = Math.max(0, Math.min(255, Math.round((mask[i2] - 127.5) * k + 127.5)));
   return out;
 }
-function selShiftEdge(mask, w, h, px) {
+function selShiftEdge(mask, w, h, px2) {
   const sd = selSigned(mask, w, h), out = new Uint8Array(w * h);
-  for (let i2 = 0; i2 < out.length; i2++) out[i2] = Math.round(255 * Math.max(0, Math.min(1, sd[i2] + px + 0.5)));
+  for (let i2 = 0; i2 < out.length; i2++) out[i2] = Math.round(255 * Math.max(0, Math.min(1, sd[i2] + px2 + 0.5)));
   return out;
 }
 function selRefineEdge(mask, w, h, rgba, radius, smart, extra) {
@@ -51480,12 +56252,12 @@ function selWand(rgba, w, h, x, y, tol, contiguous, aa) {
     out[i0] = 255;
     stack[sp++] = i0;
     while (sp) {
-      const i2 = stack[--sp], px = i2 % w;
-      if (px > 0 && !out[i2 - 1] && near2(i2 - 1)) {
+      const i2 = stack[--sp], px2 = i2 % w;
+      if (px2 > 0 && !out[i2 - 1] && near2(i2 - 1)) {
         out[i2 - 1] = 255;
         stack[sp++] = i2 - 1;
       }
-      if (px < w - 1 && !out[i2 + 1] && near2(i2 + 1)) {
+      if (px2 < w - 1 && !out[i2 + 1] && near2(i2 + 1)) {
         out[i2 + 1] = 255;
         stack[sp++] = i2 + 1;
       }
@@ -51650,11 +56422,11 @@ function selPack(mask) {
 function selUnpack(packed, len) {
   if (!packed) return null;
   const out = new Uint8Array(len);
-  let at = 0;
+  let at2 = 0;
   for (const run of packed) {
     const v = Math.floor(run / 16777216), n = run % 16777216;
-    out.fill(v, at, at + n);
-    at += n;
+    out.fill(v, at2, at2 + n);
+    at2 += n;
   }
   return out;
 }
@@ -51710,11 +56482,11 @@ function selCommit(d, mask, label2, merge) {
   if (d.hist.length > SEL_HISTORY_MAX + 1) d.hist.splice(0, d.hist.length - SEL_HISTORY_MAX - 1);
   d.at = d.hist.length - 1;
 }
-function selJump(d, at) {
-  if (at < 0 || at >= d.hist.length || at === d.at) return false;
-  d.at = at;
-  d.mask = selUnpack(d.hist[at].packed, d.w * d.h);
-  d.dev = d.hist[at].dev || null;
+function selJump(d, at2) {
+  if (at2 < 0 || at2 >= d.hist.length || at2 === d.at) return false;
+  d.at = at2;
+  d.mask = selUnpack(d.hist[at2].packed, d.w * d.h);
+  d.dev = d.hist[at2].dev || null;
   d.ver += 1;
   return true;
 }
@@ -51882,23 +56654,23 @@ function selPaintTint(c, w, h, maskC, show2, xf, edgeC) {
 function selMaskCanvas(c, mask, w, h, box) {
   const g = c.getContext("2d");
   const [x0, y0, x1, y1] = box && box[2] >= box[0] ? box : [0, 0, w - 1, h - 1];
-  const bw = x1 - x0 + 1, bh = y1 - y0 + 1, img = g.createImageData(bw, bh), px = img.data;
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1, img = g.createImageData(bw, bh), px2 = img.data;
   for (let y = 0; y < bh; y++) {
     const row2 = (y0 + y) * w + x0;
     for (let x = 0, j = y * bw * 4; x < bw; x++, j += 4) {
-      px[j] = px[j + 1] = px[j + 2] = 255;
-      px[j + 3] = mask ? mask[row2 + x] : 0;
+      px2[j] = px2[j + 1] = px2[j + 2] = 255;
+      px2[j + 3] = mask ? mask[row2 + x] : 0;
     }
   }
   g.putImageData(img, x0, y0);
 }
 var SEL_XF_HANDLES = [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]];
 var SEL_MODIFY = {
-  border: { label: "Border", title: "Border selection", field: "Width", px: 8, max: 200, run: (m, w, h, px) => selBorder(m, w, h, px), help: "A band this wide on the selection edge." },
-  smooth: { label: "Smooth", title: "Smooth selection", field: "Sample radius", px: 4, max: 100, run: (m, w, h, px) => selSmooth(m, w, h, px), help: "Removes notches and specks smaller than about this size." },
-  expand: { label: "Expand", title: "Expand selection", field: "Expand by", px: 8, max: 500, run: (m, w, h, px) => selGrow(m, w, h, px), help: "Moves the edge out by this distance." },
-  contract: { label: "Contract", title: "Contract selection", field: "Contract by", px: 8, max: 500, run: (m, w, h, px) => selGrow(m, w, h, -px), help: "Moves the edge in by this distance." },
-  feather: { label: "Feather", title: "Feather selection", field: "Feather radius", px: 8, max: 250, run: (m, w, h, px) => selFeather(m, w, h, px), help: "Softens the edge; it fades over about twice this distance." }
+  border: { label: "Border", title: "Border selection", field: "Width", px: 8, max: 200, run: (m, w, h, px2) => selBorder(m, w, h, px2), help: "A band this wide on the selection edge." },
+  smooth: { label: "Smooth", title: "Smooth selection", field: "Sample radius", px: 4, max: 100, run: (m, w, h, px2) => selSmooth(m, w, h, px2), help: "Removes notches and specks smaller than about this size." },
+  expand: { label: "Expand", title: "Expand selection", field: "Expand by", px: 8, max: 500, run: (m, w, h, px2) => selGrow(m, w, h, px2), help: "Moves the edge out by this distance." },
+  contract: { label: "Contract", title: "Contract selection", field: "Contract by", px: 8, max: 500, run: (m, w, h, px2) => selGrow(m, w, h, -px2), help: "Moves the edge in by this distance." },
+  feather: { label: "Feather", title: "Feather selection", field: "Feather radius", px: 8, max: 250, run: (m, w, h, px2) => selFeather(m, w, h, px2), help: "Softens the edge; it fades over about twice this distance." }
 };
 var SEL_SM_VIEWS = [
   { id: "onion", label: "Onion skin", key: "O", fill: "checker", opacity: 0.5, title: "The selection over a checkerboard" },
@@ -51914,7 +56686,7 @@ var SEL_QM_COLOURS = { red: [255, 40, 40], green: [0, 200, 80], blue: [40, 110, 
 var SEL_QM_DEFAULT = { indicates: "masked", colour: "red", opacity: 50 };
 
 // desktop/film-suite/src/audio/lyrics-section.js
-import { jsx as jsx14 } from "react/jsx-runtime";
+import { jsx as jsx15 } from "react/jsx-runtime";
 var $lyricsAligned = atom4(0);
 var lyricsPending = false;
 var lyricsSaved = () => {
@@ -51952,7 +56724,7 @@ function LyricsField({ body: body2, onEdit }) {
     if (text2 === stored || typeof onEdit !== "function") return;
     if (onEdit(lyricsEditBody(body2, text2))) lyricsPending = true;
   };
-  return jsx14("textarea", {
+  return jsx15("textarea", {
     className: "fw-input aei-lyrics",
     "data-testid": "aud-lyrics",
     "data-source": body2 && body2.lyrics && body2.lyrics.source || "none",
@@ -52010,98 +56782,6 @@ var FW_INSPECTOR_CSS = `
 .fw-sec-act>.fw-sec-reset:hover{color:var(--fw-t1)}
 .fw-insp-b>.fw-sec:last-child,.fw-ins-b>.fw-sec:last-child{border-bottom:0}
 .fw-ins .fw-sec-h>.fw-sec-sum{display:block}
-`;
-
-// desktop/film-suite/src/shared/ui/hermes-mark.js
-import { jsx as jsx15 } from "react/jsx-runtime";
-
-// desktop/film-suite/src/shared/ui/hermes-mark-data.js
-var HERMES_MARK_SRC = Object.freeze({
-  light: "data:image/png;base64,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",
-  dark: "data:image/png;base64,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"
-});
-
-// desktop/film-suite/src/shared/ui/hermes-mark.js
-var variant = null;
-var watching = false;
-var probe = null;
-function luminance(css) {
-  const m = /rgba?\(([^)]+)\)/.exec(String(css || ""));
-  if (!m) return null;
-  const rgb = m[1].split(/[ ,/]+/).filter(Boolean).slice(0, 3).map(Number);
-  if (rgb.length < 3 || rgb.some((v) => !Number.isFinite(v))) return null;
-  const f2 = (v) => {
-    v /= 255;
-    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-  };
-  return 0.2126 * f2(rgb[0]) + 0.7152 * f2(rgb[1]) + 0.0722 * f2(rgb[2]);
-}
-function readVariant() {
-  if (typeof document === "undefined" || !document.body) return "dark";
-  if (!probe || !probe.isConnected) {
-    probe = document.createElement("span");
-    probe.setAttribute("aria-hidden", "true");
-    probe.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;overflow:hidden;visibility:hidden;color:var(--ui-base,#e9e7e4)";
-    document.body.appendChild(probe);
-  }
-  const l = luminance(getComputedStyle(probe).color);
-  return l !== null && l < 0.5 ? "light" : "dark";
-}
-function refresh() {
-  const next = readVariant();
-  if (next === variant) return;
-  variant = next;
-  for (const img of document.querySelectorAll("img.fw-hmark")) {
-    img.src = HERMES_MARK_SRC[next];
-    img.setAttribute("data-variant", next);
-  }
-}
-function watch() {
-  if (watching || typeof document === "undefined" || typeof MutationObserver !== "function") return;
-  watching = true;
-  let frame = 0;
-  const bump2 = () => {
-    if (frame) return;
-    frame = requestAnimationFrame(() => {
-      frame = 0;
-      refresh();
-    });
-  };
-  const observer = new MutationObserver(bump2);
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme", "data-hermes-mode", "data-hermes-theme"] });
-  if (document.head) observer.observe(document.head, { childList: true, subtree: true, characterData: true });
-  const media = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
-  if (media && media.addEventListener) media.addEventListener("change", bump2);
-}
-function hermesMarkVariant() {
-  if (variant === null) variant = readVariant();
-  watch();
-  return variant;
-}
-var MARK_S = "var(--fw-hmark-s,var(--fw-hmark,.875rem))";
-var MARK_SIZE = { width: MARK_S, height: MARK_S, maxWidth: "20px", maxHeight: "20px" };
-function markProps({ at, label: label2, testid, className, decorative }) {
-  const v = hermesMarkVariant();
-  const text2 = label2 || `Changed by Hermes ${at}`;
-  const own2 = { className: "fw-hmark" + (className ? " " + className : ""), src: HERMES_MARK_SRC[v], "data-variant": v, draggable: false, style: MARK_SIZE };
-  if (testid) own2["data-testid"] = testid;
-  return decorative ? { ...own2, alt: "", "aria-hidden": "true" } : { ...own2, alt: text2, role: "img", "aria-label": text2, title: text2 };
-}
-function HermesMark(props) {
-  return jsx15("img", markProps(props));
-}
-function hermesMarkElement(props) {
-  const el = document.createElement("img");
-  for (const [key, value] of Object.entries(markProps(props))) {
-    if (key === "className") el.className = value;
-    else if (key === "draggable") el.draggable = false;
-    else if (key === "style") Object.assign(el.style, value);
-    else el.setAttribute(key, value);
-  }
-  return el;
-}
-var HERMES_MARK_CSS = `
-.fw-hmark{--fw-hmark-s:var(--fw-hmark,.875rem);display:block;flex:none;box-sizing:border-box;width:var(--fw-hmark-s);height:var(--fw-hmark-s);min-width:0;max-width:none;margin:0;padding:0;border:0;object-fit:contain;user-select:none;-webkit-user-drag:none;pointer-events:auto}
 `;
 
 // desktop/film-suite/src/shared/ui/styles/workstation.js
@@ -52976,7 +57656,7 @@ var FIM_CSS = `
 .fim-model-fam{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 8px;margin-left:-8px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--ui-text-primary);font:inherit;font-size:var(--fw-fs-title,.875rem);font-weight:600;cursor:pointer;white-space:nowrap}
 .fim-model-fam:hover,.fim-model-fam[aria-expanded=true]{border-color:var(--fim-edge);background:var(--fw-track)}
 .fim-model-line{flex:1 1 auto;min-width:0;font-size:var(--fw-fs,.75rem);color:var(--ui-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fim-model-health{margin:0;min-width:0;font-size:var(--fw-fs,.75rem);color:var(--ui-red,#e75e78);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fim-model-health{margin:0;min-width:0;font-size:var(--fw-fs,.75rem);color:var(--ui-red,#e75e78);white-space:normal;overflow-wrap:anywhere}
 .fim-model-dot{flex:0 0 auto;position:relative;width:24px;height:24px;margin:0 2px;padding:0;border:0;border-radius:4px;background:transparent;cursor:default}
 .fim-model-dot::after{content:'';position:absolute;left:8px;top:8px;width:8px;height:8px;border-radius:50%;background:transparent}
 .fim-model-dot[data-state=unchecked]::after,.fim-model-dot[data-state=unknown]::after{background:var(--fw-warn,#c08532)}
@@ -53132,8 +57812,8 @@ function audioBarLines(bars, viewStart, viewEnd, width) {
   const list = (bars || []).map((time, index) => ({ time, index })).filter((b) => Number.isFinite(b.time));
   const span2 = viewEnd - viewStart;
   if (list.length < 2 || !(width > 0) || !(span2 > 0)) return list.filter((b) => b.time >= viewStart && b.time <= viewEnd).map((b) => b.time);
-  const px = (t2) => (t2 - viewStart) / span2 * width;
-  return audioThin(list, viewStart, viewEnd, (a, b) => px(b.time) - px(a.time) >= AUDIO_BAR_MIN_PX - 1e-9).map((b) => b.time);
+  const px2 = (t2) => (t2 - viewStart) / span2 * width;
+  return audioThin(list, viewStart, viewEnd, (a, b) => px2(b.time) - px2(a.time) >= AUDIO_BAR_MIN_PX - 1e-9).map((b) => b.time);
 }
 var audioBeatsShown = (beatGap) => beatGap >= AUDIO_BEAT_MIN_PX;
 function audioBarNumbers(bars, viewStart, viewEnd, width, textWidth = (n) => 7 * String(n).length, barOne = null) {
@@ -53149,12 +57829,12 @@ function audioBarNumbers(bars, viewStart, viewEnd, width, textWidth = (n) => 7 *
   const list = from.map((time, index) => ({ time, index, n: index + 1 }));
   const span2 = viewEnd - viewStart;
   if (!list.length || !(width > 0) || !(span2 > 0)) return [];
-  const px = (t2) => (t2 - viewStart) / span2 * width;
-  const room2 = list.filter((b) => px(b.time) <= width - AUDIO_BAR_NUM_PX);
+  const px2 = (t2) => (t2 - viewStart) / span2 * width;
+  const room2 = list.filter((b) => px2(b.time) <= width - AUDIO_BAR_NUM_PX);
   return audioThin(room2, viewStart, viewEnd, (a, b) => {
-    const d = px(b.time) - px(a.time);
+    const d = px2(b.time) - px2(a.time);
     return d >= AUDIO_BAR_GAP_PX - 1e-9 && d - textWidth(a.n) >= 8 - 1e-9;
-  }).map((b) => ({ n: b.n, x: px(b.time), t: b.time }));
+  }).map((b) => ({ n: b.n, x: px2(b.time), t: b.time }));
 }
 function audioTicks(events, viewStart, viewEnd, width, maxH = 16) {
   const span2 = viewEnd - viewStart;
@@ -53832,12 +58512,12 @@ function SongMapRows({ source, approvedRoots, projectId: given = null, analyse, 
         role: "listitem",
         "data-testid": "smap-need-engine",
         "data-count": missing.length,
-        title: `Song engine (SongFormer) · ${missing.map((t2) => t2.name).join(" · ")}`,
+        title: `Song engine (SongFormer) · Needed by ${missing.length} lanes: ${missing.map((t2) => t2.name).join(" · ")}`,
         /* w18-aedit2 item 5 (owner Q1: no control without an action; the tooltip names the engine) */
         children: [
           jsx17(TrackHead, { id: "engine", name: "Song engine" }, "hd"),
           jsxs13("div", { className: "smap-lane smap-need-l", children: [
-            jsx17("span", { className: "smap-need-t", children: `${missing.length} lanes need the song engine` }, "t")
+            // w39-p2-detail2 (decided, rule 8): no sentence on the lane; which lanes need the engine is the row's tooltip.
           ] }, "l")
         ]
       }, "need") : null
@@ -54083,7 +58763,7 @@ function audioAnalysisSection({ source = "", engines, engine, engineHint, engine
     // Open while there is something to do here: before / during the analysis, or when the map could not be read.
     open: Boolean(timeOnly || analyseRunning || timing?.unavailable),
     // The engine that made the shown result, by name, with the fallback reason in its tooltip (was the Analysis row's mpro-engine fact).
-    value: analyseRunning ? `Analysing · ${analysePct} %` : timeOnly ? "none" : jsx19("span", { "data-testid": engineFact?.fallback ? "mpro-engine-fact" : void 0, title: engineFact?.fallback ? engineTitle : void 0, children: `${engineFact && engineFact.text ? engineFact.text : "Analysis"} · done` }),
+    value: analyseRunning ? `Analysing · ${analysePct} %` : timeOnly ? "none" : jsx19("span", { "data-testid": engineFact?.fallback ? "mpro-engine-fact" : void 0, title: engineFact?.fallback ? engineTitle : void 0, children: engineFact?.fallback ? "Beats · basic" : `${engineFact && engineFact.text ? engineFact.text : "Analysis"} · done` }),
     body: jsxs14("div", { className: "mti-an", "data-testid": "mpro-analyse-box", "data-state": analyseRunning ? "running" : timeOnly ? "none" : "done", children: [
       jsxs14("div", { className: "fw-prow", children: [
         jsx19("span", { className: "fw-lbl", children: "Model" }, "l"),
@@ -54715,8 +59395,8 @@ function MusicProPanel({
     if (!width) return { ticks: [], labels: [], bars: [] };
     if (audioRow) {
       const t2 = audioRulerTicks(viewStart, viewEnd, width);
-      const at = (time) => (time - viewStart) / (viewEnd - viewStart) * width;
-      const labels2 = musicProPlaceLabels(t2.major.map((m) => ({ ...m, x: at(m.time), width: musicProTextWidth(m.label) })), width);
+      const at2 = (time) => (time - viewStart) / (viewEnd - viewStart) * width;
+      const labels2 = musicProPlaceLabels(t2.major.map((m) => ({ ...m, x: at2(m.time), width: musicProTextWidth(m.label) })), width);
       return { ticks: [...t2.major.map((m) => ({ time: m.time, major: true })), ...t2.minor.map((time) => ({ time, major: false }))], labels: labels2, bars: [] };
     }
     const labelWidth = musicProTextWidth("0:00.000");
@@ -54814,7 +59494,7 @@ function MusicProPanel({
     else if (row2.offsetTop + row2.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = row2.offsetTop + row2.offsetHeight - list.clientHeight;
   }, [currentIndex, playing, rows.length]);
   const tempoTitle = tempo?.bpm == null ? "No tempo was detected for this track." : `Detected tempo · ${trust.word}${engineFact && !engineFact.fallback ? " · Beat This!" : ""}`;
-  const engineTitle = engineFact?.fallback ? engineFact.reason === "not_installed" ? "Beat This! is not installed · basic beats" : "Beat This! failed · basic beats" : "";
+  const engineTitle = engineFact?.fallback ? engineFact.reason === "not_installed" ? "Basic beats · Beat This! is not installed" : "Basic beats · Beat This! failed" : "";
   const meterText = Number.isInteger(timing?.beatsPerBar) ? `${timing.beatsPerBar} beats/bar` : meterStatus === "fixed" && meter?.value != null ? `${meter.value} beats/bar` : meterStatus === "ambiguous" && Number.isInteger(meter?.candidates?.[0]?.value) ? `${meter.candidates[0].value} beats/bar · unsure` : `Meter ${meterStatus === "none" ? "—" : meterStatus}`;
   const fieldInput = (field, label2, extra = {}) => jsx22("input", {
     className: "mpro-in",
@@ -56404,9 +61084,11 @@ function generationHealthReasonLabel(reasonCode) {
   return labels[reasonCode] || "Check unavailable";
 }
 var ENGINE_PART = /^[A-Za-z0-9_][A-Za-z0-9_.+-]{0,79}$/;
+var ENGINE_REASON = /^No ComfyUI answers at [0-9A-Za-z.:\[\]-]+(?: or [0-9A-Za-z.:\[\]-]+)*$|^FILM_SUITE_COMFY_URL is not a valid address$|^ComfyUI at [0-9A-Za-z.:\[\]-]+ answers; this model's check failed$/;
 function generationHealthLabel(health, targetUsesSamplingState, providerId, targetId) {
   if (!generationHealthMatches(health, providerId, targetId)) return "Checking…";
   if (health.state === "ready_static") return "Ready";
+  if (health.reason_code === "unreachable" && typeof health.reason === "string" && health.reason.length <= 160 && ENGINE_REASON.test(health.reason)) return health.reason;
   const part = typeof health.reason_detail === "string" && ENGINE_PART.test(health.reason_detail) ? health.reason_detail : "";
   if (part && (health.reason_code === "incompatible_node_schema" || health.reason_code === "missing_node")) {
     return `Engine update changed ${part.replace(".", " · ")}`;
@@ -57334,7 +62016,7 @@ function FshMediaItem({ wb, target, control, path, index, items, variant: varian
     setMenu(null);
     run();
   };
-  const remove2 = () => setList(items.filter((_, at) => at !== index));
+  const remove2 = () => setList(items.filter((_, at2) => at2 !== index));
   const mi = (testid, text2, run, extra = {}) => jsx25("button", { type: "button", role: "menuitem", className: cn7("fsm-mi", extra.danger && "is-danger"), "data-testid": testid, disabled: extra.disabled, onClick: act(run), children: text2 }, testid || text2);
   const entries = [
     max > 1 ? mi("fsh-slot-up", "Move earlier", () => move2(-1), { disabled: index === 0 }) : null,
@@ -57545,16 +62227,16 @@ function FshMediaSlots({ wb, target, providerLabel, ownerScope, takeOf = null })
   const frames = controls.filter((control) => (control.id === "first_frame" || control.id === "last_frame") && catalogMediaMax(control) === 1);
   const many = controls.filter((control) => catalogMediaMax(control) > 1);
   const lines = controls.filter((control) => !frames.includes(control) && !many.includes(control));
-  const pair = frames.length ? jsxs20("div", { className: "fsm-pair", children: frames.flatMap((control, at) => {
+  const pair = frames.length ? jsxs20("div", { className: "fsm-pair", children: frames.flatMap((control, at2) => {
     const items = media(control.id);
-    const side = at === 0 ? "fsm-a" : "fsm-b";
+    const side = at2 === 0 ? "fsm-a" : "fsm-b";
     const label2 = fsmLabel(target, control);
     const cell = items.length ? jsx25(FshMediaItem, { ...itemProps, control, path: items[0], index: 0, items, variant: "frame" }, "it") : jsxs20(MediaSlotTile, { type: "button", className: "fsm-empty", "data-testid": "fsh-slot-add", title: `Choose a picture for ${label2}`, "aria-label": `Choose a picture for ${label2}`, onClick: () => void wb.pickCatalogMedia(control.id), children: [
       jsx25(FwIcon, { name: "plus" }, "i"),
       jsx25("span", { children: busy2 === control.id ? "Preparing…" : CATALOG_KIND_HINTS[control.kind] || "" }, "t")
     ] }, "add");
     return [
-      at === 1 ? jsx25("span", { className: "fsm-arrow", "aria-hidden": "true", children: jsx25(FwIcon, { name: "arrow" }) }, "arrow") : null,
+      at2 === 1 ? jsx25("span", { className: "fsm-arrow", "aria-hidden": "true", children: jsx25(FwIcon, { name: "arrow" }) }, "arrow") : null,
       jsxs20("div", { className: "fsm-frame", ...slotAttrs(control, items), ...dropProps(control.id, () => control), children: [
         jsx25("span", { className: cn7("fsh-slot-name fsm-nm", side), children: label2 }, "n"),
         jsx25("div", { className: cn7("fsm-cell", side, over === control.id && "is-over"), children: cell }, "c"),
@@ -58596,8 +63278,7 @@ function useShootActions(ctx) {
     [ctx.note]
   );
   const revealMedia = useCallback((asset) => {
-    const desktop = bridge();
-    if (desktop && desktop.revealPath) void desktop.revealPath(asset.path);
+    void revealPath(asset.path);
   }, []);
   const applyMediaFile = useCallback(
     (action, asset) => {
@@ -58937,7 +63618,7 @@ function H3xControl({ control, value, values, setValue }) {
       min: range.min,
       max: range.max,
       step: control.step || 0.05,
-      title: `${control.label}: ${range.min} to ${range.max}${control.proof === "untested" ? " · Not proven" : ""}`,
+      title: `${control.label}: ${range.min} to ${range.max}${control.proof === "untested" ? " · No render on record" : ""}`,
       placeholder: numText(def),
       value: value === void 0 || value === null ? "" : String(value),
       onChange: (event) => setValue(control.id, event.target.value === "" ? void 0 : Number(event.target.value))
@@ -58955,8 +63636,8 @@ function H3xControl({ control, value, values, setValue }) {
           value: String(option.value),
           disabled: off,
           "data-proof": untested ? "untested" : "rendered",
-          title: off ? option.reason || "Unavailable" : void 0,
-          children: optionWord(option.value) + (untested ? " · Not proven" : "") + (off ? " · Unavailable" : "")
+          title: off ? option.reason || "Unavailable" : untested ? `${optionWord(option.value)} · No render on record` : void 0,
+          children: optionWord(option.value) + (off ? " · Unavailable" : "")
         }, String(option.value));
       })
     ] }));
@@ -61988,9 +66669,9 @@ function musicBeatHereTime(playhead, analysis) {
 function musicBeatHereBody(draftBody, currentBpm, playhead, analysis) {
   if (!draftBody || !draftBody.tempo || !draftBody.downbeat) return null;
   if (typeof currentBpm !== "number" || !Number.isFinite(currentBpm)) return null;
-  const at = musicBeatHereTime(playhead, analysis);
-  if (!at) return null;
-  return { body: { ...draftBody, tempo: fixedTempo(draftBody.tempo, round3(currentBpm)), downbeat: { mode: "anchor", anchor_seconds: at.time, confirmed_by_artist: true } }, at };
+  const at2 = musicBeatHereTime(playhead, analysis);
+  if (!at2) return null;
+  return { body: { ...draftBody, tempo: fixedTempo(draftBody.tempo, round3(currentBpm)), downbeat: { mode: "anchor", anchor_seconds: at2.time, confirmed_by_artist: true } }, at: at2 };
 }
 
 // desktop/film-suite/src/music/timing-ui/music-timing-inspector.js
@@ -65706,10 +70387,14 @@ function promptStart(text2) {
   const value = String(text2 || "").split(/\s+/).filter(Boolean).join(" ");
   if (value.length <= RUN_PROMPT_MAX) return value;
   const cut2 = value.slice(0, RUN_PROMPT_MAX);
-  const at = cut2.lastIndexOf(" ");
-  return (at > 16 ? cut2.slice(0, at) : cut2).replace(/[\s,.;:·-]+$/, "") + "…";
+  const at2 = cut2.lastIndexOf(" ");
+  return (at2 > 16 ? cut2.slice(0, at2) : cut2).replace(/[\s,.;:·-]+$/, "") + "…";
 }
+var IMPORT_TARGET_ID = "filmsuite-import-v1";
+var isImportJob = (job) => Boolean(job) && (job.targetId === IMPORT_TARGET_ID || job.module === "image" && job.modelLabel === "Import");
+var importName = (label2) => String(label2 || "").split(/[\\/]/).pop().replace(/\.[A-Za-z0-9]{1,5}$/, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 function jobRunName(job) {
+  if (isImportJob(job)) return `Import · ${importName(job.label) || "picture"}`;
   if (!job || job.module !== "image" || !job.modelLabel) return null;
   return [job.modelLabel, job.runSize > 1 ? `×${job.runSize}` : "", promptStart(job.label)].filter(Boolean).join(" · ");
 }
@@ -65764,8 +70449,8 @@ function mergeRefusedTakes(listed = []) {
   const merged = local.map((row2) => {
     const take = held.find((job) => job && job.id === row2.jobId) || {};
     const label2 = jobLabelOf(take.prompt);
-    const at = Number(take.startedAt) || 0;
-    const hit2 = listed.find((job) => job && !used.has(job.jobId) && job.module === "shoot" && job.rawState === "refused" && /^refused_/.test(job.jobId) && label2 && job.label === label2 && (!job.targetId || !row2.targetId || job.targetId === row2.targetId) && (!at || !job.createdAt || Math.abs(job.createdAt - at) <= REFUSAL_MATCH_MS));
+    const at2 = Number(take.startedAt) || 0;
+    const hit2 = listed.find((job) => job && !used.has(job.jobId) && job.module === "shoot" && job.rawState === "refused" && /^refused_/.test(job.jobId) && label2 && job.label === label2 && (!job.targetId || !row2.targetId || job.targetId === row2.targetId) && (!at2 || !job.createdAt || Math.abs(job.createdAt - at2) <= REFUSAL_MATCH_MS));
     if (!hit2) return row2;
     used.add(hit2.jobId);
     const reason = hit2.reason || hit2.error || row2.reason;
@@ -65818,7 +70503,7 @@ function FilmSuiteJobRow({ job, now, onCancel, moduleLabel = JOB_MODULE_LABEL, c
   const takeLabels = useValue9($shootTakeLabels);
   const label2 = jobDisplayLabel(job, takeLabels);
   const runName = jobRunName(job);
-  const namedId = job.targetId && job.workflowLabel && job.workflowLabel !== job.targetId ? job.targetId : null;
+  const namedId = !isImportJob(job) && job.targetId && job.workflowLabel && job.workflowLabel !== job.targetId ? job.targetId : null;
   const active = job.state === "running" || job.state === "queued";
   const uncollected = job.state === "done" && job.module !== "shoot" && (job.rawState === "ready" || job.rawState === "ingested");
   let since = job.startedAt || (job.state === "running" ? null : job.createdAt);
@@ -65983,7 +70668,7 @@ function filmSentence(code2) {
   return "The picture could not be added to the film.";
 }
 var filmDetails = (reply) => reply && reply.error ? `${reply.error.code}: ${reply.error.message}` : reply ? [reply.kind, reply.status, reply.reason_code].filter(Boolean).join(" · ") : "no reply";
-var filmClock = (at) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+var filmClock = (at2) => new Date(at2).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 async function filmCurrentRevision(projectId) {
   const book = filmBook(projectId);
   const known = Object.values(book.pics).find((entry2) => entry2 && entry2.binding_id && entry2.film_reference_id);
@@ -66082,9 +70767,9 @@ async function filmConfirm(projectId, key) {
       fail2(last2 && !last2.error ? last2 : executed);
       return;
     }
-    const at = Date.now();
-    filmBookWrite(projectId, (book) => ({ revision: receipt.committed_revision, open: null, pics: { ...book.pics, [key]: { binding_id: receipt.result.binding_id, film_reference_id: receipt.target_scope.film_reference_id, at } } }));
-    filmFlowSet(key, { phase: "added", preview: null, at });
+    const at2 = Date.now();
+    filmBookWrite(projectId, (book) => ({ revision: receipt.committed_revision, open: null, pics: { ...book.pics, [key]: { binding_id: receipt.result.binding_id, film_reference_id: receipt.target_scope.film_reference_id, at: at2 } } }));
+    filmFlowSet(key, { phase: "added", preview: null, at: at2 });
   } finally {
     filmBusy.delete(key);
   }
@@ -66549,21 +71234,21 @@ function buildTimelineModel(state, sources = []) {
     if (track.kind !== "video") continue;
     const storyline2 = track.role === "storyline";
     const items = [];
-    let at = 0;
+    let at2 = 0;
     for (const raw of Array.isArray(track.items) ? track.items : []) {
       if (!isObj(raw)) continue;
       if (raw.type === "gap") {
         const duration = Math.max(1, int0(raw.duration_frames));
         if (storyline2) {
-          items.push({ id: String(raw.id || ""), type: "gap", start: at, duration, end: at + duration });
-          at += duration;
+          items.push({ id: String(raw.id || ""), type: "gap", start: at2, duration, end: at2 + duration });
+          at2 += duration;
         }
         continue;
       }
       if (raw.type !== "clip") continue;
-      const start = storyline2 ? at : int0(raw.record_start_frame);
+      const start = storyline2 ? at2 : int0(raw.record_start_frame);
       const item = clipItem(raw, start, rate, facts);
-      if (storyline2) at = item.end;
+      if (storyline2) at2 = item.end;
       items.push(item);
     }
     if (!storyline2) items.sort((a, b) => a.start - b.start);
@@ -66746,18 +71431,30 @@ function describeChange2(beforeModel, afterModel) {
   };
   const a = index(beforeModel), b = index(afterModel);
   const lines = [], ids = /* @__PURE__ */ new Set();
+  const before = new Set([...a.values()].map((c) => c.track + "\0" + c.label));
+  const added = /* @__PURE__ */ new Map();
+  for (const [id, clip3] of b) if (!a.has(id)) {
+    const k = clip3.track + "\0" + clip3.label;
+    if (!added.has(k)) added.set(k, { clip: clip3, n: 0, at: lines.length });
+    added.get(k).n += 1;
+  }
+  const said = /* @__PURE__ */ new Set();
   for (const [id, clip3] of b) {
     const old = a.get(id);
     if (!old) {
-      lines.push(`${clip3.label} added on ${clip3.track}`);
       ids.add(id);
+      const k = clip3.track + "\0" + clip3.label;
+      if (said.has(k)) continue;
+      said.add(k);
+      const n = added.get(k).n;
+      lines.push(before.has(k) ? `${clip3.label} split into ${n + 1} pieces on ${clip3.track}` : n > 1 ? `${clip3.label} added ${n} times on ${clip3.track}` : `${clip3.label} added on ${clip3.track}`);
       continue;
     }
     const parts = [];
     if (old.duration !== clip3.duration) parts.push(`${old.duration} f → ${clip3.duration} f`);
-    if (old.start !== clip3.start) parts.push(`starts ${old.start} → ${clip3.start}`);
+    if (old.start !== clip3.start) parts.push(`starts ${old.start} f → ${clip3.start} f`);
     if (old.ref !== clip3.ref) parts.push("other take");
-    if (old.sourceIn !== clip3.sourceIn) parts.push(`in ${old.sourceIn} → ${clip3.sourceIn}`);
+    if (old.sourceIn !== clip3.sourceIn) parts.push(`in ${old.sourceIn} f → ${clip3.sourceIn} f`);
     if (old.enabled !== clip3.enabled) parts.push(clip3.enabled ? "on" : "off");
     if (parts.length) {
       lines.push(`${clip3.label} ${parts.join(", ")}`);
@@ -66787,8 +71484,8 @@ function decimal(value) {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const m = NUMBER_RE.exec(String(value));
   if (!m) return null;
-  const [, sign, whole2, fraction2 = "", exponent = "0"] = m;
-  let p = big2(whole2 + fraction2) * (sign ? -1n : 1n), q = 10n ** big2(fraction2.length);
+  const [, sign2, whole2, fraction2 = "", exponent = "0"] = m;
+  let p = big2(whole2 + fraction2) * (sign2 ? -1n : 1n), q = 10n ** big2(fraction2.length);
   const shift2 = Number(exponent);
   if (shift2 >= 0) p *= 10n ** big2(shift2);
   else q *= 10n ** big2(-shift2);
@@ -67532,7 +72229,7 @@ var FIM_PROMPT_OPEN_PX = 340;
 var FIM_PROMPT_MIN_PX = 62;
 var FIM_PROMPT_USER_MAX_PX = 720;
 var FIM_PROMPT_H_KEY = "filmSuite.image.promptHeight";
-var fimPromptClamp = (px) => Math.round(Math.min(FIM_PROMPT_USER_MAX_PX, Math.max(FIM_PROMPT_MIN_PX, Number(px) || FIM_PROMPT_MIN_PX)));
+var fimPromptClamp = (px2) => Math.round(Math.min(FIM_PROMPT_USER_MAX_PX, Math.max(FIM_PROMPT_MIN_PX, Number(px2) || FIM_PROMPT_MIN_PX)));
 var imageVariantRunnable = (variant2) => Boolean(variant2 && (variant2.suite_targets || []).length && (!variant2.health || variant2.health.selectable !== false) && (!variant2.workflow || variant2.workflow.availability === "runnable" && (variant2.workflow.capabilities?.create || variant2.workflow.capabilities?.edit)));
 var IMAGE_PRESET_IDS = ["turbo", "raw"];
 var IMAGE_FILE_ROLE_LABEL = {
@@ -67731,8 +72428,12 @@ function imageModelView(modelCatalog, state, profile) {
   const missing = (Array.isArray(h.missing_files) ? h.missing_files : []).map((text2) => String(text2).split(" | ").join(" or "));
   const missingParts = Array.isArray(h.missing_classes) ? h.missing_classes.map((text2) => String(text2).split(" | ").join(" or ")) : [];
   let health;
-  if (h.state === "ready") health = { state: "ready", text: "Ready", title: "Every file and node of this preset is in place" };
-  else if (h.state === "missing" && missing.length) health = { state: "missing", text: `Missing: ${missing.join(", ")}`, title: `Missing files: ${missing.join(", ")}${missingParts.length ? ` · missing nodes: ${missingParts.join(", ")}` : ""}` };
+  const engine = modelCatalog && modelCatalog.engine && typeof modelCatalog.engine === "object" ? modelCatalog.engine : null;
+  const engineDown = engine && engine.reachable === false && typeof engine.reason === "string" && engine.reason.length <= 160 ? engine.reason : "";
+  const filesLine = missing.length ? `Missing ${missing.length === 1 ? "file" : `${missing.length} files`}: ${missing.join(", ")}` : "";
+  if (engineDown) health = { state: "missing", text: engineDown, title: [engineDown, filesLine].filter(Boolean).join(" · "), files: missing };
+  else if (h.state === "ready") health = { state: "ready", text: "Ready", title: "Every file and node of this preset is in place" };
+  else if (h.state === "missing" && missing.length) health = { state: "missing", text: filesLine, title: `${filesLine}${missingParts.length ? ` · missing nodes: ${missingParts.join(", ")}` : ""}`, files: missing };
   else if (h.state === "missing") health = { state: "missing", text: `Missing nodes: ${missingParts.join(", ")}`, title: `Missing nodes: ${missingParts.join(", ")}` };
   else health = { state: "unchecked", text: "Not checked", title: "Files present; nodes are checked when the image engine runs" };
   const presetLabel = (variant2.presets.find((item) => item.id === presetId) || variant2.presets[0] || { label: variant2.label }).label;
@@ -67760,7 +72461,8 @@ function imageFamilyRows(modelCatalog) {
       reason = why || "Coming next: not in the Suite";
     }
     const files = missing.length ? `Missing for ${missingFor.join(", ")}: ${missing.slice(0, 2).join(", ")}${missing.length > 2 ? ` +${missing.length - 2} more` : ""}` : family.variants.some((variant2) => variant2.health && variant2.health.state === "unchecked") ? "Files in place" : "Files ready";
-    return { id: family.id, label: family.label, kind: family.kind, runnable, reason, variants, files, missing, filesTitle: missing.length ? `Missing files: ${missing.join(", ")}` : files };
+    const note = runnable ? family.variants.map((variant2) => imageVariantRunnable(variant2) && variant2.evidence && variant2.evidence.state === "unproven" ? variant2.evidence.reason : "").find(Boolean) || "" : "";
+    return { id: family.id, label: family.label, kind: family.kind, runnable, reason, note, variants, files, missing, filesTitle: missing.length ? `Missing files: ${missing.join(", ")}` : files };
   });
 }
 
@@ -67957,7 +72659,7 @@ function FimModelHeader({ modelCatalog, state, profile, onPreset, onRecheck, spe
     "aria-selected": row2.id === currentFamily,
     "aria-pressed": row2.id === currentFamily,
     disabled: !row2.runnable,
-    title: row2.runnable ? `${row2.label} · ${row2.variants}${row2.missing.length ? ` · missing: ${row2.missing.join(", ")}` : ""}` : `${row2.label} cannot be picked: ${row2.reason}${row2.missing.length && !row2.reason.startsWith("Missing model files") ? ` · Missing: ${row2.missing.join(", ")}` : ""}`,
+    title: row2.runnable ? `${row2.label} · ${row2.variants}${row2.note ? ` · ${row2.note}` : ""}${row2.missing.length ? ` · missing: ${row2.missing.join(", ")}` : ""}` : `${row2.label} cannot be picked: ${row2.reason}${row2.missing.length && !row2.reason.startsWith("Missing model files") ? ` · Missing: ${row2.missing.join(", ")}` : ""}`,
     "data-reason": row2.runnable ? void 0 : row2.reason,
     onClick: () => pick(row2),
     children: [
@@ -68060,7 +72762,16 @@ var fimSpecDiff = (spec, current2) => {
   return out;
 };
 var fimSpecLine = (spec) => spec?.controls ? `${spec.target_id} · ${spec.width} × ${spec.height}` : spec ? [spec.profile === "raw" ? "Raw" : "Turbo", `${spec.steps} steps`, `cfg ${fimNumberText(spec.cfg)}`, `seed ${spec.seed}`].join(" · ") : "settings not recorded";
-function FimKeepToggle({ keptAs, disabled, busy: busy2, onKeep, small = false, testid = "fim-keep" }) {
+function FimKeepToggle({ keptAs, disabled, busy: busy2, onKeep, onUnkeep = null, small = false, testid = "fim-keep", what = "picture" }) {
+  if (keptAs && onUnkeep) {
+    return jsxs34("button", { type: "button", className: cn15("fim-keep fw-b is-kept", small && "is-small"), "data-testid": testid, "aria-pressed": "true", "aria-keyshortcuts": "K", title: "Kept · Unkeep (K)", onClick: (event) => {
+      if (busy2) {
+        event.preventDefault();
+        return;
+      }
+      onUnkeep(event);
+    }, children: [jsx40("span", { "aria-hidden": "true", children: "★" }, "s"), " Kept"] });
+  }
   if (keptAs) {
     return jsxs34("span", { className: cn15("fim-keep is-kept", small && "is-small"), role: "status", "data-testid": testid, title: `Kept as “${keptAs}”`, children: [jsx40("span", { "aria-hidden": "true", children: "★" }, "s"), " Kept"] });
   }
@@ -68071,7 +72782,7 @@ function FimKeepToggle({ keptAs, disabled, busy: busy2, onKeep, small = false, t
       return;
     }
     onKeep(event);
-  }, title: busy2 ? "Keep · Keeping this picture" : disabled ? "Keep · Nothing finished to keep" : "Keep this picture in the project", children: [jsx40("span", { "aria-hidden": "true", children: "☆" }, "s"), busy2 ? " Keeping…" : " Keep"] });
+  }, "aria-pressed": onUnkeep ? "false" : void 0, "aria-keyshortcuts": onUnkeep ? "K" : void 0, title: busy2 ? `Keep · Keeping this ${what}` : disabled ? typeof disabled === "string" ? `Keep · ${disabled}` : "Keep · Nothing finished to keep" : onUnkeep ? `Keep this ${what} (K)` : "Keep this picture in the project", children: [jsx40("span", { "aria-hidden": "true", children: "☆" }, "s"), busy2 ? " Keeping…" : " Keep"] });
 }
 function FimKeptBadge({ className }) {
   return jsx40("span", { className: cn15("fim-star", className), role: "img", "aria-label": "Kept", title: "Kept", children: "★" });
@@ -68458,7 +73169,7 @@ function FwMinimap({ src, natW, natH, view, box, onView }) {
     jsx42("div", { className: "fw-mini-view", "data-testid": "fw-nav-view", style: { left: vis.x0 / natW * 100 + "%", top: vis.y0 / natH * 100 + "%", width: (vis.x1 - vis.x0) / natW * 100 + "%", height: (vis.y1 - vis.y0) / natH * 100 + "%" } }, "view")
   ] });
 }
-function FwZoomMenu({ at, checked, onPick, onClose }) {
+function FwZoomMenu({ at: at2, checked, onPick, onClose }) {
   const listRef = useRef(null);
   useLayoutEffect(() => {
     const list = listRef.current;
@@ -68480,7 +73191,7 @@ function FwZoomMenu({ at, checked, onPick, onClose }) {
       role: "menu",
       "aria-label": "Zoom presets",
       "data-testid": "fw-zoom-menu",
-      style: { left: at.left + "px", top: at.top + "px" },
+      style: { left: at2.left + "px", top: at2.top + "px" },
       onKeyDown: (event) => {
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault();
@@ -68560,33 +73271,33 @@ function geomFit(g, W2, H2, c) {
   const [w, h] = geomDims(g, W2, H2), b = c || { x: 0, y: 0, w: 1, h: 1 }, pad = padOf(g);
   const t2 = (g && g.angle || 0) * Math.PI / 180, co = Math.cos(t2), si = Math.sin(t2), ac = Math.abs(co), as = Math.abs(si);
   const a = b.w * w / 2, bb = b.h * h / 2;
-  const sOf = (px2, py2) => Math.min(1, (w / 2 - pad - Math.abs(co * px2 + si * py2)) / (a * ac + bb * as), (h / 2 - pad - Math.abs(-si * px2 + co * py2)) / (a * as + bb * ac), (w / 2 - Math.abs(px2)) / a, (h / 2 - Math.abs(py2)) / bb);
-  let px = (b.x + b.w / 2) * w - w / 2, py = (b.y + b.h / 2) * h - h / 2, s = sOf(px, py);
+  const sOf = (px3, py3) => Math.min(1, (w / 2 - pad - Math.abs(co * px3 + si * py3)) / (a * ac + bb * as), (h / 2 - pad - Math.abs(-si * px3 + co * py3)) / (a * as + bb * ac), (w / 2 - Math.abs(px3)) / a, (h / 2 - Math.abs(py3)) / bb);
+  let px2 = (b.x + b.w / 2) * w - w / 2, py2 = (b.y + b.h / 2) * h - h / 2, s = sOf(px2, py2);
   const s0 = sOf(0, 0);
   if (s < s0 / 2) {
     let lo = 0, hi = 1;
     for (let i2 = 0; i2 < 24; i2++) {
       const k = (lo + hi) / 2;
-      if (sOf(px * k, py * k) >= s0 / 2) lo = k;
+      if (sOf(px2 * k, py2 * k) >= s0 / 2) lo = k;
       else hi = k;
     }
-    px *= lo;
-    py *= lo;
-    s = sOf(px, py);
+    px2 *= lo;
+    py2 *= lo;
+    s = sOf(px2, py2);
   }
-  return { x: (px - s * a + w / 2) / w, y: (py - s * bb + h / 2) / h, w: 2 * s * a / w, h: 2 * s * bb / h };
+  return { x: (px2 - s * a + w / 2) / w, y: (py2 - s * bb + h / 2) / h, w: 2 * s * a / w, h: 2 * s * bb / h };
 }
 function geomClamp(g, W2, H2, c0, c1) {
   if (!g || !g.angle || geomInside(g, W2, H2, c1)) return c1;
   if (!c0 || !geomInside(g, W2, H2, c0)) return geomFit(g, W2, H2, c1);
-  const at = (k) => ({ x: c0.x + (c1.x - c0.x) * k, y: c0.y + (c1.y - c0.y) * k, w: c0.w + (c1.w - c0.w) * k, h: c0.h + (c1.h - c0.h) * k });
+  const at2 = (k) => ({ x: c0.x + (c1.x - c0.x) * k, y: c0.y + (c1.y - c0.y) * k, w: c0.w + (c1.w - c0.w) * k, h: c0.h + (c1.h - c0.h) * k });
   let lo = 0, hi = 1;
   for (let i2 = 0; i2 < 24; i2++) {
     const k = (lo + hi) / 2;
-    if (geomInside(g, W2, H2, at(k))) lo = k;
+    if (geomInside(g, W2, H2, at2(k))) lo = k;
     else hi = k;
   }
-  return at(lo);
+  return at2(lo);
 }
 function geomStraighten(angle0, x0, y0, x1, y1) {
   let p = Math.atan2(y1 - y0, x1 - x0) * 180 / Math.PI;
@@ -68663,8 +73374,8 @@ function cropBoxDrag(b, id, dx, dy, ratio, B, mw, mh) {
   } else if (id.length === 2) {
     const sx = id.includes("w") ? -1 : 1, sy = id.includes("n") ? -1 : 1;
     const ax = sx < 0 ? x1 : x0, ay = sy < 0 ? y1 : y0;
-    const px = (sx < 0 ? x0 : x1) + dx, py = (sy < 0 ? y0 : y1) + dy;
-    let w = Math.max(mw, (px - ax) * sx), h = Math.max(mh, (py - ay) * sy);
+    const px2 = (sx < 0 ? x0 : x1) + dx, py2 = (sy < 0 ? y0 : y1) + dy;
+    let w = Math.max(mw, (px2 - ax) * sx), h = Math.max(mh, (py2 - ay) * sy);
     if (w / h > ratio) h = w / ratio;
     else w = h * ratio;
     const limW = sx > 0 ? B.x1 - ax : ax - B.x0, limH = sy > 0 ? B.y1 - ay : ay - B.y0;
@@ -70062,8 +74773,8 @@ function componentPlane(k, w, h, out, src) {
     const ax = k.a[0] * w / L, ay = k.a[1] * h / L, dx = k.b[0] * w / L - ax, dy = k.b[1] * h / L - ay;
     const len2 = Math.max(dx * dx + dy * dy, 1e-12);
     for (let y = 0, i2 = 0; y < h; y++) {
-      const py = (y + 0.5) / L - ay;
-      for (let x = 0; x < w; x++, i2++) out[i2] = 1 - smoothstep(0, 1, (((x + 0.5) / L - ax) * dx + py * dy) / len2);
+      const py2 = (y + 0.5) / L - ay;
+      for (let x = 0; x < w; x++, i2++) out[i2] = 1 - smoothstep(0, 1, (((x + 0.5) / L - ax) * dx + py2 * dy) / len2);
     }
   } else {
     const cx = k.c[0] * w / L, cy = k.c[1] * h / L, rad = -k.angle * Math.PI / 180, s = Math.sin(rad), co = Math.cos(rad);
@@ -70173,8 +74884,8 @@ var LAYER_CUTOUT = "cutout";
 var CUTOUT_FEATHER = { min: 0, max: 250, def: 0 };
 var CUTOUT_DENSITY = { min: 0, max: 100, def: 100 };
 var SHA = /^[0-9a-f]{64}$/;
-function featherBytes(m, w, h, px) {
-  const r = Math.max(1, Math.round(0.6 * px - 0.5)), a = Float32Array.from(m), t2 = new Float32Array(a.length);
+function featherBytes(m, w, h, px2) {
+  const r = Math.max(1, Math.round(0.6 * px2 - 0.5)), a = Float32Array.from(m), t2 = new Float32Array(a.length);
   const pass = (src, dst, len, lines, step2, line) => {
     for (let k = 0; k < lines; k++) {
       const o = k * line;
@@ -70228,8 +74939,8 @@ function cutoutAlpha(l, w, h) {
   return m;
 }
 var THUMBS = /* @__PURE__ */ new Map();
-function cutoutThumb(l, w, h, px = 48) {
-  const key = `${cutoutKey(l)}|${w}x${h}|${px}`;
+function cutoutThumb(l, w, h, px2 = 48) {
+  const key = `${cutoutKey(l)}|${w}x${h}|${px2}`;
   if (THUMBS.has(key)) return THUMBS.get(key);
   const m = cutoutAlpha(l, w, h);
   if (!m) return null;
@@ -70242,7 +74953,7 @@ function cutoutThumb(l, w, h, px = 48) {
   src.width = w;
   src.height = h;
   src.getContext("2d").putImageData(new ImageData(rgba, w, h), 0, 0);
-  const k = px / Math.max(w, h), out = document.createElement("canvas");
+  const k = px2 / Math.max(w, h), out = document.createElement("canvas");
   out.width = Math.max(1, Math.round(w * k));
   out.height = Math.max(1, Math.round(h * k));
   const g = out.getContext("2d");
@@ -70280,8 +74991,8 @@ function layerRead(raw) {
   const out = { id, edit: raw.edit, op, variants, variant: variant2, on: raw.on !== false, prompt: clean(raw.prompt, 400) };
   const target = clean(raw.target, 200);
   if (target) out.target = target;
-  const area = clean(raw.area, 60);
-  if (area) out.area = area;
+  const area2 = clean(raw.area, 60);
+  if (area2) out.area = area2;
   if (typeof raw.model === "string" && FAMILY.test(raw.model)) out.model = raw.model;
   if (typeof raw.src === "string" && /^[0-9a-f]{8}$/.test(raw.src)) out.src = raw.src;
   if (Number.isInteger(raw.seed) && raw.seed >= 0 && raw.seed <= Number.MAX_SAFE_INTEGER) out.seed = raw.seed;
@@ -70559,9 +75270,9 @@ function outboxGet(key) {
 function outboxPut(key, draft) {
   return storageKeep(EDITS_OUTBOX_KEY, { ...outboxAll(), [key]: draft }, (all) => Boolean(all && all[key] && all[key].at === draft.at));
 }
-function outboxDone(key, at) {
+function outboxDone(key, at2) {
   const all = outboxAll();
-  if (all[key] && all[key].at === at) {
+  if (all[key] && all[key].at === at2) {
     const next = { ...all };
     delete next[key];
     storageSet(EDITS_OUTBOX_KEY, next);
@@ -70606,9 +75317,9 @@ async function editsLoad(scope, sha2) {
 function editsSave(scope, sha2, item) {
   if (!scope || !SHA_RE.test(String(sha2))) return Promise.resolve(false);
   const key = keyOf(scope, sha2), k = entry(key);
-  const at = Math.max(Date.now(), (k.next && k.next.at || 0) + 1, (k.lastAt || 0) + 1);
-  k.lastAt = at;
-  const draft = { scope, sha: sha2, base: k.revision, develop: item.develop ?? null, history: item.history ?? null, at };
+  const at2 = Math.max(Date.now(), (k.next && k.next.at || 0) + 1, (k.lastAt || 0) + 1);
+  k.lastAt = at2;
+  const draft = { scope, sha: sha2, base: k.revision, develop: item.develop ?? null, history: item.history ?? null, at: at2 };
   k.local = outboxPut(key, draft);
   k.next = draft;
   return pump(scope, sha2);
@@ -70712,7 +75423,7 @@ async function maskZ(packed, n) {
   }
   return z;
 }
-async function entryBuild(sha2, d, rows, at) {
+async function entryBuild(sha2, d, rows, at2) {
   const devs = [], devIx = /* @__PURE__ */ new Map(), masks = [], maskIx = /* @__PURE__ */ new Map();
   const out = [];
   for (const row2 of rows) {
@@ -70733,19 +75444,19 @@ async function entryBuild(sha2, d, rows, at) {
     }
     out.push([String(row2.label || "").slice(0, HIST_LABEL_MAX), row2.kind === "develop" ? "d" : "s", di, mi]);
   }
-  const e = { schema: HIST_SCHEMA, sha: sha2, w: d.w, h: d.h, at, devs, masks, rows: out };
+  const e = { schema: HIST_SCHEMA, sha: sha2, w: d.w, h: d.h, at: at2, devs, masks, rows: out };
   e.sum = histSum(bodyOf(e));
   return e;
 }
 async function histFit(sha2, d) {
-  let rows = d.hist.slice(-(SEL_HISTORY_MAX + 1)), at = d.at - (d.hist.length - rows.length);
+  let rows = d.hist.slice(-(SEL_HISTORY_MAX + 1)), at2 = d.at - (d.hist.length - rows.length);
   for (; ; ) {
-    const e = await entryBuild(sha2, d, rows, at), chars = JSON.stringify(e).length;
+    const e = await entryBuild(sha2, d, rows, at2), chars = JSON.stringify(e).length;
     if (chars <= HIST_PICTURE_CHARS) return { e, chars, dropped: d.hist.length - rows.length };
-    if (at > 0) {
+    if (at2 > 0) {
       rows = rows.slice(1);
-      at -= 1;
-    } else if (rows.length - 1 > at) rows = rows.slice(0, -1);
+      at2 -= 1;
+    } else if (rows.length - 1 > at2) rows = rows.slice(0, -1);
     else return null;
   }
 }
@@ -70938,12 +75649,12 @@ function selRefine(base2, W2, H2, rgba, p, extra) {
   return { mask: m, band: band2 };
 }
 function selAgentState(doc2, tool, refining) {
-  const area = selAreaOf(doc2), box = doc2.mask ? selBBox(doc2.mask, doc2.w, doc2.h) : null;
+  const area2 = selAreaOf(doc2), box = doc2.mask ? selBBox(doc2.mask, doc2.w, doc2.h) : null;
   return {
-    has: area > 0,
+    has: area2 > 0,
     bounds: box ? { x: box[0], y: box[1], w: box[2], h: box[3] } : null,
-    area_px: area,
-    feathered: area > 0 && selStatsOf(doc2).soft > 0,
+    area_px: area2,
+    feathered: area2 > 0 && selStatsOf(doc2).soft > 0,
     tool: SEL_AGENT_TOOLS.includes(tool) ? tool : "move",
     refining: Boolean(refining),
     // A fingerprint of the mask bytes: the UI result and the agent result compare by it.
@@ -71000,10 +75711,10 @@ function selAgentApi(s, pickTool, toolNow) {
       const kind = SEL_AGENT_MODIFY[p.op];
       if (!kind) return refuse4("image_selection_op_unknown", `No selection op ${p.op}.`);
       if (!s.doc.mask) return refuse4("image_no_selection", `${SEL_MODIFY[kind].label} needs a selection.`);
-      const px = p.px == null ? s.modDefault(kind) : p.px;
-      if (!(Number.isInteger(px) && px >= 1 && px <= SEL_MODIFY[kind].max)) return refuse4("image_selection_px_invalid", `${SEL_MODIFY[kind].field} takes 1..${SEL_MODIFY[kind].max} px.`);
-      s.modApply(kind, px);
-      return done({ op: p.op, px }, `${SEL_MODIFY[kind].label} ${px} px`);
+      const px2 = p.px == null ? s.modDefault(kind) : p.px;
+      if (!(Number.isInteger(px2) && px2 >= 1 && px2 <= SEL_MODIFY[kind].max)) return refuse4("image_selection_px_invalid", `${SEL_MODIFY[kind].field} takes 1..${SEL_MODIFY[kind].max} px.`);
+      s.modApply(kind, px2);
+      return done({ op: p.op, px: px2 }, `${SEL_MODIFY[kind].label} ${px2} px`);
     },
     tool: (p) => {
       if (!SEL_AGENT_TOOLS.includes(p.tool)) return refuse4("image_tool_unknown", `No rail tool ${p.tool}.`);
@@ -71197,9 +75908,9 @@ function useImageSelection(ctx) {
     if (!modify || !selDoc || !selDoc.mask || !(modify.px >= 1)) return null;
     return SEL_MODIFY[modify.kind].run(selDoc.mask, selDoc.w, selDoc.h, modify.px);
   }, [modify && modify.kind, modify && modify.px, selDoc ? selDoc.key + ":" + selDoc.ver : ""]);
-  const modCommit = (kind, px, mask) => {
-    storageSet(FW_MOD_KEY, { ...storageGet(FW_MOD_KEY, {}) || {}, [kind]: px });
-    selDo(mask, `${SEL_MODIFY[kind].label} ${px} px`);
+  const modCommit = (kind, px2, mask) => {
+    storageSet(FW_MOD_KEY, { ...storageGet(FW_MOD_KEY, {}) || {}, [kind]: px2 });
+    selDo(mask, `${SEL_MODIFY[kind].label} ${px2} px`);
   };
   const modOk = () => {
     if (!modify || !modMask) {
@@ -71210,10 +75921,10 @@ function useImageSelection(ctx) {
     setModify(null);
   };
   const modDefault = (kind) => (storageGet(FW_MOD_KEY, {}) || {})[kind] || SEL_MODIFY[kind].px;
-  const modApply = (kind, px) => {
+  const modApply = (kind, px2) => {
     if (selDoc && selDoc.mask) {
       setModify(null);
-      modCommit(kind, px, SEL_MODIFY[kind].run(selDoc.mask, selDoc.w, selDoc.h, px));
+      modCommit(kind, px2, SEL_MODIFY[kind].run(selDoc.mask, selDoc.w, selDoc.h, px2));
     }
   };
   const [xform, setXform] = useState(null);
@@ -71596,8 +76307,8 @@ function fnv32(text2) {
   return h.toString(16).padStart(8, "0");
 }
 function lowerOf(layers, id = 0) {
-  const at = id ? layers.findIndex((l) => l.id === id) : -1;
-  return layers.slice(0, at < 0 ? layers.length : at).filter((l) => l.on && l.op !== "cutout" && l.edit);
+  const at2 = id ? layers.findIndex((l) => l.id === id) : -1;
+  return layers.slice(0, at2 < 0 ? layers.length : at2).filter((l) => l.on && l.op !== "cutout" && l.edit);
 }
 var layerSrc = (pictureJob, lower) => fnv32(`${pictureJob || ""}|${lower.map((l) => `${l.edit}|${l.variant}`).join(",")}`);
 var layerStale = (layers, l, pictureJob) => l.op !== "cutout" && Boolean(l.src) && layerSrc(pictureJob, lowerOf(layers, l.id)) !== l.src;
@@ -71731,7 +76442,7 @@ function FwLiveGraphs({ live: live2 }) {
   const yOf = (v, max) => r1(H2 - pad - (max > 0 ? v / max : 0) * (H2 - 2 * pad));
   const final = Boolean(live2 && live2.final);
   const stepNow = !final && live2 && Number.isInteger(live2.step) && live2.step > 0 ? live2.step : 0;
-  const at = final ? r1(sx(total)) : stepNow ? r1(sx(stepNow - 1)) : null;
+  const at2 = final ? r1(sx(total)) : stepNow ? r1(sx(stepNow - 1)) : null;
   const sigAt = final ? sigmas[total] != null ? sigmas[total] : null : stepNow && sigmas[stepNow - 1] != null ? sigmas[stepNow - 1] : null;
   const delAt = !final && stepNow && deltas[stepNow - 1] != null ? deltas[stepNow - 1] : null;
   const timed = times.map((v, i2) => ({ v, i: i2 })).filter((t2) => t2.v != null);
@@ -71751,9 +76462,9 @@ function FwLiveGraphs({ live: live2 }) {
       jsxs38("svg", { viewBox: `0 0 ${W2} ${H2}`, preserveAspectRatio: "none", role: "img", "aria-label": `Sigma and delta per step, ${deltas.length} of ${total} steps`, children: [
         sigmas.length ? jsx45("path", { d: path(sigmas, 0, sMax), className: "fw-g-sigma", "data-testid": "fw-g-sigma", "data-points": sigmas.length }, "s") : null,
         deltas.length ? jsx45("path", { d: path(deltas, 0, dMax), className: "fw-g-delta", "data-testid": "fw-g-delta", "data-points": deltas.filter((v) => v != null).length }, "d") : null,
-        at != null ? jsx45("line", { x1: at, x2: at, y1: 0, y2: H2, className: "fw-g-at", "data-testid": "fw-g-at" }, "a") : null,
-        at != null && sigAt != null ? jsx45("line", { x1: at, x2: at, y1: yOf(sigAt, sMax), y2: yOf(sigAt, sMax), className: "fw-g-dot is-sigma", "data-testid": "fw-g-dot-sigma", "data-value": sigAt }, "ds") : null,
-        at != null && delAt != null ? jsx45("line", { x1: at, x2: at, y1: yOf(delAt, dMax), y2: yOf(delAt, dMax), className: "fw-g-dot is-delta", "data-testid": "fw-g-dot-delta", "data-value": delAt }, "dd") : null
+        at2 != null ? jsx45("line", { x1: at2, x2: at2, y1: 0, y2: H2, className: "fw-g-at", "data-testid": "fw-g-at" }, "a") : null,
+        at2 != null && sigAt != null ? jsx45("line", { x1: at2, x2: at2, y1: yOf(sigAt, sMax), y2: yOf(sigAt, sMax), className: "fw-g-dot is-sigma", "data-testid": "fw-g-dot-sigma", "data-value": sigAt }, "ds") : null,
+        at2 != null && delAt != null ? jsx45("line", { x1: at2, x2: at2, y1: yOf(delAt, dMax), y2: yOf(delAt, dMax), className: "fw-g-dot is-delta", "data-testid": "fw-g-dot-delta", "data-value": delAt }, "dd") : null
       ] }, "svg")
     ] }, "sd"),
     jsxs38("figure", { className: "fw-graph", children: [
@@ -71815,11 +76526,11 @@ function useStepHistory({ ownerScope, jobId }) {
   const entry2 = jobId && ownerScope ? STEP_HISTORY_CACHE.get(ownerScope + "|" + jobId) || { state: "loading" } : { state: "idle" };
   const hist = entry2.state === "ok" ? entry2.data : null;
   const list = hist ? hist.frames : [];
-  const at = scrub && scrub.jobId === jobId && hist ? Math.max(0, Math.min(list.length - 1, scrub.i)) : -1;
-  const frame = at >= 0 ? list[at] : null;
+  const at2 = scrub && scrub.jobId === jobId && hist ? Math.max(0, Math.min(list.length - 1, scrub.i)) : -1;
+  const frame = at2 >= 0 ? list[at2] : null;
   useEffect(() => {
-    if (!hist || at < 0) return void 0;
-    const want = [at, at + 1, at - 1].filter((i2) => i2 >= 0 && i2 < list.length).map((i2) => list[i2].step);
+    if (!hist || at2 < 0) return void 0;
+    const want = [at2, at2 + 1, at2 - 1].filter((i2) => i2 >= 0 && i2 < list.length).map((i2) => list[i2].step);
     for (const step2 of want) {
       const map2 = frames.jobId === jobId ? frames.map : {};
       if (map2[step2]) continue;
@@ -71831,7 +76542,7 @@ function useStepHistory({ ownerScope, jobId }) {
       }, () => setFrames((cur) => cur.jobId === jobId ? { jobId, map: { ...cur.map, [step2]: "missing" } } : cur));
     }
     return void 0;
-  }, [jobId, at, hist]);
+  }, [jobId, at2, hist]);
   const map = frames.jobId === jobId ? frames.map : {};
   const ready = (v) => v && v !== "loading" && v !== "missing";
   const lastRef = useRef({ jobId: "", src: "", step: null });
@@ -71842,7 +76553,7 @@ function useStepHistory({ ownerScope, jobId }) {
     if (i2 >= list.length || i2 == null) setScrub(null);
     else setScrub({ jobId, i: Math.max(0, i2) });
   };
-  return { state: entry2.state, hist, list, at, frame, shown, label: stepLabel(hist, frame), go, back: () => setScrub(null), active: Boolean(frame) };
+  return { state: entry2.state, hist, list, at: at2, frame, shown, label: stepLabel(hist, frame), go, back: () => setScrub(null), active: Boolean(frame) };
 }
 function FwSwapImg({ src, holdSrc, alt, onDone }) {
   const [ready, setReady] = useState(holdSrc ? "" : src);
@@ -72333,9 +77044,9 @@ var LIGHT_PRESET = Object.fromEntries(LIGHT_DIRS.map((k) => [k, unit(RELIGHT_DIR
 var dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 var lightDirWord = (d) => d[2] < -0.2 ? "from behind" : LIGHT_DIRS.filter((k) => k !== "from behind").reduce((best, k) => dot(LIGHT_PRESET[k], d) > dot(LIGHT_PRESET[best], d) ? k : best, "from the front");
 var padDir = (x, y, behind) => {
-  const r = Math.hypot(x, y), k = r > 1 ? 1 / r : 1, px = x * k, py = y * k;
-  const z = Math.sqrt(Math.max(0.12, 1 - px * px - py * py)) * (behind ? -1 : 1);
-  return unit([px, py, z]);
+  const r = Math.hypot(x, y), k = r > 1 ? 1 / r : 1, px2 = x * k, py2 = y * k;
+  const z = Math.sqrt(Math.max(0.12, 1 - px2 * px2 - py2 * py2)) * (behind ? -1 : 1);
+  return unit([px2, py2, z]);
 };
 var sameDir = (a, b) => Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6 && Math.abs(a[2] - b[2]) < 1e-6;
 var r3 = (n) => Math.round(n * 1e3) / 1e3;
@@ -72635,22 +77346,22 @@ function compositeBuilder() {
     return out;
   };
 }
-async function rgbaPng(px, w, h) {
-  if (!px) return null;
+async function rgbaPng(px2, w, h) {
+  if (!px2) return null;
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
-  c.getContext("2d").putImageData(new ImageData(px instanceof Uint8ClampedArray ? px : new Uint8ClampedArray(px), w, h), 0, 0);
+  c.getContext("2d").putImageData(new ImageData(px2 instanceof Uint8ClampedArray ? px2 : new Uint8ClampedArray(px2), w, h), 0, 0);
   const blob2 = await new Promise((resolve) => c.toBlob(resolve, "image/png"));
   return blob2 ? new Uint8Array(await blob2.arrayBuffer()) : null;
 }
-async function compositeFramePng(px, W2, H2, crop) {
-  if (!px) return null;
+async function compositeFramePng(px2, W2, H2, crop) {
+  if (!px2) return null;
   const r = cropPx(crop, W2, H2) || { x: 0, y: 0, w: W2, h: H2 };
   const c = document.createElement("canvas");
   c.width = W2;
   c.height = H2;
-  c.getContext("2d").putImageData(new ImageData(px instanceof Uint8ClampedArray ? px : new Uint8ClampedArray(px), W2, H2), 0, 0);
+  c.getContext("2d").putImageData(new ImageData(px2 instanceof Uint8ClampedArray ? px2 : new Uint8ClampedArray(px2), W2, H2), 0, 0);
   const out = crop ? cropRender(c, W2, H2, crop) : c;
   const blob2 = await new Promise((resolve) => out.toBlob(resolve, "image/png"));
   return blob2 ? { bytes: new Uint8Array(await blob2.arrayBuffer()), w: r.w, h: r.h } : null;
@@ -72689,9 +77400,9 @@ async function readShape(scope, pictureJob, w, h) {
   try {
     const m = await maskJob(maskJobBody(scope, pictureJob, { mode: "background" }));
     if (m && m.state === "done" && !m.empty && m.mask && m.mask.png_b64) {
-      const px = await decodePng(m.mask.png_b64, gw, gh);
+      const px2 = await decodePng(m.mask.png_b64, gw, gh);
       subject = new Uint8Array(gw * gh);
-      for (let i2 = 0; i2 < gw * gh; i2++) subject[i2] = px[i2 * 4];
+      for (let i2 = 0; i2 < gw * gh; i2++) subject[i2] = px2[i2 * 4];
     }
   } catch {
     subject = null;
@@ -72762,8 +77473,8 @@ function useImageRelight({ on, doc: doc2, scope, pictureJob, getPixels }) {
     }
   };
   const basePng = async () => {
-    const px = doc2 ? lit(getPixels ? getPixels() : null) : null;
-    return px ? rgbaPng(px, doc2.w, doc2.h) : null;
+    const px2 = doc2 ? lit(getPixels ? getPixels() : null) : null;
+    return px2 ? rgbaPng(px2, doc2.w, doc2.h) : null;
   };
   const reading2 = Boolean(on && live2 && key && scope && (!shape || shape.state === "reading"));
   const waitWhy = reading2 ? "Reading the shape of the picture" : !lit0 ? "All lights off" : "";
@@ -72910,11 +77621,11 @@ var opMeasure = null;
 function opNamesOverflow(wrap2) {
   const seg = wrap2.querySelector('[data-testid="fw-gen-op"]'), bs = seg ? [...seg.querySelectorAll("button")] : [];
   if (!bs.length) return false;
-  const px = (v) => parseFloat(v) || 0, cs = getComputedStyle(bs[0]), ss = getComputedStyle(seg);
-  const pad = 12 + px(cs.borderLeftWidth) + px(cs.borderRightWidth);
+  const px2 = (v) => parseFloat(v) || 0, cs = getComputedStyle(bs[0]), ss = getComputedStyle(seg);
+  const pad = 12 + px2(cs.borderLeftWidth) + px2(cs.borderRightWidth);
   if (!opMeasure) opMeasure = document.createElement("canvas").getContext("2d");
   opMeasure.font = `600 ${cs.fontSize} ${cs.fontFamily}`;
-  const need = bs.reduce((n, b) => n + Math.ceil(opMeasure.measureText(b.textContent).width) + pad, 0) + (bs.length - 1) * px(ss.columnGap) + px(ss.paddingLeft) + px(ss.paddingRight) + px(ss.borderLeftWidth) + px(ss.borderRightWidth);
+  const need = bs.reduce((n, b) => n + Math.ceil(opMeasure.measureText(b.textContent).width) + pad, 0) + (bs.length - 1) * px2(ss.columnGap) + px2(ss.paddingLeft) + px2(ss.paddingRight) + px2(ss.borderLeftWidth) + px2(ss.borderRightWidth);
   seg.dataset.need = String(Math.ceil(need));
   return wrap2.clientWidth < need;
 }
@@ -73038,14 +77749,14 @@ var STATE_TEXT = { queued: "Waiting for the image engine…", running: "Renderin
 var TERMINAL2 = /* @__PURE__ */ new Set(["published", "failed", "cancelled", "quarantined"]);
 var AREA_SEL = "selection";
 var AREA_ALL = "all";
-var areaOf = (doc2, masks, area, getPixels) => {
+var areaOf = (doc2, masks, area2, getPixels) => {
   if (!doc2) return null;
-  if (area === AREA_ALL) return { mask: new Uint8Array(doc2.w * doc2.h).fill(255), name: "Whole picture" };
-  if (area === AREA_SEL || area === void 0 || area === null) return doc2.mask ? { mask: doc2.mask, name: "" } : null;
-  const m = masks.find((x) => x.id === area);
+  if (area2 === AREA_ALL) return { mask: new Uint8Array(doc2.w * doc2.h).fill(255), name: "Whole picture" };
+  if (area2 === AREA_SEL || area2 === void 0 || area2 === null) return doc2.mask ? { mask: doc2.mask, name: "" } : null;
+  const m = masks.find((x) => x.id === area2);
   if (!m || !m.components.length) return null;
-  const px = getPixels ? getPixels() : null;
-  const a = maskPlane(m, doc2.w, doc2.h, px ? () => logLuminance(px, doc2.w, doc2.h) : null);
+  const px2 = getPixels ? getPixels() : null;
+  const a = maskPlane(m, doc2.w, doc2.h, px2 ? () => logLuminance(px2, doc2.w, doc2.h) : null);
   const out = new Uint8Array(a.length);
   for (let i2 = 0; i2 < a.length; i2++) out[i2] = Math.round(Math.min(Math.max(a[i2], 0), 1) * 255);
   return { mask: out, name: m.name };
@@ -73094,7 +77805,8 @@ var editModelWarn = (fam, o) => {
   const f2 = (EDIT_MODELS.all || []).find((x) => x.family === fam);
   const c = f2 && f2.operations ? f2.operations[o] : null;
   const label2 = f2 && typeof f2.label === "string" && f2.label ? f2.label : fam;
-  return c && c.available && typeof c.warning === "string" && c.warning ? `${label2}: ${c.warning}` : "";
+  if (c && c.available && typeof c.warning === "string" && c.warning) return `${label2}: ${c.warning}`;
+  return c && c.available && typeof c.unrendered === "string" && c.unrendered ? `${label2}: ${c.unrendered}` : "";
 };
 var EDIT_WARN_MARK = " †";
 var editModelWhy = (fam, o) => {
@@ -73190,14 +77902,14 @@ function useImageGenerative({ doc: doc2, dev, commit, gestureRef, endBefore, mod
     const got2 = areaOf(doc2, masks, areaId, getPixels);
     areaRef.current = { key: areaKey, n: got2 ? selArea(got2.mask) : 0 };
   }
-  const area = areaRef.current.n;
+  const area2 = areaRef.current.n;
   const busy2 = Boolean(job && job.state !== "failed");
   const canStop = Boolean(job && !job.cutout && (job.state === "queued" || job.state === "running"));
   const needPrompt = op !== "remove" && op !== "relight";
-  const canRun = Boolean(doc2 && scope && pictureJob && area && !busy2 && layers.length < LAYER_MAX && (!needPrompt || prompt.trim()) && !(op === "relight" && light.waitWhy));
+  const canRun = Boolean(doc2 && scope && pictureJob && area2 && !busy2 && layers.length < LAYER_MAX && (!needPrompt || prompt.trim()) && !(op === "relight" && light.waitWhy));
   const emptyWhy = areaId === AREA_SEL ? "No area selected" : "The mask covers nothing";
   const promptWhy = (o) => o === "restyle" ? "No style described" : o === "relight" ? "No light described" : "No description";
-  const why = !doc2 ? "No picture open" : !pictureJob || !scope ? "Generative edits need a picture from this project" : !area ? emptyWhy : layers.length >= LAYER_MAX ? `At most ${LAYER_MAX} layers` : needPrompt && !prompt.trim() ? promptWhy(op) : busy2 ? "An edit is running" : op === "relight" && light.waitWhy ? light.waitWhy : "";
+  const why = !doc2 ? "No picture open" : !pictureJob || !scope ? "Generative edits need a picture from this project" : !area2 ? emptyWhy : layers.length >= LAYER_MAX ? `At most ${LAYER_MAX} layers` : needPrompt && !prompt.trim() ? promptWhy(op) : busy2 ? "An edit is running" : op === "relight" && light.waitWhy ? light.waitWhy : "";
   const shownKeys = layers.filter((l) => l.on && l.op !== LAYER_CUTOUT).map(layerKey);
   const thumbKeys = layers.filter((l) => l.op !== LAYER_CUTOUT).flatMap((l) => Array.from({ length: l.variants }, (_, v) => layerKey({ ...l, variant: v })));
   const want = doc2 ? [.../* @__PURE__ */ new Set([...shownKeys, ...thumbKeys])].filter((k) => !PATCHES.has(k) && !NO_RESULT.has(k)).map((k) => {
@@ -73234,8 +77946,8 @@ function useImageGenerative({ doc: doc2, dev, commit, gestureRef, endBefore, mod
       ask(RESULT_ASKS).then((r) => {
         if (!r || !r.patch || !r.patch.png_b64) throw new Error(r && r.error && r.error.message ? r.error.message : "The result has no picture");
         return decodeRgba(r.patch.png_b64, w, h);
-      }).then((px) => {
-        PATCHES.set(key, px);
+      }).then((px2) => {
+        PATCHES.set(key, px2);
         while (PATCHES.size > PATCHES_MAX) PATCHES.delete(PATCHES.keys().next().value);
         if (jobRef.current && jobRef.current.refetch === key) setJob2(null);
         setGot((n) => n + 1);
@@ -73673,8 +78385,8 @@ function FwEditStage({ doc: doc2, ver, picture, geo, tool, opts, show: show2, on
   };
   const edgeC = useMemo(() => {
     if (!show2 || !show2.edge) return null;
-    const c = selCanvas(w, h), g = c.getContext("2d"), img = g.createImageData(w, h), px = img.data;
-    for (let i2 = 0, j = 3; i2 < show2.edge.length; i2++, j += 4) px[j] = show2.edge[i2] ? 0 : 217;
+    const c = selCanvas(w, h), g = c.getContext("2d"), img = g.createImageData(w, h), px2 = img.data;
+    for (let i2 = 0, j = 3; i2 < show2.edge.length; i2++, j += 4) px2[j] = show2.edge[i2] ? 0 : 217;
     g.putImageData(img, 0, 0);
     return c;
   }, [show2 && show2.edge, w, h]);
@@ -74315,11 +79027,11 @@ function createTatProbe(gl, U) {
   return {
     // `at`: { x, y, mode } in picture px (row 0 at the top); `draw` issues the pass with every
     // uniform of the document already set.
-    read(at, draw, w, h) {
-      const x = Math.min(w - 1, Math.max(0, Math.floor(at.x))), y = Math.min(h - 1, Math.max(0, Math.floor(at.y)));
+    read(at2, draw, w, h) {
+      const x = Math.min(w - 1, Math.max(0, Math.floor(at2.x))), y = Math.min(h - 1, Math.max(0, Math.floor(at2.y)));
       gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
       gl.viewport(0, 0, 1, 1);
-      gl.uniform1i(U("uProbe"), at.mode === 2 ? 2 : 1);
+      gl.uniform1i(U("uProbe"), at2.mode === 2 ? 2 : 1);
       gl.uniform2i(U("uProbeAt"), x, y);
       draw();
       const raw = float ? new Float32Array(4) : new Uint8Array(4);
@@ -74328,7 +79040,7 @@ function createTatProbe(gl, U) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, w, h);
       const v = float ? [...raw] : [...raw].map((b) => b / 255);
-      if (at.mode !== 2) return { x, y, rgb: v.slice(0, 3) };
+      if (at2.mode !== 2) return { x, y, rgb: v.slice(0, 3) };
       if (v[3] < 0.5 || v[2] < TAT_NEUTRAL_CHROMA) return { x, y, neutral: true };
       const i2 = Math.min(7, Math.max(0, Math.floor(v[0] * 8))), j = (i2 + 1) % 8;
       return { x, y, neutral: false, chroma: v[2], bands: [[MIXER_BANDS[i2][0], 1 - v[1]], [MIXER_BANDS[j][0], v[1]]] };
@@ -74417,11 +79129,11 @@ function createGpuKit(gl) {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return out;
   };
-  const gaussian2 = (src, tmp, w, h, sigma) => {
+  const gaussian2 = (src, tmp2, w, h, sigma) => {
     if (Number.isNaN(sigma) || sigma <= 0.3 || !w || !h) return src;
     const radii = boxRadii(Math.min(sigma, Math.max(w, h) * 2)).filter((r) => r > 0);
     let cur = src, k = 0;
-    for (const dir of [[1, 0], [0, 1]]) for (const r of radii) cur = run(BOX_FS, { uIn: cur }, { uDir: ["2i", ...dir], uR: ["1i", r], uInv: ["1f", 1 / (2 * r + 1)] }, tmp[k++ % 2], w, h);
+    for (const dir of [[1, 0], [0, 1]]) for (const r of radii) cur = run(BOX_FS, { uIn: cur }, { uDir: ["2i", ...dir], uR: ["1i", r], uInv: ["1f", 1 / (2 * r + 1)] }, tmp2[k++ % 2], w, h);
     return cur;
   };
   const read2 = (t2, w, h) => {
@@ -74502,10 +79214,10 @@ function createGpuNoise(kit, gl, srcTex) {
   };
   const run = (w, h, wb, p) => {
     if (!alloc(w, h)) return null;
-    const [A, B, C3] = T, other = (...used) => T.find((t2) => !used.includes(t2));
+    const [A, B, C4] = T, other = (...used) => T.find((t2) => !used.includes(t2));
     let lin = kit.run(LIN_FS, { uSrc: srcTex, uDec: decLut }, wbUniforms(wb), A, w, h);
     if (p.l) {
-      const m = kit.gaussian(kit.run(L_FS, { uLin: lin }, {}, B, w, h), [C3, B], w, h, p.l.sigma);
+      const m = kit.gaussian(kit.run(L_FS, { uLin: lin }, {}, B, w, h), [C4, B], w, h, p.l.sigma);
       const ab = kit.gaussian(kit.run(AB_FS, { uIn: m }, { uEps: ["1f", p.l.eps] }, other(lin, m), w, h), [m, other(lin, m)], w, h, p.l.sigma);
       lin = kit.run(L_APPLY_FS, { uLin: lin, uAB: ab }, { uK: ["1f", p.l.k] }, other(lin, ab), w, h);
     }
@@ -74619,7 +79331,7 @@ function createGpuPlanes(kit, gl, srcTex, decTex) {
       size = `${w}x${h}`;
     }
   };
-  const table = (src, dst, filter) => {
+  const table2 = (src, dst, filter) => {
     const key = `${src}>${dst}:${filter}`;
     if (tables.has(key)) return tables.get(key);
     const ws = weights(src, dst, filter), cols = 2 + Math.max(...ws.map(([, v]) => v.length)), d = new Float32Array(cols * dst);
@@ -74638,8 +79350,8 @@ function createGpuPlanes(kit, gl, srcTex, decTex) {
   };
   const resize2 = (src, w, h, nw, nh, filter, mid, out) => {
     if (w === nw && h === nh) return src;
-    kit.run(RS_FS, { uIn: src, uW: table(w, nw, filter) }, { uX: ["1i", 1] }, mid, nw, h);
-    return kit.run(RS_FS, { uIn: mid, uW: table(h, nh, filter) }, { uX: ["1i", 0] }, out, nw, nh);
+    kit.run(RS_FS, { uIn: src, uW: table2(w, nw, filter) }, { uX: ["1i", 1] }, mid, nw, h);
+    return kit.run(RS_FS, { uIn: mid, uW: table2(h, nh, filter) }, { uX: ["1i", 0] }, out, nw, nh);
   };
   const coeffs = (p, w, h, sigma, eps, tag) => {
     const A = tgt(tag + "A", w, h, "rg"), B = tgt(tag + "B", w, h, "rg");
@@ -74697,8 +79409,8 @@ function createGpuPlanes(kit, gl, srcTex, decTex) {
       const count3 = Math.ceil(w * h / AIRLIGHT_STEP);
       if (!count3) return { tex, air: 1 };
       const texels = Math.ceil(count3 / 4), aw = Math.min(texels, 2048), ah = Math.ceil(texels / aw);
-      const at = kit.run(AIR_FS, { uIn: tex }, { uW: ["1i", w], uCount: ["1i", count3], uStep: ["1i", AIRLIGHT_STEP], uRow: ["1i", aw] }, tgt("air", aw, ah, "rgba"), aw, ah);
-      const v = kit.read(at, aw, ah).subarray(0, count3);
+      const at2 = kit.run(AIR_FS, { uIn: tex }, { uW: ["1i", w], uCount: ["1i", count3], uStep: ["1i", AIRLIGHT_STEP], uRow: ["1i", aw] }, tgt("air", aw, ah, "rgba"), aw, ah);
+      const v = kit.read(at2, aw, ah).subarray(0, count3);
       return { tex, air: Math.max(0.05, select(v, Math.min(count3 - 1, Math.floor(count3 * 0.995)))) };
     },
     dispose() {
@@ -74903,7 +79615,7 @@ function createDevelopEngine(canvas2, { gpu: useGpu2 = true } = {}) {
     // planes of the last source instead of rebuilding them: the white balance itself is exact
     // (shader), the local-tone, clarity, texture and dehaze planes lag and noise reduction is
     // skipped. The caller renders once more without `draft` when the gesture settles, which is exact.
-    render(doc2, { draft = false, clip: clip3 = 0, probe: at = null } = {}) {
+    render(doc2, { draft = false, clip: clip3 = 0, probe: at2 = null } = {}) {
       if (!pic) return false;
       const light = developValues(doc2, "light"), color = developValues(doc2, "color"), fx = developValues(doc2, "effects"), curve = developValues(doc2, "curve"), grade = developValues(doc2, "grading"), mix2 = developValues(doc2, "mixer"), det = developValues(doc2, "detail");
       const wb = colorWbMatrix(color), { w, h } = pic;
@@ -75009,7 +79721,7 @@ function createDevelopEngine(canvas2, { gpu: useGpu2 = true } = {}) {
       gl.uniform1i(U("uMkN"), masks.length);
       gl.uniform1i(U("uFlipY"), 1);
       gl.uniform1i(U("uClip"), clip3 | 0);
-      if (at) return probe2.read(at, () => gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4), pic.w, pic.h);
+      if (at2) return probe2.read(at2, () => gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4), pic.w, pic.h);
       gl.viewport(0, 0, pic.w, pic.h);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       return true;
@@ -75194,9 +79906,9 @@ function useMaskBrush({ doc: doc2, sel, comp, kAt, patchK, gestureRef, on }) {
     L.s.points.push([x / doc2.w, y / doc2.h]);
     push2(L);
   };
-  const paintCursor = (g, fx, fy, dpr, scale, at) => {
-    if (!at) return;
-    const r = Math.max(1, opts.size / 400 * Math.max(doc2.w, doc2.h) * scale * dpr), hard = r * (1 - opts.feather / 100), x = fx(at[0]), y = fy(at[1]);
+  const paintCursor = (g, fx, fy, dpr, scale, at2) => {
+    if (!at2) return;
+    const r = Math.max(1, opts.size / 400 * Math.max(doc2.w, doc2.h) * scale * dpr), hard = r * (1 - opts.feather / 100), x = fx(at2[0]), y = fy(at2[1]);
     const ring = (rr, dash) => {
       g.setLineDash(dash ? [3 * dpr, 3 * dpr] : []);
       g.lineWidth = 1 * dpr;
@@ -75281,9 +79993,9 @@ function useMaskRange({ doc: doc2, sel, comp, kAt, patchK, gestureRef, on, sourc
   const onDown = (event) => {
     if (!barRef.current || event.button !== 0) return;
     const v = valueAt2(event), [lo, hi] = comp.range;
-    const r = barRef.current.getBoundingClientRect(), px = Math.abs(v - lo) * r.width, qx = Math.abs(v - hi) * r.width;
-    const id = Math.min(px, qx) <= 12 ? px <= qx ? "lo" : "hi" : v > lo && v < hi ? "band" : v <= lo ? "lo" : "hi";
-    const jump = Math.min(px, qx) > 12 && id !== "band";
+    const r = barRef.current.getBoundingClientRect(), px2 = Math.abs(v - lo) * r.width, qx = Math.abs(v - hi) * r.width;
+    const id = Math.min(px2, qx) <= 12 ? px2 <= qx ? "lo" : "hi" : v > lo && v < hi ? "band" : v <= lo ? "lo" : "hi";
+    const jump = Math.min(px2, qx) > 12 && id !== "band";
     dragRef.current = { id, v0: jump ? id === "lo" ? lo : hi : v, lo, hi };
     event.currentTarget.setPointerCapture && event.currentTarget.setPointerCapture(event.pointerId);
     const g = gestureRef.current;
@@ -75477,17 +80189,17 @@ function useMaskPins({ doc: doc2, masks, sel, kAt, on, source, select: select2 }
       const s = Math.min(1, PIN_PLANE / Math.max(doc2.w, doc2.h)), pw = Math.max(1, Math.round(doc2.w * s)), ph = Math.max(1, Math.round(doc2.h * s));
       p = maskPinOf({ components: [k] }, maskPlane({ id: 0, on: true, invert: false, refine: 0, amount: 100, components: [{ ...k, op: "add" }] }, pw, ph, null, src), pw, ph);
     }
-    const at = p ? [p[0] * doc2.w, p[1] * doc2.h] : null;
+    const at2 = p ? [p[0] * doc2.w, p[1] * doc2.h] : null;
     if (cache2.current.size > 256) cache2.current.clear();
-    cache2.current.set(key, at);
-    return at;
+    cache2.current.set(key, at2);
+    return at2;
   };
   const list = () => {
     if (!on || !show2 || !doc2) return [];
     const out = [];
     for (const m of masks) m.components.forEach((k, i2) => {
-      const at = pinOf(k);
-      if (at) out.push({ id: `pin:${m.id}:${i2}`, mask: m.id, k: i2, at, current: Boolean(sel && m.id === sel.id && i2 === kAt), mine: Boolean(sel && m.id === sel.id), off: !m.on });
+      const at2 = pinOf(k);
+      if (at2) out.push({ id: `pin:${m.id}:${i2}`, mask: m.id, k: i2, at: at2, current: Boolean(sel && m.id === sel.id && i2 === kAt), mine: Boolean(sel && m.id === sel.id), off: !m.on });
     });
     return out;
   };
@@ -75569,13 +80281,13 @@ function useMaskOverlay() {
     return next;
   });
   const cycle = () => set((cur) => ({ show: true, mode: OVERLAY_MODES[(OVERLAY_MODES.findIndex((m) => m.id === cur.mode) + 1) % OVERLAY_MODES.length].id }));
-  const fill = (px, a, ow, oh) => {
+  const fill = (px2, a, ow, oh) => {
     if (o.mode === "mask") for (let i2 = 0, j = 0; i2 < a.length; i2++, j += 4) {
       const v = Math.round(a[i2] * 255);
-      px[j] = v;
-      px[j + 1] = v;
-      px[j + 2] = v;
-      px[j + 3] = 255;
+      px2[j] = v;
+      px2[j + 1] = v;
+      px2[j + 2] = v;
+      px2[j + 3] = 255;
     }
     else if (o.mode === "edge") {
       const on = (i2) => a[i2] >= 0.5;
@@ -75583,26 +80295,26 @@ function useMaskOverlay() {
         const me = on(i2), j = i2 * 4;
         const cross = x > 0 && on(i2 - 1) !== me || x < ow - 1 && on(i2 + 1) !== me || y > 0 && on(i2 - ow) !== me || y < oh - 1 && on(i2 + ow) !== me;
         const v = me ? 255 : 0;
-        px[j] = v;
-        px[j + 1] = v;
-        px[j + 2] = v;
-        px[j + 3] = cross ? me ? 255 : 200 : 0;
+        px2[j] = v;
+        px2[j + 1] = v;
+        px2[j + 2] = v;
+        px2[j + 3] = cross ? me ? 255 : 200 : 0;
       }
     } else if (o.mode === "black" || o.mode === "white") {
       const v = o.mode === "white" ? 255 : 0;
       for (let i2 = 0, j = 0; i2 < a.length; i2++, j += 4) {
-        px[j] = v;
-        px[j + 1] = v;
-        px[j + 2] = v;
-        px[j + 3] = Math.round((1 - a[i2]) * 255);
+        px2[j] = v;
+        px2[j + 1] = v;
+        px2[j + 2] = v;
+        px2[j + 3] = Math.round((1 - a[i2]) * 255);
       }
     } else {
       const c = OVERLAY_COLOURS[o.colour], k = o.opacity / 100 * 255;
       for (let i2 = 0, j = 0; i2 < a.length; i2++, j += 4) {
-        px[j] = c[0];
-        px[j + 1] = c[1];
-        px[j + 2] = c[2];
-        px[j + 3] = Math.round(a[i2] * k);
+        px2[j] = c[0];
+        px2[j + 1] = c[1];
+        px2[j + 2] = c[2];
+        px2[j + 3] = Math.round(a[i2] * k);
       }
     }
   };
@@ -75642,13 +80354,13 @@ function MaskThumb({ m, w, h, src }) {
       el.width = tw;
       el.height = th;
     }
-    const a = maskPlane({ ...m, refine: 0 }, tw, th, null, src), g = el.getContext("2d"), img = g.createImageData(tw, th), px = img.data;
+    const a = maskPlane({ ...m, refine: 0 }, tw, th, null, src), g = el.getContext("2d"), img = g.createImageData(tw, th), px2 = img.data;
     for (let i2 = 0, j = 0; i2 < a.length; i2++, j += 4) {
       const v = Math.round(a[i2] * 255);
-      px[j] = v;
-      px[j + 1] = v;
-      px[j + 2] = v;
-      px[j + 3] = 255;
+      px2[j] = v;
+      px2[j + 1] = v;
+      px2[j + 2] = v;
+      px2[j + 3] = 255;
     }
     g.putImageData(img, 0, 0);
     last2.current = key;
@@ -75782,8 +80494,8 @@ function useImageMasks({ doc: doc2, dev, commit, gestureRef, endBefore, mode, sc
     }
     if (!box && info.negative) return;
     const shape = maskComponentRead(box ? { kind: "object", box } : { kind: "object", points: [pt] });
-    const at = shape && place2(pick.op, shape, MASK_KIND_LABEL.object);
-    if (at) setPick({ op: "add", mask: at.id, k: at.k });
+    const at2 = shape && place2(pick.op, shape, MASK_KIND_LABEL.object);
+    if (at2) setPick({ op: "add", mask: at2.id, k: at2.k });
   };
   const pickEnd = () => {
     if (range.end()) return true;
@@ -75843,8 +80555,8 @@ function useImageMasks({ doc: doc2, dev, commit, gestureRef, endBefore, mode, sc
       el.width = ow;
       el.height = oh;
     }
-    const a = maskPlane(sel, ow, oh, overlayLogL(ow, oh), source()), g = el.getContext("2d"), img = g.createImageData(ow, oh), px = img.data;
-    ov.fill(px, a, ow, oh);
+    const a = maskPlane(sel, ow, oh, overlayLogL(ow, oh), source()), g = el.getContext("2d"), img = g.createImageData(ow, oh), px2 = img.data;
+    ov.fill(px2, a, ow, oh);
     el.style.backdropFilter = ov.backdrop;
     g.putImageData(img, 0, 0);
     o.key = overlayKey;
@@ -75972,16 +80684,16 @@ function useImageMasks({ doc: doc2, dev, commit, gestureRef, endBefore, mode, sc
         else next = { ...c0, a: [c0.a[0] + dx, c0.a[1] + dy], b: [c0.b[0] + dx, c0.b[1] + dy] };
       } else {
         const cx = c0.c[0] * W2, cy = c0.c[1] * H2, t2 = c0.angle * Math.PI / 180, U = [Math.cos(t2), Math.sin(t2)], V = [-Math.sin(t2), Math.cos(t2)];
-        const px = x - cx, py = y - cy;
+        const px2 = x - cx, py2 = y - cy;
         if (d.id === "c") next = { ...c0, c: [c0.c[0] + dx, c0.c[1] + dy] };
-        else if (d.id === "rx" || d.id === "rx2") next = { ...c0, rx: Math.abs(px * U[0] + py * U[1]) / L };
-        else if (d.id === "ry" || d.id === "ry2") next = { ...c0, ry: Math.abs(px * V[0] + py * V[1]) / L };
+        else if (d.id === "rx" || d.id === "rx2") next = { ...c0, rx: Math.abs(px2 * U[0] + py2 * U[1]) / L };
+        else if (d.id === "ry" || d.id === "ry2") next = { ...c0, ry: Math.abs(px2 * V[0] + py2 * V[1]) / L };
         else if (d.id === "rot") {
-          let a = Math.atan2(py, px) * 180 / Math.PI + 90;
+          let a = Math.atan2(py2, px2) * 180 / Math.PI + 90;
           if (a > 180) a -= 360;
           next = { ...c0, angle: Math.round(a * 10) / 10 };
         } else if (d.id === "f") {
-          const q = Math.hypot((px * U[0] + py * U[1]) / Math.max(c0.rx * L, 1e-6), (px * V[0] + py * V[1]) / Math.max(c0.ry * L, 1e-6));
+          const q = Math.hypot((px2 * U[0] + py2 * U[1]) / Math.max(c0.rx * L, 1e-6), (px2 * V[0] + py2 * V[1]) / Math.max(c0.ry * L, 1e-6));
           next = { ...c0, feather: Math.round(Math.min(100, Math.max(0, (1 - q) * 100))) };
         }
       }
@@ -76614,9 +81326,9 @@ function outpaintCarry(dev, W2, H2, margins, crop = developCrop(dev)) {
   if (!masks.length) return { dev: next, dropped: 0 };
   if (cropGeom(crop)) return { dev: developSetMasks(next, []), dropped: masks.length };
   const L0 = Math.max(W2, H2), L1 = Math.max(NW, NH);
-  const px = (x) => r6((x * W2 - r.x + margins.left) / NW), py = (y) => r6((y * H2 - r.y + margins.top) / NH);
-  const pt = (p) => [px(p[0]), py(p[1])];
-  const box = (b) => ({ x: px(b.x), y: py(b.y), w: r6(b.w * W2 / NW), h: r6(b.h * H2 / NH) });
+  const px2 = (x) => r6((x * W2 - r.x + margins.left) / NW), py2 = (y) => r6((y * H2 - r.y + margins.top) / NH);
+  const pt = (p) => [px2(p[0]), py2(p[1])];
+  const box = (b) => ({ x: px2(b.x), y: py2(b.y), w: r6(b.w * W2 / NW), h: r6(b.h * H2 / NH) });
   const comp = (k) => {
     const c = { ...k };
     delete c.seg;
@@ -76625,7 +81337,7 @@ function outpaintCarry(dev, W2, H2, margins, crop = developCrop(dev)) {
     if (k.kind === "radial") return { ...c, c: pt(k.c), rx: r6(k.rx * L0 / L1), ry: r6(k.ry * L0 / L1) };
     if (k.kind === "brush") return { ...c, strokes: k.strokes.map((s) => ({ ...s, points: s.points.map(pt), size: Math.max(1, Math.min(100, r6(s.size * L0 / L1))) })) };
     if (k.kind === "color") return { ...c, samples: k.samples.map(box) };
-    if (k.kind === "object") return k.box ? { ...c, box: [px(k.box[0]), py(k.box[1]), r6(k.box[2] * W2 / NW), r6(k.box[3] * H2 / NH)] } : { ...c, points: k.points.map((p) => ({ ...p, x: px(p.x), y: py(p.y) })) };
+    if (k.kind === "object") return k.box ? { ...c, box: [px2(k.box[0]), py2(k.box[1]), r6(k.box[2] * W2 / NW), r6(k.box[3] * H2 / NH)] } : { ...c, points: k.points.map((p) => ({ ...p, x: px2(p.x), y: py2(p.y) })) };
     return c;
   };
   next = developSetMasks(next, masks.map((m) => ({ ...m, components: m.components.map(comp) })));
@@ -76743,8 +81455,8 @@ function useImageOutpaint({ doc: doc2, dev = null, crop = null, shown = null, or
     setKeep(null);
     setJob2({ state: "submitting", text: STATE_TEXT2.submitting });
     try {
-      const px = shown ? shown() : null;
-      const base2 = px && (crop || original && px !== original()) ? await compositeFramePng(px, doc2.w, doc2.h, crop) : null;
+      const px2 = shown ? shown() : null;
+      const base2 = px2 && (crop || original && px2 !== original()) ? await compositeFramePng(px2, doc2.w, doc2.h, crop) : null;
       const body2 = {
         schema: "studio.image-edit-request/1",
         owner_scope: scope,
@@ -77257,7 +81969,7 @@ var presetsRead = () => {
   const all = storageGet(PRESETS_KEY, null);
   return all && typeof all === "object" ? Object.entries(all).map(([name2, e]) => [name2, entryRead(e), Number(e && e.at) || 0]).filter(([n, e]) => e && n && n.length <= PRESET_NAME_MAX).sort((a, b) => a[0].localeCompare(b[0])) : [];
 };
-var presetsWrite = (list) => storageSet(PRESETS_KEY, Object.fromEntries(list.map(([n, e, at]) => [n, { at, ...e }])));
+var presetsWrite = (list) => storageSet(PRESETS_KEY, Object.fromEntries(list.map(([n, e, at2]) => [n, { at: at2, ...e }])));
 var sameEntry = (dev, entry2) => {
   const off = developOff(dev);
   return Object.keys(entry2.groups).every((id) => !developGroupDiffers(dev, { [id]: entry2.groups[id] }, id) && off.includes(id) === entry2.off.includes(id));
@@ -77375,11 +82087,11 @@ function useImageDevelopPresets({ doc: doc2, dev, commit, gestureRef, endBefore,
       setFileMsg({ ok: false, text: why });
       return { ok: false, reason: why };
     }
-    const taken = new Set(presets.map(([n]) => n)), added = [], at = Date.now();
+    const taken = new Set(presets.map(([n]) => n)), added = [], at2 = Date.now();
     for (const [name2, entry2] of r.presets) {
       const n = presetUniqueName(name2, taken);
       taken.add(n);
-      added.push([n, entry2, at]);
+      added.push([n, entry2, at2]);
     }
     presetsWrite([...presets, ...added]);
     bump2();
@@ -77679,16 +82391,16 @@ function useImageTat({ doc: doc2, dev, commit, gestureRef, endBefore, mode, prob
     setActive(next && doc2 ? group : active === group ? null : active);
     return next;
   };
-  const curveAt = (base2, px, py, channel, amount, exact2) => {
-    const s = probe2(px, py, 1, exact2);
+  const curveAt = (base2, px2, py2, channel, amount, exact2) => {
+    const s = probe2(px2, py2, 1, exact2);
     if (!s) return null;
     const cv = developValues(base2, "curve"), input = q42(tatCurveInput(cv, channel, s.rgb));
     const r = tatCurvePoints(cv[channel], input, amount);
     return r ? { input, ...r } : { input, points: null };
   };
   const nameOf3 = (channel) => (CURVE_POINTS.find((p) => p.id === channel) || CURVE_POINTS[0]).name;
-  const mixerAt = (base2, px, py, field, amount, exact2) => {
-    const s = probe2(px, py, 2, exact2);
+  const mixerAt = (base2, px2, py2, field, amount, exact2) => {
+    const s = probe2(px2, py2, 2, exact2);
     if (!s) return null;
     if (s.neutral) return { neutral: true };
     const bands = s.bands.filter(([, w]) => w > 1e-4);
@@ -77712,9 +82424,9 @@ function useImageTat({ doc: doc2, dev, commit, gestureRef, endBefore, mode, prob
       }
     }
   }
-  const hover = (at) => {
+  const hover = (at2) => {
     const h = hoverRef.current;
-    h.at = at;
+    h.at = at2;
     if (h.raf) return;
     h.raf = requestAnimationFrame(() => {
       h.raf = 0;
@@ -77752,25 +82464,25 @@ function useImageTat({ doc: doc2, dev, commit, gestureRef, endBefore, mode, prob
     leave: () => hover(null),
     drag: (id, x, y, phase) => {
       if (phase === "start" && active === "mixer") {
-        const px = Math.floor(x), py = Math.floor(y), field = fieldRef.current;
-        const r = mixerAt(dev, px, py, field, 0, true);
+        const px2 = Math.floor(x), py2 = Math.floor(y), field = fieldRef.current;
+        const r = mixerAt(dev, px2, py2, field, 0, true);
         if (!r || r.neutral) return;
         endBefore();
         gestureRef.current.pointer = true;
         gestureRef.current.id = "";
-        dragRef.current = { px, py, y0: y, field, bands: r.bands, dev0: dev, amount: 0, rows: 0, mixer: true };
+        dragRef.current = { px: px2, py: py2, y0: y, field, bands: r.bands, dev0: dev, amount: 0, rows: 0, mixer: true };
         markMixer(r.bands);
         window.addEventListener("pointerup", finish, { once: true });
         return;
       }
       if (phase === "start") {
-        const px = Math.floor(x), py = Math.floor(y), channel = chanRef.current;
-        const r = curveAt(dev, px, py, channel, 0, true);
+        const px2 = Math.floor(x), py2 = Math.floor(y), channel = chanRef.current;
+        const r = curveAt(dev, px2, py2, channel, 0, true);
         if (!r) return;
         endBefore();
         gestureRef.current.pointer = true;
         gestureRef.current.id = "";
-        dragRef.current = { px, py, y0: y, channel, input: r.input, dev0: dev, amount: 0, rows: 0 };
+        dragRef.current = { px: px2, py: py2, y0: y, channel, input: r.input, dev0: dev, amount: 0, rows: 0 };
         if (paintRef.current.curve) paintRef.current.curve(r.input);
         window.addEventListener("pointerup", finish, { once: true });
         return;
@@ -77835,10 +82547,10 @@ function useImageTat({ doc: doc2, dev, commit, gestureRef, endBefore, mode, prob
   const agentSet = (p) => {
     if (!doc2) return { ok: false, reason: "No picture open in Edit" };
     const r = cropRect() || { x: 0, y: 0, w: doc2.w, h: doc2.h };
-    const px = Math.min(doc2.w - 1, Math.max(0, Math.floor(r.x + p.x * r.w))), py = Math.min(doc2.h - 1, Math.max(0, Math.floor(r.y + p.y * r.h)));
+    const px2 = Math.min(doc2.w - 1, Math.max(0, Math.floor(r.x + p.x * r.w))), py2 = Math.min(doc2.h - 1, Math.max(0, Math.floor(r.y + p.y * r.h)));
     if (p.group === "mixer") {
       const field = TAT_PROPERTY[p.property] || fieldRef.current;
-      const m = mixerAt(dev, px, py, field, p.amount, true);
+      const m = mixerAt(dev, px2, py2, field, p.amount, true);
       if (!m) return { ok: false, reason: "The picture is still loading" };
       if (m.neutral) return { ok: false, reason: "That spot has no colour: the Color Mixer leaves neutral greys alone" };
       const next2 = mixerNext(dev, m.values), changed3 = developGroupDiffers(next2, dev, "mixer");
@@ -77848,10 +82560,10 @@ function useImageTat({ doc: doc2, dev, commit, gestureRef, endBefore, mode, prob
         commit(next2, `${mixerLabel(m.values, field)} (Hermes)`, false);
       }
       const mv = developValues(changed3 ? next2 : dev, "mixer");
-      return { ok: true, changed: changed3, group: "mixer", property: Object.keys(TAT_PROPERTY).find((k) => TAT_PROPERTY[k] === field), bands: m.values.map((x) => ({ band: x.band, weight: Math.round(x.weight * 1e3) / 1e3, value: mv[x.id] })), pixel: [px, py] };
+      return { ok: true, changed: changed3, group: "mixer", property: Object.keys(TAT_PROPERTY).find((k) => TAT_PROPERTY[k] === field), bands: m.values.map((x) => ({ band: x.band, weight: Math.round(x.weight * 1e3) / 1e3, value: mv[x.id] })), pixel: [px2, py2] };
     }
     const channel = p.channel || chanRef.current;
-    const res = curveAt(dev, px, py, channel, p.amount, true);
+    const res = curveAt(dev, px2, py2, channel, p.amount, true);
     if (!res) return { ok: false, reason: "The picture is still loading" };
     if (!res.points) return { ok: false, reason: `${nameOf3(channel)} already has 16 points` };
     const next = developSet(dev, "curve", channel, res.points), changed2 = developGroupDiffers(next, dev, "curve");
@@ -77861,7 +82573,7 @@ function useImageTat({ doc: doc2, dev, commit, gestureRef, endBefore, mode, prob
       commit(next, `${nameOf3(channel)} (Hermes)`, false);
     }
     const stored = developValues(changed2 ? next : dev, "curve")[channel];
-    return { ok: true, changed: changed2, group: "curve", channel, input: res.input, added: res.added, points: stored, pixel: [px, py] };
+    return { ok: true, changed: changed2, group: "curve", channel, input: res.input, added: res.added, points: stored, pixel: [px2, py2] };
   };
   const curve = { on: active === "curve", channelRef: chanRef, register: registerRef.current };
   const mixer = { on: active === "mixer", rowsRef: (el) => {
@@ -77961,7 +82673,7 @@ function CurveEditor({ values, onChange, onReset, hist, tat }) {
   }, [hist, channel]);
   const item = CURVE_POINTS.find((p) => p.id === channel), pts = curveShown(values[channel]);
   shownPtsRef.current = pts;
-  const at = (e) => {
+  const at2 = (e) => {
     const r = svgRef.current.getBoundingClientRect(), k = (VIEW + 2 * PAD) / r.width;
     const rx = ((e.clientX - r.left) * k - PAD) / VIEW, ry = 1 - ((e.clientY - r.top) * k - PAD) / VIEW;
     return { x: clampTo3(rx, 0, 1), y: clampTo3(ry, 0, 1), rx, ry, scale: VIEW / k };
@@ -77970,7 +82682,7 @@ function CurveEditor({ values, onChange, onReset, hist, tat }) {
   const set = (next) => onChange(channel, next);
   const down = (e) => {
     if (e.button !== 0) return;
-    const p = at(e);
+    const p = at2(e);
     let i2 = hit2(p, pts), list = pts;
     if (i2 < 0) {
       if (pts.length >= CURVE_POINTS_MAX || pts.some(([x]) => Math.abs(x - p.x) < CURVE_POINT_GAP)) return;
@@ -77984,7 +82696,7 @@ function CurveEditor({ values, onChange, onReset, hist, tat }) {
     svgRef.current.focus({ preventScroll: true });
   };
   const move2 = (e) => {
-    const d = dragRef.current, p = at(e);
+    const d = dragRef.current, p = at2(e);
     if (!d) {
       setHover(hit2(p, pts));
       return;
@@ -78021,7 +82733,7 @@ function CurveEditor({ values, onChange, onReset, hist, tat }) {
     setSel2(-1);
   };
   const dbl = (e) => {
-    const i2 = hit2(at(e), pts);
+    const i2 = hit2(at2(e), pts);
     if (i2 >= 0) remove2(i2);
   };
   const key = (e) => {
@@ -78148,10 +82860,10 @@ var shownLin = (light, y) => {
   return toneOf(light, base2 + localEv(base2, light.highlights / 100, light.shadows / 100));
 };
 var autoShown = (light, y, r = 1) => enc8(Math.min(1, r * shownLin(light, y)));
-function fit(at, target) {
-  let best = 0, be = Math.abs(at(0) - target);
+function fit(at2, target) {
+  let best = 0, be = Math.abs(at2(0) - target);
   for (let v = -END_MAX; v <= END_MAX; v++) {
-    const e = Math.abs(at(v) - target) + LEVEL_PER_UNIT * Math.abs(v);
+    const e = Math.abs(at2(v) - target) + LEVEL_PER_UNIT * Math.abs(v);
     if (e < be - 1e-9) {
       be = e;
       best = v;
@@ -78167,12 +82879,12 @@ function autoTone(S) {
   for (let i2 = 0; i2 < n; i2++) sum2 += Y[i2];
   const mean = sum2 / n;
   if (!(mean > 1e-6)) return { exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0 };
-  const at = (q) => Y[clamp4(Math.floor(q * n), 0, n - 1)];
+  const at2 = (q) => Y[clamp4(Math.floor(q * n), 0, n - 1)];
   const L = (y) => Math.log2(Math.max(y, 1e-7));
-  const oct = [1, 2, 3, 4, 5, 6, 7].map((k) => L(at(k / 8))).concat(L(at(15 / 16)));
+  const oct = [1, 2, 3, 4, 5, 6, 7].map((k) => L(at2(k / 8))).concat(L(at2(15 / 16)));
   oct.unshift(null);
   const o = (i2) => oct[i2 + 1];
-  const hiY = Math.max(S.hi.y, 1e-7), hiR = S.hi.r, loY = Math.max(S.lo.y, 1e-7), loR = S.lo.r, ym = at(0.5), ytop = at(0.99), ybot = at(0.01);
+  const hiY = Math.max(S.hi.y, 1e-7), hiR = S.hi.r, loY = Math.max(S.lo.y, 1e-7), loR = S.lo.r, ym = at2(0.5), ytop = at2(0.99), ybot = at2(0.01);
   let spread = 0;
   for (let i2 = 1; i2 < 6; i2++) spread += (o(i2 + 1) - o(i2)) / Math.max(0.5, i2 > 2 ? o(i2 + 1) - o(3) : o(3) - o(i2));
   spread /= 5;
@@ -78496,15 +83208,15 @@ function histogramOfCanvas(canvas2, w, h) {
   g.drawImage(canvas2, 0, 0, sw, sh);
   return count(g.getImageData(0, 0, sw, sh).data, 4);
 }
-function histogramOfPixels(px, w, h) {
+function histogramOfPixels(px2, w, h) {
   const k = Math.max(1, Math.ceil(Math.max(w, h) / HIST_EDGE)), cols = Math.ceil(w / k), rows = Math.ceil(h / k);
   const out = new Uint8Array(cols * rows * 4);
   let o = 0;
   for (let y = 0; y < h; y += k) for (let x = 0; x < w; x += k) {
     const i2 = (y * w + x) * 4;
-    out[o] = px[i2];
-    out[o + 1] = px[i2 + 1];
-    out[o + 2] = px[i2 + 2];
+    out[o] = px2[i2];
+    out[o + 1] = px2[i2 + 1];
+    out[o + 2] = px2[i2 + 2];
     o += 4;
   }
   return count(out.subarray(0, o), 4);
@@ -78563,13 +83275,13 @@ var mixMeasure = null;
 function mixNamesOverflow(body2) {
   const bar = body2.querySelector('[data-testid="fw-dev-mixer-tabs"]'), bs = bar ? [...bar.querySelectorAll("button")] : [];
   if (!bs.length) return false;
-  const cs = getComputedStyle(bs[0]), px = (v) => parseFloat(v) || 0;
-  const pad = px(cs.paddingLeft) + px(cs.paddingRight) + px(cs.borderLeftWidth) + px(cs.borderRightWidth);
+  const cs = getComputedStyle(bs[0]), px2 = (v) => parseFloat(v) || 0;
+  const pad = px2(cs.paddingLeft) + px2(cs.paddingRight) + px2(cs.borderLeftWidth) + px2(cs.borderRightWidth);
   if (!mixMeasure) mixMeasure = document.createElement("canvas").getContext("2d");
   mixMeasure.font = `600 ${cs.fontSize} ${cs.fontFamily}`;
-  const gap = px(getComputedStyle(bar).columnGap);
+  const gap = px2(getComputedStyle(bar).columnGap);
   const need = [...MIXER_VIEWS, MIXER_ALL].reduce((n, [, l]) => n + Math.ceil(mixMeasure.measureText(l).width) + pad, 0) + (bs.length - 1) * gap;
-  const bcs = getComputedStyle(body2), room2 = body2.clientWidth - px(bcs.paddingLeft) - px(bcs.paddingRight);
+  const bcs = getComputedStyle(body2), room2 = body2.clientWidth - px2(bcs.paddingLeft) - px2(bcs.paddingRight);
   bar.dataset.need = String(Math.ceil(need));
   return room2 < need;
 }
@@ -78923,8 +83635,8 @@ function useImageDevelop(ctx) {
   }, preview: pv, setPreview });
   const op = useImageOutpaint({ doc: doc2, dev, crop: cr.crop, shown: () => gen.composite(), original: () => ctx.getPixels(), mode: ctx.editMode, scope: ctx.ownerScope, pictureJob: ctx.stageId, publish: (p) => extraRef.current.publish ? extraRef.current.publish(p) : Promise.resolve({ ok: false, reason: "No picture open in Edit" }) });
   if (ctx.bridgeRef) {
-    const jump = (at) => {
-      if (!selJump(doc2, at)) return false;
+    const jump = (at2) => {
+      if (!selJump(doc2, at2)) return false;
       gestureRef.current.id = "";
       ctx.selBump();
       return true;
@@ -78940,7 +83652,7 @@ function useImageDevelop(ctx) {
       },
       undo: () => jump(doc2.at - 1),
       redo: () => jump(doc2.at + 1),
-      jump: (at) => jump(at),
+      jump: (at2) => jump(at2),
       position: () => ({ at: doc2.at, count: doc2.hist.length, label: String((doc2.hist[doc2.at] || {}).label || "").slice(0, 80) }),
       view: (edge) => {
         if (!pixels) return null;
@@ -79562,10 +84274,10 @@ function useImageBox(ctx) {
     return { ok: true };
   };
   const insertRef = (id) => {
-    const area = promptRef.current, token = `<${id}>`;
-    const at = area && document.activeElement === area ? area.selectionStart : prompt.length;
-    const end2 = area && document.activeElement === area ? area.selectionEnd : prompt.length;
-    const pre = prompt.slice(0, at), post2 = prompt.slice(end2);
+    const area2 = promptRef.current, token = `<${id}>`;
+    const at2 = area2 && document.activeElement === area2 ? area2.selectionStart : prompt.length;
+    const end2 = area2 && document.activeElement === area2 ? area2.selectionEnd : prompt.length;
+    const pre = prompt.slice(0, at2), post2 = prompt.slice(end2);
     const pad = pre && !/\s$/.test(pre) ? " " : "";
     const next = pre + pad + token + (/^\s/.test(post2) ? "" : " ") + post2;
     setPrompt(next.slice(0, 2e3));
@@ -79581,25 +84293,25 @@ function useImageBox(ctx) {
   const refs = boxRefs(prompt, boxes);
   const markChildren = () => {
     const parts = [];
-    let at = 0;
+    let at2 = 0;
     refs.forEach((r, k) => {
-      parts.push(prompt.slice(at, r.s));
+      parts.push(prompt.slice(at2, r.s));
       const b = boxes[r.n - 1];
       parts.push(jsxs53("span", { className: cn19("fw-box-chip", b && b.id === selected && "is-sel"), "data-testid": "fw-box-chip", "data-box": r.id, children: [
         jsx62("span", { className: "fw-box-chip-slot", children: prompt.slice(r.s, r.e) }, "s"),
         jsxs53("span", { className: "fw-box-chip-t", "aria-hidden": "true", children: [jsx62("b", { children: String(r.n) }, "n"), " ", r.id] }, "t")
       ] }, "c" + k));
-      at = r.e;
+      at2 = r.e;
     });
-    parts.push(prompt.slice(at));
+    parts.push(prompt.slice(at2));
     parts.push("\n");
     return parts;
   };
   useEffect(() => {
-    const area = promptRef.current;
-    if (!area) return;
-    area.style.height = "auto";
-    area.style.height = Math.max(64, Math.min(area.scrollHeight + 2, 360)) + "px";
+    const area2 = promptRef.current;
+    if (!area2) return;
+    area2.style.height = "auto";
+    area2.style.height = Math.max(64, Math.min(area2.scrollHeight + 2, 360)) + "px";
   }, [prompt, on]);
   const key = (event) => {
     if (!on) return false;
@@ -80443,12 +85155,12 @@ function useImageEditWorkspace(ctx) {
       onContextMenu: (event) => event.preventDefault(),
       style: { left: Math.max(4, Math.min(ctx.menu.x, ctx.menu.rootW - menuW - 4)) + "px", top: Math.max(4, Math.min(ctx.menu.y, ctx.menu.rootH - menuH - 4)) + "px", width: menuW + "px" },
       onKeyDown: (event) => {
-        const items = [...event.currentTarget.querySelectorAll("[role=menuitem]:not([aria-disabled=true])")], at = items.indexOf(document.activeElement);
+        const items = [...event.currentTarget.querySelectorAll("[role=menuitem]:not([aria-disabled=true])")], at2 = items.indexOf(document.activeElement);
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault();
           event.stopPropagation();
           const n = items.length;
-          if (n) items[(at + (event.key === "ArrowDown" ? 1 : n - 1)) % n].focus();
+          if (n) items[(at2 + (event.key === "ArrowDown" ? 1 : n - 1)) % n].focus();
         } else if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
@@ -80854,16 +85566,16 @@ function useImageCanvas(ctx) {
   };
   const gridKey = (event) => {
     const tiles = ctx.gridRef.current ? [...ctx.gridRef.current.querySelectorAll('[data-testid="fw-grid-tile"]')] : [];
-    const at = tiles.indexOf(document.activeElement);
-    if (at < 0 || !gridLayout) return;
+    const at2 = tiles.indexOf(document.activeElement);
+    if (at2 < 0 || !gridLayout) return;
     const move2 = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: gridLayout.cols, ArrowUp: -gridLayout.cols }[event.key];
     if (move2) {
       event.preventDefault();
-      const next = tiles[Math.max(0, Math.min(tiles.length - 1, at + move2))];
+      const next = tiles[Math.max(0, Math.min(tiles.length - 1, at2 + move2))];
       if (next) next.focus();
-    } else if (event.key === "Enter" && event.target === tiles[at]) {
+    } else if (event.key === "Enter" && event.target === tiles[at2]) {
       event.preventDefault();
-      openGridPicture(runJobs[at]);
+      openGridPicture(runJobs[at2]);
     }
   };
   const gridBody = showGrid ? jsx65("div", {
@@ -80959,8 +85671,12 @@ function useImageCanvas(ctx) {
     jsxs56("span", { className: "fim-sum", title: ctx.stagePrompt, children: [
       // WP3 T5: seeds and kept count only; each tile shows its own seed on hover.
       // Lane w14-img item 4 (IMG-066): the info follows the selected picture (Lightroom: metadata of the selected cell).
-      ((pick) => pick ? jsx65("span", { "data-testid": "fim-grid-pick", children: `Picture ${Math.min(ctx.gridSel, runJobs.length - 1) + 1} · seed ${pick.spec && Number.isSafeInteger(pick.spec.seed) ? pick.spec.seed : pick.seed} · ` }, "p") : null)(runJobs[Math.min(ctx.gridSel, runJobs.length - 1)]),
-      jsx65("b", { children: `Seeds ${runJobs[0].seed}–${runJobs[runJobs.length - 1].seed}` }, "b"),
+      ((pick) => pick ? jsx65("span", {
+        "data-testid": "fim-grid-pick",
+        children: `Picture ${Math.min(ctx.gridSel, runJobs.length - 1) + 1} · seed ${pick.spec && Number.isSafeInteger(pick.spec.seed) ? pick.spec.seed : pick.seed} of `
+        /* w39-p2-green3 (IMG-066 + w39-p2-wins b8f32734): the word seed once, naming the SELECTED picture's seed; the run's range follows bare */
+      }, "p") : null)(runJobs[Math.min(ctx.gridSel, runJobs.length - 1)]),
+      jsx65("b", { children: `${runJobs[0].seed}–${runJobs[runJobs.length - 1].seed}` }, "b"),
       ((n) => n ? ` · ${n} kept` : "")(runJobs.filter((item) => ctx.keptJobs[item.jobId]).length)
     ] }, "sum"),
     ((done) => jsx65(FwButton, { variant: "ghost", icon: "grid", "data-testid": "fim-survey-open", disabled: done.length < 2 || done.length > 12, title: "Survey: the finished pictures side by side", onClick: () => ctx.cmpSurface.startSurveyIds(done.map((item) => item.jobId)), children: "Survey" }, "survey"))(runJobs.filter((item) => item.picture)),
@@ -81034,452 +85750,32 @@ function useImageCanvas(ctx) {
   };
 }
 
-// desktop/film-suite/src/image/module/parts/use-prompt-blocks.js
-import { jsx as jsx66 } from "react/jsx-runtime";
-
-// desktop/film-suite/src/image/styles/style-api.js
-var STYLE_THUMB_BATCH = 60;
-var STYLE_THUMB_CACHE_MAX = 1500;
-var STYLE_DETAIL_CACHE_MAX = 200;
-var STYLE_NAME_MAX = 60;
-var STYLE_THUMB_RE = /^data:image\/(?:webp|png|jpeg|gif);base64,[A-Za-z0-9+/=]+$/;
-var thumbCache2 = /* @__PURE__ */ new Map();
-var thumbPending = /* @__PURE__ */ new Set();
-var thumbListeners = /* @__PURE__ */ new Set();
-var thumbFailed = /* @__PURE__ */ new Map();
-var STYLE_THUMB_RETRY_MS = 3e4;
-var detailCache = /* @__PURE__ */ new Map();
-var searchCache = /* @__PURE__ */ new Map();
-var searchPending = /* @__PURE__ */ new Map();
-var STYLE_SEARCH_CACHE_MAX = 40;
-var categoryCache = null;
-var FAVOURITES_ID = "cat_000000000000";
-var styleErrorCode = (error) => {
-  const match = String(error && error.message || error || "").match(/"code"\s*:\s*"([a-z_]{1,64})"/);
-  return match ? match[1] : "";
-};
-var styleErrorStatus = (error) => {
-  const status = Number(error && error.statusCode);
-  if (status) return status;
-  const match = String(error && error.message || "").match(/^(\d{3})\b/);
-  return match ? Number(match[1]) : 0;
-};
-var styleErrorText = (error, fallback) => {
-  const match = String(error && error.message || "").match(/"message"\s*:\s*"([^"\\]{1,200})"/);
-  return match ? match[1] : fallback;
-};
-var isStyleConflict = (error) => styleErrorCode(error) === "style_categories_conflict" || styleErrorStatus(error) === 409 && styleErrorCode(error) !== "style_category_exists";
-async function styleCall(path, body2) {
-  if (!rest) throw new Error("Styles are unavailable here");
-  return rest(path, { method: "POST", body: body2, timeoutMs: 2e4 });
-}
-var searchKey = (query) => String(query || "").trim().slice(0, 200);
-var cachedSearch = (query) => searchCache.get(searchKey(query)) || null;
-async function searchStyles(query) {
-  const q = searchKey(query);
-  if (searchCache.has(q)) return searchCache.get(q);
-  if (searchPending.has(q)) return searchPending.get(q);
-  const run = (async () => {
-    const reply = await styleCall("/styles/search", { query: q, limit: 4e3 });
-    const items = (Array.isArray(reply && reply.items) ? reply.items : []).filter((item) => item && typeof item.id === "string" && typeof item.title === "string").map((item) => ({ id: item.id, title: item.title.slice(0, 120) }));
-    const result = { items, total: Number(reply && reply.total) || items.length, catalogTotal: Number(reply && reply.catalog_total) || 0 };
-    if (result.catalogTotal > 0) {
-      searchCache.set(q, result);
-      if (searchCache.size > STYLE_SEARCH_CACHE_MAX) {
-        const first = searchCache.keys().next().value;
-        if (first !== "") searchCache.delete(first);
-      }
-    }
-    return result;
-  })();
-  searchPending.set(q, run);
-  try {
-    return await run;
-  } finally {
-    searchPending.delete(q);
-  }
-}
-var prefetched = false;
-async function prefetchStyles() {
-  if (prefetched || !rest) return;
-  prefetched = true;
-  try {
-    const all = await searchStyles("");
-    await requestThumbs(all.items.slice(0, STYLE_THUMB_BATCH).map((item) => item.id), { cachedOnly: true });
-  } catch {
-    prefetched = false;
-  }
-}
-async function readStyleDetail(id) {
-  if (detailCache.has(id)) return detailCache.get(id);
-  const reply = await styleCall("/styles/detail", { id });
-  const detail = {
-    id,
-    title: String(reply && reply.title || "").slice(0, 120),
-    keywords: (Array.isArray(reply && reply.keywords) ? reply.keywords : []).filter((k) => typeof k === "string").slice(0, 12).map((k) => k.slice(0, 60)),
-    summary: String(reply && reply.summary || "").slice(0, 600),
-    style: String(reply && reply.style || "").slice(0, 4e3)
-  };
-  detailCache.set(id, detail);
-  if (detailCache.size > STYLE_DETAIL_CACHE_MAX) detailCache.delete(detailCache.keys().next().value);
-  return detail;
-}
-var thumbOf3 = (id) => thumbCache2.has(id) ? thumbCache2.get(id) : thumbFailed.has(id) ? null : void 0;
-var onThumbs = (listener) => {
-  thumbListeners.add(listener);
-  return () => {
-    thumbListeners.delete(listener);
-  };
-};
-var thumbOk = (value) => typeof value === "string" && STYLE_THUMB_RE.test(value);
-async function requestThumbs(ids, { cachedOnly = false } = {}) {
-  const now = Date.now();
-  const want = [...new Set(ids)].filter((id) => !thumbCache2.has(id) && !thumbPending.has(id) && !(now - (thumbFailed.get(id) || -Infinity) < STYLE_THUMB_RETRY_MS));
-  const batches = [];
-  for (let i2 = 0; i2 < want.length; i2 += STYLE_THUMB_BATCH) batches.push(want.slice(i2, i2 + STYLE_THUMB_BATCH));
-  const settle = () => {
-    while (thumbCache2.size > STYLE_THUMB_CACHE_MAX) thumbCache2.delete(thumbCache2.keys().next().value);
-    thumbListeners.forEach((listener) => listener());
-  };
-  await Promise.all(batches.map(async (batch) => {
-    batch.forEach((id) => thumbPending.add(id));
-    let rest2 = batch;
-    try {
-      const fast = await styleCall("/styles/thumbs", { ids: batch, cached_only: true });
-      const got = fast && fast.thumbs && typeof fast.thumbs === "object" ? fast.thumbs : {};
-      for (const id of batch) if (thumbOk(got[id])) {
-        thumbCache2.set(id, got[id]);
-        thumbFailed.delete(id);
-      }
-      rest2 = batch.filter((id) => !thumbCache2.has(id));
-      if (rest2.length < batch.length) settle();
-    } catch {
-      rest2 = batch;
-    }
-    if (cachedOnly || !rest2.length) {
-      batch.forEach((id) => thumbPending.delete(id));
-      return;
-    }
-    try {
-      const reply = await styleCall("/styles/thumbs", { ids: rest2 });
-      const thumbs2 = reply && reply.thumbs && typeof reply.thumbs === "object" ? reply.thumbs : {};
-      for (const id of rest2) {
-        thumbCache2.set(id, thumbOk(thumbs2[id]) ? thumbs2[id] : null);
-        thumbFailed.delete(id);
-      }
-    } catch {
-      const at = Date.now();
-      for (const id of rest2) thumbFailed.set(id, at);
-    } finally {
-      batch.forEach((id) => thumbPending.delete(id));
-      settle();
-    }
-  }));
-}
-var cleanCategories = (list) => (Array.isArray(list) ? list : []).filter((item) => item && typeof item.name === "string").map((item) => ({ id: typeof item.id === "string" ? item.id : null, name: item.name, boards: Array.isArray(item.boards) ? item.boards.filter((b) => typeof b === "string") : [] }));
-var categoryDoc = (reply) => ({ revision: Number.isInteger(reply && reply.revision) ? reply.revision : 0, categories: cleanCategories(reply && reply.categories) });
-var keepCategories = (doc2) => {
-  categoryCache = doc2;
-  return doc2;
-};
-var cachedCategories = () => categoryCache;
-var readCategories = async () => keepCategories(categoryDoc(await styleCall("/styles/categories/read", {})));
-var writeCategories = async (revision, categories) => keepCategories(categoryDoc(await styleCall("/styles/categories/write", {
-  expected_revision: revision,
-  categories: categories.map((item) => item.id ? { id: item.id, name: item.name, boards: item.boards } : { name: item.name, boards: item.boards })
-})));
-async function changeCategories(doc2, change) {
-  try {
-    return await writeCategories(doc2.revision, change(doc2.categories));
-  } catch (error) {
-    if (!isStyleConflict(error)) throw error;
-  }
-  const fresh = await readCategories();
-  try {
-    return await writeCategories(fresh.revision, change(fresh.categories));
-  } catch (error) {
-    if (!isStyleConflict(error)) throw error;
-    const again = new Error("Categories changed elsewhere");
-    again.reload = true;
-    throw again;
-  }
-}
-var categoryName = (text2) => String(text2 || "").replace(/\s+/g, " ").trim().slice(0, STYLE_NAME_MAX);
-var addCategory = (name2) => (list) => [...list, { id: null, name: name2, boards: [] }];
-var renameCategory = (id, name2) => (list) => list.map((item) => item.id === id ? { ...item, name: name2 } : item);
-var deleteCategory = (id) => (list) => list.filter((item) => item.id !== id);
-var setBoardInCategory = (id, boardId, on) => (list) => list.map((item) => {
-  if (item.id !== id) return item;
-  const has3 = item.boards.includes(boardId);
-  if (on === has3) return item;
-  return { ...item, boards: on ? [...item.boards, boardId] : item.boards.filter((b) => b !== boardId) };
-});
-var categoryErrorText = (error) => styleErrorCode(error) === "style_category_exists" ? "A category with this name already exists" : error && error.reload ? error.message : styleErrorText(error, "Categories could not be saved");
-var STYLE_TEXT_MAX = 8e3;
-var IMAGE_STYLES_MAX = 24;
-var styleItem = (raw) => {
-  if (!raw || typeof raw.id !== "string" || !raw.id || typeof raw.style !== "string") return null;
-  const style = raw.style.replace(/\s+$/, "").slice(0, STYLE_TEXT_MAX);
-  if (!style.trim()) return null;
-  const text2 = typeof raw.text === "string" && raw.text.trim() ? raw.text.trim().slice(0, STYLE_TEXT_MAX) : style;
-  return { id: raw.id.slice(0, 80), title: String(raw.title || "").slice(0, 160), style, text: text2, on: raw.on !== false };
-};
-var IMAGE_RUN_STYLES_KEY = "filmSuite.image.runStyles";
-var IMAGE_RUN_STYLES_MAX = 300;
-var runStylesKey = (prompt) => String(prompt || "").trim();
-var runStylesNote = (store4, prompt, list) => {
-  const key = runStylesKey(prompt);
-  const all = Array.isArray(store4) ? store4.filter((entry2) => entry2 && entry2.prompt !== key) : [];
-  const kept = (Array.isArray(list) ? list : []).map(styleItem).filter(Boolean).slice(0, IMAGE_STYLES_MAX);
-  if (!key || !kept.some((item) => item.on)) return all.slice(-IMAGE_RUN_STYLES_MAX);
-  return [...all, { prompt: key, styles: kept }].slice(-IMAGE_RUN_STYLES_MAX);
-};
-var runStylesFind = (store4, prompt) => {
-  const key = runStylesKey(prompt);
-  const entry2 = Array.isArray(store4) && key ? store4.find((item) => item && item.prompt === key) : null;
-  return entry2 && Array.isArray(entry2.styles) ? entry2.styles.map(styleItem).filter(Boolean) : null;
-};
-
-// desktop/film-suite/src/image/module/parts/use-prompt-blocks.js
-function editPromptText(area, next, fallback) {
-  const now = area ? area.value : null;
-  if (now === next) return;
-  if (!area || typeof document === "undefined" || typeof document.execCommand !== "function") {
-    fallback(next);
-    return;
-  }
-  let a = 0;
-  while (a < now.length && a < next.length && now[a] === next[a]) a++;
-  let b = 0;
-  while (b < now.length - a && b < next.length - a && now[now.length - 1 - b] === next[next.length - 1 - b]) b++;
-  const active = document.activeElement;
-  let ok4 = false;
-  try {
-    area.focus({ preventScroll: true });
-    if (document.activeElement === area) {
-      area.setSelectionRange(a, now.length - b);
-      const mid = next.slice(a, next.length - b);
-      ok4 = mid ? document.execCommand("insertText", false, mid) : document.execCommand("delete");
-    }
-  } catch {
-    ok4 = false;
-  }
-  if (active && active !== area && typeof active.focus === "function") active.focus({ preventScroll: true });
-  if (!ok4 || area.value !== next) fallback(next);
-}
-function dropWords(text2, words2) {
-  let out = String(text2 || "");
-  for (const word of words2 || []) {
-    if (!word) continue;
-    const at = out.indexOf(word);
-    if (at < 0) continue;
-    let before = out.slice(0, at), after = out.slice(at + word.length);
-    if (before.endsWith(", ")) before = before.slice(0, -2);
-    else if (/[.;:] $/.test(before)) before = before.slice(0, -1);
-    else if (!before.trim()) after = after.replace(/^,\s*/, "");
-    else before = before.replace(/\s+$/, "");
-    out = before + after;
-  }
-  return out;
-}
-var STYLE_SEP = "\n\n";
-var onOf = (styles) => styles.filter((item) => item.on);
-var textsOf = (styles) => onOf(styles).map((item) => item.text);
-var composePrompt = (head2, texts) => [String(head2 || "").trim(), ...texts].filter(Boolean).join(STYLE_SEP);
-function parseBlocks(text2, texts) {
-  const all = String(text2 || "");
-  let end2 = all.replace(/\s+$/, "").length;
-  const spans = [];
-  for (let i2 = texts.length - 1; i2 >= 0; i2--) {
-    const t2 = texts[i2];
-    if (!t2 || end2 < t2.length || all.slice(end2 - t2.length, end2) !== t2) return null;
-    spans.unshift({ s: end2 - t2.length, e: end2 });
-    end2 = all.slice(0, end2 - t2.length).replace(/\s+$/, "").length;
-  }
-  return { head: all.slice(0, end2), spans };
-}
-function trackEdit(prevText, text2, styles) {
-  const on = onOf(styles);
-  const prev = parseBlocks(prevText, on.map((item) => item.text));
-  if (prev && on.length) {
-    let a = 0;
-    while (a < prevText.length && a < text2.length && prevText[a] === text2[a]) a++;
-    let b = 0;
-    while (b < prevText.length - a && b < text2.length - a && prevText[prevText.length - 1 - b] === text2[text2.length - 1 - b]) b++;
-    const oldEnd = prevText.length - b;
-    const delta = text2.length - prevText.length;
-    for (let k = 0; k < on.length; k++) {
-      const s = prev.spans[k].s;
-      const e = k === on.length - 1 ? prevText.length : prev.spans[k].e;
-      if (s <= a && oldEnd <= e) {
-        const changed2 = text2.slice(s, e + delta).trim();
-        if (!changed2) break;
-        const next = styles.map((item) => item.id === on[k].id ? { ...item, text: changed2 } : item);
-        if (parseBlocks(text2, textsOf(next))) return { styles: next, gone: [] };
-        break;
-      }
-    }
-  }
-  let rest2 = String(text2 || "");
-  const keep = /* @__PURE__ */ new Set();
-  for (let i2 = on.length - 1; i2 >= 0; i2--) {
-    const trimmed = rest2.replace(/\s+$/, "");
-    if (!trimmed.endsWith(on[i2].text)) break;
-    keep.add(on[i2].id);
-    rest2 = trimmed.slice(0, trimmed.length - on[i2].text.length);
-  }
-  const gone2 = [];
-  styles.forEach((item, index) => {
-    if (item.on && !keep.has(item.id)) gone2.push({ item, index });
-  });
-  return { styles: styles.filter((item) => !item.on || keep.has(item.id)), gone: gone2 };
-}
-var sameStyles = (a, b) => a === b || a.length === b.length && a.every((item, i2) => item.id === b[i2].id && item.text === b[i2].text && item.on === b[i2].on);
-function usePromptBlocks({ promptRef, typed, setTyped, styles, setStyles, scope }) {
-  const on = onOf(styles);
-  const parsed = parseBlocks(typed, on.map((item) => item.text));
-  const seenRef = useRef(null);
-  const pendingRef = useRef(null);
-  const recentRef = useRef([]);
-  const remember3 = (gone2, at) => {
-    recentRef.current = [
-      ...gone2.map((entry2) => ({ ...entry2, scope: at })),
-      ...recentRef.current.filter((entry2) => entry2.scope !== at || !gone2.some((g) => g.item.id === entry2.item.id))
-    ].slice(0, 12);
-  };
-  const edit = (next) => editPromptText(promptRef.current, next, setTyped);
-  const commit = (nextStyles) => {
-    const head2 = parsed ? parsed.head : typed;
-    const nextText = composePrompt(head2, textsOf(nextStyles));
-    pendingRef.current = { typed: nextText, styles: nextStyles };
-    setStyles(nextStyles);
-    edit(nextText);
-  };
-  const addStyle = (raw) => {
-    const board2 = styleItem({ ...raw, text: void 0, on: true });
-    if (!board2 || !parsed) return;
-    const have = styles.find((item) => item.id === board2.id);
-    if (have && have.on) return;
-    commit(have ? styles.map((item) => item.id === board2.id ? { ...item, on: true } : item) : [...styles, board2]);
-  };
-  const removeStyle = (id) => {
-    const index = styles.findIndex((item) => item.id === id);
-    if (index < 0 || !parsed) return;
-    remember3([{ item: styles[index], index }], scope);
-    commit(styles.filter((item) => item.id !== id));
-  };
-  const toggleStyle = (id) => {
-    if (parsed) commit(styles.map((item) => item.id === id ? { ...item, on: !item.on } : item));
-  };
-  const reorderStyles = (ids) => {
-    const byId2 = new Map(styles.map((item) => [item.id, item]));
-    const next = ids.map((id) => byId2.get(id)).filter(Boolean);
-    if (next.length === styles.length && parsed) commit(next);
-  };
-  useEffect(() => {
-    const pending = pendingRef.current;
-    if (pending) {
-      const textOk = typed === pending.typed;
-      const listOk = sameStyles(styles, pending.styles);
-      if (textOk && listOk) {
-        pendingRef.current = null;
-        seenRef.current = { scope, typed, styles };
-        return;
-      }
-      if (textOk || listOk) return;
-      pendingRef.current = null;
-    }
-    const seen = seenRef.current;
-    if (seen && seen.scope === scope && seen.typed === typed && sameStyles(seen.styles, styles)) return;
-    const texts = textsOf(styles);
-    if (!seen || seen.scope !== scope) {
-      if (texts.length && !parseBlocks(typed, texts)) {
-        const nextText = composePrompt(typed, texts);
-        pendingRef.current = { typed: nextText, styles };
-        setTyped(nextText);
-        return;
-      }
-      seenRef.current = { scope, typed, styles };
-      return;
-    }
-    const back = [
-      ...recentRef.current.filter((entry2) => entry2.scope === scope && !styles.some((item) => item.id === entry2.item.id)).map((entry2) => {
-        const cand = styles.slice();
-        cand.splice(Math.min(entry2.index, cand.length), 0, { ...entry2.item, on: true });
-        return { entry: entry2, cand };
-      }),
-      ...styles.filter((item) => !item.on).map((item) => ({ entry: null, cand: styles.map((other) => other.id === item.id ? { ...other, on: true } : other) }))
-    ].find(({ cand }) => parseBlocks(typed, textsOf(cand)) && !parseBlocks(seen.typed, textsOf(cand)));
-    if (back) {
-      if (back.entry) recentRef.current = recentRef.current.filter((other) => other !== back.entry);
-      pendingRef.current = { typed, styles: back.cand };
-      setStyles(back.cand);
-      return;
-    }
-    if (parseBlocks(typed, texts)) {
-      seenRef.current = { scope, typed, styles };
-      return;
-    }
-    const tracked = trackEdit(seen.typed, typed, styles);
-    if (tracked.gone.length) remember3(tracked.gone, scope);
-    pendingRef.current = { typed, styles: tracked.styles };
-    setStyles(tracked.styles);
-  }, [typed, styles, scope]);
-  const insertTriggers = (words2) => {
-    const add = (Array.isArray(words2) ? words2 : [words2]).filter((word) => word && !typed.includes(word));
-    if (!add.length) return;
-    let joined = (parsed ? parsed.head : typed).replace(/\s+$/, "");
-    for (const word of add) joined = joined ? joined + (/[,.;:]$/.test(joined) ? " " : ", ") + word : word;
-    edit(parsed && on.length ? composePrompt(joined, on.map((item) => item.text)) : joined);
-  };
-  const insertTrigger = (word) => insertTriggers([word]);
-  const dropTriggers = (words2) => {
-    const head2 = parsed ? parsed.head : typed;
-    const next = dropWords(head2, words2);
-    if (next === head2) return;
-    edit(parsed && on.length ? composePrompt(next, on.map((item) => item.text)) : next);
-  };
-  const markChildren = () => {
-    if (!parsed || !on.length) return null;
-    const parts = [];
-    let at = 0;
-    parsed.spans.forEach((span2, k) => {
-      parts.push(typed.slice(at, span2.s));
-      parts.push(jsx66("mark", { className: "fw-pmark-style", "data-testid": "fim-prompt-style", "data-board": on[k].id, children: typed.slice(span2.s, span2.e) }, on[k].id));
-      at = span2.e;
-    });
-    parts.push(typed.slice(at) + "\n");
-    return parts;
-  };
-  return { linked: Boolean(parsed && on.length), styles, addStyle, removeStyle, toggleStyle, reorderStyles, insertTrigger, insertTriggers, dropTriggers, markChildren };
-}
-
 // desktop/film-suite/src/image/history/image-history-ui.js
 import { useValue as useValue14 } from "@hermes/plugin-sdk";
-import { jsx as jsx68 } from "react/jsx-runtime";
+import { jsx as jsx67 } from "react/jsx-runtime";
 
 // desktop/film-suite/src/shared/ui/components/history-row.js
-import { jsx as jsx67, jsxs as jsxs57 } from "react/jsx-runtime";
+import { jsx as jsx66, jsxs as jsxs57 } from "react/jsx-runtime";
 var USER_ROUND = '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>';
-var hhmm = (at) => {
-  const d = at ? new Date(at) : null;
+var hhmm = (at2) => {
+  const d = at2 ? new Date(at2) : null;
   if (!d || Number.isNaN(d.getTime())) return "";
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
-function HistoryRow({ by, what, at, tip, testid, revision, open = false, action = null, now = false, whatClass = "", className = "", attrs = null, whoWord = "" }) {
+function HistoryRow({ by, what, at: at2, tip, testid, revision, open = false, action = null, now = false, whatClass = "", className = "", attrs = null, whoWord = "" }) {
   const hermes = by === "hermes";
   const who = hermes ? "Hermes" : whoWord || "You";
-  const time = /^\d\d:\d\d$/.test(String(at || "")) ? at : hhmm(at);
+  const time = /^\d\d:\d\d$/.test(String(at2 || "")) ? at2 : hhmm(at2);
   const title = [tip || what, time ? `${who} · ${time}` : who].filter(Boolean).join("\n");
   return jsxs57("li", { ...attrs || {}, className: "fw-hrow" + (now ? " is-now" : "") + (className ? " " + className : ""), "data-testid": testid, "data-revision": revision === void 0 ? void 0 : String(revision), "data-by": hermes ? "hermes" : "artist", title, children: [
-    jsx67("span", { className: "fw-hrow-who", children: hermes ? jsx67(HermesMark, { label: "Hermes" }) : jsx67("svg", { className: "fw-hrow-user", viewBox: "0 0 24 24", role: "img", "aria-label": who, dangerouslySetInnerHTML: { __html: USER_ROUND } }) }, "w"),
+    jsx66("span", { className: "fw-hrow-who", children: hermes ? jsx66(HermesMark, { label: "Hermes" }) : jsx66("svg", { className: "fw-hrow-user", viewBox: "0 0 24 24", role: "img", "aria-label": who, dangerouslySetInnerHTML: { __html: USER_ROUND } }) }, "w"),
     // The dot sits right after the text (board H1), not at the row's far edge.
     jsxs57("span", { className: "fw-hrow-main", children: [
-      jsx67("span", { className: "fw-hrow-what" + (whatClass ? " " + whatClass : ""), "data-user-text": "1", children: what }, "l"),
-      open ? jsx67("span", { className: "fw-hrow-dot", "data-testid": "history-row-open", "aria-label": "Not reviewed" }, "d") : null
+      jsx66("span", { className: "fw-hrow-what" + (whatClass ? " " + whatClass : ""), "data-user-text": "1", children: what }, "l"),
+      open ? jsx66("span", { className: "fw-hrow-dot", "data-testid": "history-row-open", "aria-label": "Not reviewed" }, "d") : null
     ] }, "m"),
-    jsx67("span", { className: "fw-hrow-at", children: time }, "t"),
-    action ? jsx67("button", { type: "button", className: "fw-hrow-act" + (action.className ? " " + action.className : ""), "data-testid": action.testid, disabled: action.disabled, title: action.title, onClick: action.onClick, children: action.word }, "b") : jsx67("span", { className: "fw-hrow-act is-none", "aria-hidden": "true" }, "b")
+    jsx66("span", { className: "fw-hrow-at", children: time }, "t"),
+    action ? jsx66("button", { type: "button", className: "fw-hrow-act" + (action.className ? " " + action.className : ""), "data-testid": action.testid, disabled: action.disabled, title: action.title, onClick: action.onClick, children: action.word }, "b") : jsx66("span", { className: "fw-hrow-act is-none", "aria-hidden": "true" }, "b")
   ] });
 }
 var HISTORY_ROW_CSS = `
@@ -81584,7 +85880,7 @@ var ownTextUndo = (target) => Boolean(target && (target.tagName === "TEXTAREA" |
 function useImageStepsPanel(ownerScope, jobs) {
   const imageSteps = useValue14($imageSteps);
   const stepRows = imageHistoryRows(imageSteps, jobs, ownerScope, jobRunName);
-  return stepRows.length ? jsx68("ul", { className: "fw-hist fim-steps", "data-testid": "fim-steps", "aria-label": "Steps", children: stepRows.slice(0, 60).map((row2) => jsx68(HistoryRow, { by: row2.by, what: row2.what, at: new Date(row2.at).toISOString(), testid: "fim-step", tip: row2.what }, row2.key)) }, "steps") : null;
+  return stepRows.length ? jsx67("ul", { className: "fw-hist fim-steps", "data-testid": "fim-steps", "aria-label": "Steps", children: stepRows.slice(0, 60).map((row2) => jsx67(HistoryRow, { by: row2.by, what: row2.what, at: new Date(row2.at).toISOString(), testid: "fim-step", tip: row2.what }, row2.key)) }, "steps") : null;
 }
 function useSettingsUndo({ w, seed, setSeed, profile, visible, inImageRef, createOnRef }) {
   const settingsNow = { seed, profile, samplingByProfile: w.samplingByProfile, runSize: w.runSize || null };
@@ -81646,66 +85942,9 @@ var OUTPAINT_CSS = `
 .fw .fw-op-result .fw-btnrow .fw-op-accept{width:auto}
 `;
 
-// desktop/film-suite/src/shared/ui/components/panes.js
-import { jsx as jsx69 } from "react/jsx-runtime";
-var FW_CANVAS_MIN_SHARE = 0.4;
-var FW_STRIP_W = 36;
-var FW_PANE_LIMITS = { insp: { min: 220, max: 520 }, dock: { min: 200, max: 480 } };
-var fwStoredWidth = (key, limits) => {
-  const v = storageGet(key, null);
-  return Number.isFinite(v) && v >= limits.min && v <= limits.max ? Math.round(v) : null;
-};
-function useFrameWidth(rootRef) {
-  const [fwW, setFwW] = useState(0);
-  useLayoutEffect(() => {
-    const node = rootRef.current;
-    if (!node) return void 0;
-    const read2 = () => setFwW(node.clientWidth);
-    read2();
-    if (typeof ResizeObserver === "undefined") return void 0;
-    const observer = new ResizeObserver(read2);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-  return fwW;
-}
-function usePaneWidths({ fwW, keys, defaults: defaults2, fixed = 0, inspOpen = true, dockOpen = true, limits = FW_PANE_LIMITS }) {
-  const [inspW, setInspW] = useState(() => fwStoredWidth(keys.insp, limits.insp));
-  const [dockW, setDockW] = useState(() => fwStoredWidth(keys.dock, limits.dock));
-  const base2 = defaults2(fwW);
-  const narrow = fwW > 0 && fwW < 900;
-  const inspShown = inspOpen ? inspW || base2.insp : FW_STRIP_W;
-  const dockShown = dockOpen ? dockW || base2.dock : FW_STRIP_W;
-  const paneMax = (pane, other) => Math.max(limits[pane].min, Math.min(limits[pane].max, Math.floor(fwW * (1 - FW_CANVAS_MIN_SHARE)) - other - fixed));
-  const inspMax = paneMax("insp", dockShown);
-  const dockMax = paneMax("dock", inspShown);
-  const sizePane = (pane, value) => {
-    const max = pane === "insp" ? inspMax : dockMax;
-    const next = value === null ? null : Math.round(Math.max(limits[pane].min, Math.min(max, value)));
-    if (pane === "insp") {
-      setInspW(next);
-      storageSet(keys.insp, next);
-    } else {
-      setDockW(next);
-      storageSet(keys.dock, next);
-    }
-  };
-  const inspCss = inspOpen ? Math.min(inspShown, inspMax) : FW_STRIP_W;
-  const dockCss = dockOpen ? Math.min(dockShown, dockMax) : FW_STRIP_W;
-  const style = fwW && !narrow ? { "--fw-insp-w": inspCss + "px", "--fw-dock-w": dockCss + "px" } : void 0;
-  return { narrow, inspShown, dockShown, inspMax, dockMax, inspCss, dockCss, sizePane, style, limits };
-}
-function PaneSplitters({ panes, fwW, inspOpen = true, dockOpen = true, flip = false, inspLabel = "Controls width", dockLabel = "Panels width", testids = ["fw-split-insp", "fw-split-dock"] }) {
-  if (!fwW || panes.narrow) return [];
-  return [
-    inspOpen ? jsx69(FwSplitter, { label: inspLabel, testid: testids[0], side: flip ? "right" : "left", value: panes.inspCss, min: panes.limits.insp.min, max: panes.inspMax, onSize: (n) => panes.sizePane("insp", n), onReset: () => panes.sizePane("insp", null) }, "split-insp") : null,
-    dockOpen ? jsx69(FwSplitter, { label: dockLabel, testid: testids[1], side: flip ? "left" : "right", value: panes.dockCss, min: panes.limits.dock.min, max: panes.dockMax, onSize: (n) => panes.sizePane("dock", n), onReset: () => panes.sizePane("dock", null) }, "split-dock") : null
-  ];
-}
-
 // desktop/film-suite/src/image/module/image-g1.js
 import { GlyphSpinner as GlyphSpinner11, cn as cn23 } from "@hermes/plugin-sdk";
-import { jsx as jsx70, jsxs as jsxs58 } from "react/jsx-runtime";
+import { jsx as jsx68, jsxs as jsxs58 } from "react/jsx-runtime";
 function imageSessionTakes(seen, { runJobs = [], job = null, shownPicture = null, cells = [], prompt = "", isHermes = () => false }) {
   const out = seen.slice();
   const has3 = (id) => out.some((t2) => t2.jobId === id);
@@ -81720,9 +85959,9 @@ function imageSessionTakes(seen, { runJobs = [], job = null, shownPicture = null
 function ImageTakesStrip({ takes, current: current2, onPick, hermes = [] }) {
   const own2 = new Set(takes.map((t2) => t2.jobId));
   const extra = hermes.filter((h) => !own2.has(h.jobId) && !h.failed);
-  if (!takes.length && !extra.length) return jsx70("div", { className: "fim-takes-strip is-empty", "aria-hidden": "true", "data-testid": "fim-takes-strip" });
+  if (!takes.length && !extra.length) return jsx68("div", { className: "fim-takes-strip is-empty", "aria-hidden": "true", "data-testid": "fim-takes-strip" });
   const total = takes.length + extra.length;
-  return jsx70("div", { className: "fim-takes-strip", role: "list", "aria-label": `Takes · ${total}`, "data-testid": "fim-takes-strip", children: [...takes.map((t2, i2) => jsx70("div", { role: "listitem", className: "fim-tk-li", children: jsxs58("button", {
+  return jsx68("div", { className: "fim-takes-strip", role: "list", "aria-label": `Takes · ${total}`, "data-testid": "fim-takes-strip", children: [...takes.map((t2, i2) => jsx68("div", { role: "listitem", className: "fim-tk-li", children: jsxs58("button", {
     type: "button",
     className: cn23("fim-tk fw-b", t2.jobId === current2 && "is-current"),
     "data-testid": "fim-tk",
@@ -81733,13 +85972,13 @@ function ImageTakesStrip({ takes, current: current2, onPick, hermes = [] }) {
     title: `Take ${i2 + 1}${t2.by === "hermes" ? " · Hermes" : ""}${t2.label ? " · " + t2.label : ""} (click opens it)`,
     onClick: () => onPick(t2),
     children: [
-      jsx70("img", { src: t2.picture.src, alt: "", draggable: false }, "i"),
-      jsx70("span", { className: "fim-tk-n", "aria-hidden": "true", children: String(i2 + 1) }, "n"),
-      t2.by === "hermes" ? jsx70(HermesMark, { decorative: true, className: "fim-tk-h" }, "h") : null
+      jsx68("img", { src: t2.picture.src, alt: "", draggable: false }, "i"),
+      jsx68("span", { className: "fim-tk-n", "aria-hidden": "true", children: String(i2 + 1) }, "n"),
+      t2.by === "hermes" ? jsx68(HermesMark, { decorative: true, className: "fim-tk-h" }, "h") : null
     ]
   }) }, t2.jobId)), ...extra.map((h, k) => {
     const n = takes.length + k + 1, busy2 = !h.picture;
-    return jsx70("div", { role: "listitem", className: "fim-tk-li", children: jsxs58("button", {
+    return jsx68("div", { role: "listitem", className: "fim-tk-li", children: jsxs58("button", {
       type: "button",
       className: cn23("fim-tk fw-b", busy2 && "is-busy", h.jobId === current2 && "is-current"),
       "data-testid": "fim-tk",
@@ -81751,9 +85990,9 @@ function ImageTakesStrip({ takes, current: current2, onPick, hermes = [] }) {
       title: `Take ${n} · Hermes · ${busy2 ? "Running" : "Done"} (click opens it)`,
       onClick: () => onPick({ ...h, hermes: true }),
       children: [
-        busy2 ? jsx70("span", { className: "fim-tk-busy", children: jsx70(GlyphSpinner11, {}) }, "s") : jsx70("img", { src: h.picture.src, alt: "", draggable: false }, "i"),
-        jsx70("span", { className: "fim-tk-n", "aria-hidden": "true", children: String(n) }, "n"),
-        jsx70(HermesMark, { decorative: true, className: "fim-tk-h" }, "h")
+        busy2 ? jsx68("span", { className: "fim-tk-busy", children: jsx68(GlyphSpinner11, {}) }, "s") : jsx68("img", { src: h.picture.src, alt: "", draggable: false }, "i"),
+        jsx68("span", { className: "fim-tk-n", "aria-hidden": "true", children: String(n) }, "n"),
+        jsx68(HermesMark, { decorative: true, className: "fim-tk-h" }, "h")
       ]
     }) }, h.jobId);
   })] });
@@ -81933,7 +86172,7 @@ var RELIGHT_CSS = `
 `;
 
 // desktop/film-suite/src/image/canvas-nav/canvas-view.js
-import { jsx as jsx71 } from "react/jsx-runtime";
+import { jsx as jsx69 } from "react/jsx-runtime";
 var CANVAS_DRAG_PX = 3;
 var CANVAS_OWN_POINTER = "button, a, input, select, textarea, [role=slider], [role=button], .fw-mini, .fw-toast, .fw-steps, .fw-vary";
 function useCanvasView(ctx) {
@@ -82021,8 +86260,8 @@ function useCanvasView(ctx) {
     return false;
   };
   const panAttr = Boolean(ctx.navOn && !ctx.editOn);
-  const minimap = ctx.navOn ? jsx71(FwMinimap, { src: ctx.stagePicture.src, natW: ctx.natW, natH: ctx.natH, view: ctx.viewOf(ctx.zoom), box: ctx.box, onView: ctx.setZoom }, "minimap") : null;
-  const viewerClose = on ? jsx71(FwButton, { variant: "ghost", icon: "x", className: "fw-viewer-x", "data-testid": "fw-viewer-close", "aria-label": "Close full view", title: "Close full view (Esc)", onClick: close }, "viewer-x") : null;
+  const minimap = ctx.navOn ? jsx69(FwMinimap, { src: ctx.stagePicture.src, natW: ctx.natW, natH: ctx.natH, view: ctx.viewOf(ctx.zoom), box: ctx.box, onView: ctx.setZoom }, "minimap") : null;
+  const viewerClose = on ? jsx69(FwButton, { variant: "ghost", icon: "x", className: "fw-viewer-x", "data-testid": "fw-viewer-close", "aria-label": "Close full view", title: "Close full view (Esc)", onClick: close }, "viewer-x") : null;
   const api = {
     snapshot: () => {
       if (!ctx.navOn || !ctx.natW || !ctx.box.w) return null;
@@ -82090,11 +86329,6 @@ var FW_CANVAS_VIEW_CSS = `
 @container fim (max-width:899px){.fw.is-viewer,.fw.is-viewer.is-right,.fw.is-viewer.no-controls{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);grid-template-areas:"canvas"}}
 `;
 
-// desktop/film-suite/src/image/recent/recent-strip.js
-import { atom as atom17 } from "@hermes/plugin-sdk";
-var $recentCurrent = atom17("");
-var $recentOpenPicture = atom17(null);
-
 // desktop/film-suite/src/image/module/parts/crop-css.js
 var CROP_CSS = `
 .fw-crop-angle{margin-top:2px}
@@ -82106,27 +86340,6 @@ var CROP_CSS = `
 .fw-prow .fw-pctl.fw-crop-wh>.fw-num{flex:1 1 0;width:auto;min-width:0;margin-left:0}
 .fw-crop-wh>.fw-wh-x:last-child{min-width:14px}
 `;
-
-// desktop/film-suite/src/image/module/parts/image-zoom-group.js
-import { jsx as jsx72, jsxs as jsxs59 } from "react/jsx-runtime";
-var ZOOM_OFF_WHY = "No picture open";
-var ZOOM_OFF_TEXT = "–";
-function ImageZoomGroup({ on, zoom, scale, zoomText, zoomMenu, zoomBtnRef, zoomBy, zoomFit, zoomActual, openZoomMenu, setZoomMenu, step: step2 }) {
-  const why = (t2) => on ? t2 : `${t2} · ${ZOOM_OFF_WHY}`;
-  return jsxs59("div", { className: "fw-zoom", role: "group", "aria-label": "Zoom", "data-enabled": on ? "true" : "false", children: [
-    jsx72(FwButton, { variant: "ghost", icon: "minus", "aria-label": "Zoom out", title: why("Zoom out (−)"), disabledReason: on ? "" : why("Zoom out (−)"), "data-testid": "fw-zoom-out", disabled: !on, onClick: () => zoomBy(1 / step2) }, "o"),
-    jsxs59("button", { ref: zoomBtnRef, type: "button", className: "fw-btn fw-btn-field fw-zoomv", "data-testid": "fw-zoom-readout", "data-scale": String(scale), "data-mode": zoom.fit ? zoom.fill ? "fill" : "fit" : "scale", "aria-haspopup": "menu", "aria-expanded": Boolean(zoomMenu), "aria-label": on ? `Zoom ${zoomText}` : "Zoom", title: why("Zoom presets"), "aria-disabled": on ? void 0 : "true", onClick: (event) => {
-      if (!on) {
-        event.preventDefault();
-        return;
-      }
-      zoomMenu ? setZoomMenu(null) : openZoomMenu();
-    }, children: [jsx72("span", { children: on ? zoomText : ZOOM_OFF_TEXT }, "t"), jsx72(FwIcon, { name: "chev", className: "fw-zoomv-chev" }, "c")] }, "v"),
-    jsx72(FwButton, { variant: "ghost", icon: "plus", "aria-label": "Zoom in", title: why("Zoom in (+)"), disabledReason: on ? "" : why("Zoom in (+)"), "data-testid": "fw-zoom-in", disabled: !on, onClick: () => zoomBy(step2) }, "i"),
-    jsx72(FwButton, { variant: "ghost", className: "fw-zoom-x", "data-testid": "fw-zoom-fit", "aria-pressed": on && Boolean(zoom.fit && !zoom.fill), title: why("Fit the picture to the canvas (Shift+1)"), disabledReason: on ? "" : why("Fit the picture to the canvas (Shift+1)"), disabled: !on, onClick: zoomFit, children: "Fit" }, "f"),
-    jsx72(FwButton, { variant: "ghost", className: "fw-zoom-x", "data-testid": "fw-zoom-100", "aria-pressed": on && !zoom.fit && Math.abs(scale - 1) < 1e-6, title: why("Actual pixels, 100% (Shift+0)"), disabledReason: on ? "" : why("Actual pixels, 100% (Shift+0)"), disabled: !on, onClick: zoomActual, children: "1:1" }, "a")
-  ] }, "zoom");
-}
 
 // desktop/film-suite/src/image/box/box-css.js
 var BOX_CSS = `
@@ -82188,14 +86401,1296 @@ var BOX_CSS = `
 .fw-op-model-files{margin:0}
 `;
 
-// desktop/film-suite/src/image/output/target-run.js
+// desktop/film-suite/src/image/styles/style-browser-css.js
+var STYLE_BROWSER_CSS = `
+.stb-scrim{position:absolute;inset:0;z-index:70;background:rgb(0 0 0 / .66)}
+.stb{position:absolute;z-index:75;inset:24px;display:grid;grid-template-columns:200px minmax(0,1fr) 340px;grid-template-rows:48px minmax(0,1fr);
+  grid-template-areas:"head head head" "cats grid detail";border-radius:var(--fw-r2);background:var(--fw-s1);box-shadow:var(--fw-shadow);overflow:hidden;color:var(--fw-t3)}
+@container fim (max-width:1280px){.stb{inset:12px;grid-template-columns:176px minmax(0,1fr) 296px}}
+@container fim (max-width:900px){.stb{inset:0;border-radius:0;grid-template-columns:minmax(0,1fr);grid-template-rows:48px auto minmax(0,1fr);grid-template-areas:"head" "cats" "grid"}
+  .stb-detail{position:absolute;inset:48px 0 0 0;z-index:2}.stb-detail.is-empty{display:none}.stb-cats{border-right:0;border-bottom:1px solid var(--fw-line);max-height:132px}}
+.stb-head{grid-area:head;display:flex;align-items:center;gap:8px;padding:0 8px 0 16px;border-bottom:1px solid var(--fw-line-2);background:var(--fw-s2)}
+.stb-title{flex:none;color:var(--fw-t1);font-weight:600;font-size:var(--fw-fs-title,.875rem)}
+.stb-q{position:relative;flex:0 1 420px;display:flex;align-items:center;min-width:120px;margin:0 8px 0 12px}
+.stb-q .fw-ic{position:absolute;left:8px;width:16px;height:16px;color:var(--fw-t3);pointer-events:none}
+.stb-q .fw-input{padding-left:30px}
+.stb-count{flex:none;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);font-variant-numeric:tabular-nums;white-space:nowrap}
+.stb-cats{grid-area:cats;display:flex;flex-direction:column;min-height:0;overflow-y:auto;padding:8px 6px;gap:2px;border-right:1px solid var(--fw-line);background:var(--fw-s1)}
+.stb-cats-h{display:flex;align-items:center;gap:4px;height:28px;padding:8px 6px 0 8px;color:var(--fw-t3);font-size:var(--fw-fs-meta,.6875rem);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.stb-cat{position:relative;display:flex;align-items:center;gap:6px;min-width:0;height:30px;padding:0 8px;border-radius:var(--fw-r1);color:var(--fw-t3)}
+.stb-cat:hover{background:var(--fw-hover)}
+.stb-cat[aria-current=true]{background:var(--fw-sel-bg);color:var(--fw-t1);font-weight:600}
+.stb-cat-pick{flex:1 1 auto;display:flex;align-items:center;gap:6px;min-width:0;height:100%;border:0;background:transparent;color:inherit;font:inherit;font-size:var(--fw-fs,.75rem);text-align:left;cursor:pointer;padding:0}
+.stb-cat-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stb-cat-n{flex:none;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);font-variant-numeric:tabular-nums}
+.stb-cat-acts{position:absolute;right:2px;top:3px;display:none;gap:0;border-radius:var(--fw-r1);background:var(--fw-s3)}
+.stb-cat:hover .stb-cat-acts,.stb-cat:focus-within .stb-cat-acts{display:flex}
+.stb-cat:hover .stb-cat-n,.stb-cat:focus-within .stb-cat-n{visibility:hidden}
+.stb-cat-acts .fw-btn{width:24px;height:24px;padding:0}
+.stb-cat-acts .fw-ic{width:14px;height:14px}
+.stb-cat-edit{display:flex;gap:4px;padding:2px 0}
+.stb-cat-edit .fw-input{height:28px}
+.stb-cats-err{margin:4px 8px;color:var(--fw-err);font-size:var(--fw-fs,.75rem)}
+.stb-grid{grid-area:grid;position:relative;min-height:0;overflow-y:auto;overflow-x:hidden;background:var(--fw-s0)}
+.stb-grid:focus-visible{outline:2px solid var(--fw-accent-ring);outline-offset:-2px}
+.stb-space{position:relative;width:100%}
+.stb-row{position:absolute;left:0;right:0;display:grid;gap:12px;padding:0 16px}
+.stb-tile{display:flex;flex-direction:column;gap:6px;min-width:0;padding:0;border:0;background:transparent;color:var(--fw-t3);font:inherit;text-align:left;cursor:pointer}
+.stb-img{position:relative;width:100%;aspect-ratio:1/1;border-radius:0;overflow:hidden;background:var(--fw-s2);box-shadow:0 0 0 1px var(--fw-line)}
+.stb-img img{display:block;width:100%;height:100%;object-fit:cover}
+.stb-img.is-none{background:linear-gradient(135deg,var(--fw-s2),var(--fw-s3))}
+.stb-tile:hover .stb-img{box-shadow:0 0 0 1px var(--fw-line-2)}
+.stb-tile[aria-selected=true] .stb-img{box-shadow:0 0 0 2px var(--fw-pick)}
+.stb-tile:focus-visible{outline:none}.stb-tile:focus-visible .stb-img{box-shadow:0 0 0 2px var(--fw-accent-ring)}
+.stb-tile-t{min-width:0;height:32px;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:var(--fw-fs,.75rem);line-height:16px}
+.stb-tile[aria-selected=true] .stb-tile-t{color:var(--fw-t1)}
+.stb-on{position:absolute;top:6px;right:6px;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--fw-accent);color:var(--fw-on-accent)}
+.stb-on .fw-ic{width:12px;height:12px}
+.stb-cell{position:relative;min-width:0}
+.stb-cell > .stb-tile{width:100%}
+.stb-fav{position:absolute;top:4px;left:4px;display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:2px;background:rgb(0 0 0 / .55);color:#f2f3f5;cursor:pointer;opacity:0;transition:opacity .12s}
+.stb-fav .fw-ic{width:14px;height:14px}
+.stb-cell:hover .stb-fav,.stb-fav:focus-visible,.stb-fav[aria-pressed=true]{opacity:1}
+.stb-fav[aria-pressed=true]{color:#f2c94c}
+.stb-fav[aria-pressed=true] .fw-ic{fill:currentColor}
+.stb-fav:hover{background:rgb(0 0 0 / .75)}
+.stb-cat-ic{flex:none;width:14px;height:14px;color:var(--fw-t3)}
+.stb-wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--fw-t3)}
+.stb-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--fw-t3)}
+.stb-detail{grid-area:detail;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--fw-line);background:var(--fw-s1)}
+.stb-detail-b{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:16px 16px 24px}
+.stb-detail-b .stb-img{flex:none;border-radius:0}
+.stb-cats-none{margin:2px 8px;color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
+.stb-detail-t{margin:0;color:var(--fw-t1);font-size:var(--fw-fs-title,.875rem);font-weight:600;line-height:1.3}
+.stb-kw{display:flex;flex-wrap:wrap;gap:4px}
+.stb-kw span{padding:1px 8px;border-radius:2px;background:var(--fw-s3);color:var(--fw-t3);font-size:var(--fw-fs,.75rem);line-height:20px}
+.stb-lbl{color:var(--fw-t3);font-size:var(--fw-fs-meta,.6875rem);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.stb-text{margin:0;display:grid;gap:6px;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);line-height:1.5;user-select:text}
+.stb-text b{color:var(--fw-t1);font-weight:600}
+.stb-incat{display:flex;flex-wrap:wrap;gap:4px}
+.stb-incat .fw-btn{height:26px;padding:0 10px;border-color:var(--fw-line-2)}
+.stb-incat .fw-btn[aria-pressed=true]{background:var(--fw-sel-bg);box-shadow:var(--fw-sel-shadow);color:var(--fw-t1)}
+.stb-incat .fw-ic{width:14px;height:14px}
+.stb-detail-f{flex:none;display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--fw-line)}
+.stb-detail-f .fw-btn-primary{flex:1 1 auto}
+.stb-err{color:var(--fw-err);font-size:var(--fw-fs,.75rem)}
+.fim-style-none{color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
+`;
+
+// desktop/film-suite/src/shared/ui/components/sortable-list.js
 import { cn as cn24 } from "@hermes/plugin-sdk";
-import { jsx as jsx73, jsxs as jsxs60 } from "react/jsx-runtime";
+import { jsx as jsx70, jsxs as jsxs59 } from "react/jsx-runtime";
+var moveItem = (list, from, to) => {
+  const next = list.slice();
+  const [it] = next.splice(from, 1);
+  next.splice(to, 0, it);
+  return next;
+};
+var dropIndex = (mids, y, from) => {
+  let to = 0;
+  for (let i2 = 0; i2 < mids.length; i2++) if (i2 !== from && y > mids[i2]) to += 1;
+  return to;
+};
+function GripDots() {
+  const dot2 = (x, y, k) => jsx70("rect", { x, y, width: 2, height: 2 }, k);
+  return jsx70("svg", {
+    viewBox: "0 0 6 12",
+    width: 6,
+    height: 12,
+    fill: "currentColor",
+    "aria-hidden": true,
+    focusable: "false",
+    children: [dot2(0, 0, 1), dot2(4, 0, 2), dot2(0, 5, 3), dot2(4, 5, 4), dot2(0, 10, 5), dot2(4, 10, 6)]
+  });
+}
+var SETTLE_MS3 = 150;
+function FwSortableList({ items, onReorder, renderItem, noun = "Item", testid, className }) {
+  const [drag, setDrag] = useState(null);
+  const refs = useRef({});
+  const geo = useRef(null);
+  const ids = items.map((item) => item.id);
+  const canSort = Boolean(onReorder) && ids.length > 1;
+  const dragRef = useRef(null);
+  dragRef.current = drag;
+  const key = ids.join("|");
+  useEffect(() => {
+    if (dragRef.current && !ids.includes(dragRef.current.id)) setDrag(null);
+  }, [key]);
+  const commit = (from, to) => {
+    if (from !== to) onReorder(moveItem(ids, from, to));
+  };
+  const measure = () => {
+    const rects = ids.map((id) => refs.current[id] ? refs.current[id].getBoundingClientRect() : null);
+    return { tops: rects.map((r) => r ? r.top : 0), heights: rects.map((r) => r ? r.height : 0), mids: rects.map((r) => r ? r.top + r.height / 2 : 0) };
+  };
+  const startPointer = (event, id) => {
+    if (!canSort || event.button !== 0) return;
+    event.preventDefault();
+    const from = ids.indexOf(id);
+    const y0 = event.clientY;
+    geo.current = { ...measure(), y0 };
+    setDrag({ id, from, to: from, dy: 0, kbd: false });
+    const body2 = event.currentTarget.ownerDocument.body;
+    body2.style.cursor = "grabbing";
+    const win = event.currentTarget.ownerDocument.defaultView;
+    const sel = win.getSelection && win.getSelection();
+    if (sel && sel.removeAllRanges) sel.removeAllRanges();
+    const move2 = (ev) => {
+      ev.preventDefault();
+      const g = geo.current;
+      const dy = ev.clientY - g.y0;
+      const to = dropIndex(g.mids, g.mids[from] + dy, from);
+      setDrag((d) => d ? { ...d, dy, to } : d);
+    };
+    const cleanup = () => {
+      win.removeEventListener("pointermove", move2);
+      win.removeEventListener("pointerup", up);
+      win.removeEventListener("pointercancel", cancel);
+      body2.style.cursor = "";
+    };
+    const up = () => {
+      cleanup();
+      setDrag((d) => d ? { ...d, settling: true } : d);
+      setTimeout(() => {
+        const d = dragRef.current;
+        setDrag(null);
+        if (d && d.id === id) commit(d.from, d.to);
+      }, SETTLE_MS3);
+    };
+    const cancel = () => {
+      cleanup();
+      setDrag(null);
+    };
+    win.addEventListener("pointermove", move2);
+    win.addEventListener("pointerup", up);
+    win.addEventListener("pointercancel", cancel);
+  };
+  const onKey = (event, id) => {
+    if (!canSort) return;
+    const i2 = ids.indexOf(id);
+    const d = dragRef.current;
+    if (!d || !d.kbd) {
+      if (event.key === " " || event.key === "Enter") {
+        event.preventDefault();
+        geo.current = measure();
+        setDrag({ id, from: i2, to: i2, dy: 0, kbd: true });
+      }
+      return;
+    }
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      setDrag((cur) => ({ ...cur, to: Math.max(0, Math.min(ids.length - 1, cur.to + (event.key === "ArrowUp" ? -1 : 1))) }));
+    } else if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      setDrag(null);
+      commit(d.from, d.to);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setDrag(null);
+    } else if (event.key === "Tab") setDrag(null);
+  };
+  const shiftFor = (i2) => {
+    if (!drag || !geo.current) return 0;
+    const { from, to } = drag;
+    const g = geo.current;
+    const h = (g.heights[from] || 0) + (from + 1 < g.tops.length ? g.tops[from + 1] - g.tops[from] - g.heights[from] : from > 0 ? g.tops[from] - g.tops[from - 1] - g.heights[from - 1] : 0);
+    if (i2 === from) {
+      if (!drag.kbd && !drag.settling) return drag.dy;
+      return to > from ? g.tops[to] + g.heights[to] - (g.tops[from] + g.heights[from]) : g.tops[to] - g.tops[from];
+    }
+    if (from < to && i2 > from && i2 <= to) return -h;
+    if (from > to && i2 >= to && i2 < from) return h;
+    return 0;
+  };
+  return jsx70("div", {
+    className: cn24("fw-sort", drag && "is-sorting", className),
+    "data-testid": testid,
+    role: "list",
+    children: items.map((item, i2) => {
+      const dragging = Boolean(drag && drag.id === item.id);
+      const lifted = dragging && !drag.settling;
+      const pos2 = dragging ? drag.to : i2;
+      const handle = canSort ? jsx70("button", {
+        type: "button",
+        className: "fw-sort-h",
+        "data-testid": "fw-sort-handle",
+        "aria-pressed": dragging && drag.kbd ? true : void 0,
+        "aria-label": `${noun} ${pos2 + 1} of ${ids.length} · Move (Space, arrow keys)`,
+        title: "Reorder",
+        onPointerDown: (event) => startPointer(event, item.id),
+        onKeyDown: (event) => onKey(event, item.id),
+        onBlur: () => {
+          const d = dragRef.current;
+          if (d && d.kbd) setDrag(null);
+        },
+        children: jsx70(GripDots, {})
+      }, "h") : null;
+      return jsx70("div", {
+        ref: (node) => {
+          refs.current[item.id] = node;
+        },
+        role: "listitem",
+        className: cn24("fw-sort-i", lifted && "is-lifted", dragging && "is-dragging"),
+        "data-sort-id": item.id,
+        style: {
+          transform: drag ? `translateY(${shiftFor(i2)}px)` : void 0,
+          transition: drag && !(dragging && !drag.kbd && !drag.settling) ? "transform 140ms cubic-bezier(.2,.7,.3,1)" : "none",
+          zIndex: dragging ? 2 : void 0
+        },
+        children: renderItem(item, { handle, index: i2, dragging })
+      }, item.id);
+    })
+  });
+}
+var FW_SORT_CSS = `
+.fw-sort{position:relative;display:grid;gap:6px;min-width:0}
+.fw-sort-i{position:relative;min-width:0}
+.fw-sort.is-sorting{user-select:none}
+.fw-sort-i.is-lifted{box-shadow:0 0 0 1px var(--fw-accent-ring),0 10px 24px rgb(0 0 0 / .55)}
+.fw-sort-h{flex:none;display:grid;place-items:center;width:16px;height:28px;padding:0;border:0;border-radius:2px;background:transparent;color:var(--fw-t3);cursor:grab;touch-action:none}
+.fw-sort-h:hover{background:var(--fw-hover);color:var(--fw-t1)}
+.fw-sort-i.is-dragging .fw-sort-h{cursor:grabbing}
+.fw-sort-h[aria-pressed=true]{color:var(--fw-t1);background:var(--fw-sel-bg);box-shadow:var(--fw-sel-shadow)}
+`;
+
+// desktop/film-suite/src/shared/ui/components/pick-row.js
+import { cn as cn25 } from "@hermes/plugin-sdk";
+import { jsx as jsx71, jsxs as jsxs60 } from "react/jsx-runtime";
+function FwPickRow({ handle, on, onToggle, toggleLabel, pic, name: name2, nameTitle, sub, onRemove, removeLabel, ids = {}, rowProps, children, className }) {
+  return jsxs60("div", { ...rowProps, className: cn25("fw-pick", !on && "is-off", className), "data-testid": ids.row, "data-on": on ? "true" : "false", children: [
+    jsxs60("div", { className: "fw-pick-top", children: [
+      handle || jsx71("span", { className: "fw-pick-hgap", "aria-hidden": "true" }, "h"),
+      jsx71("input", { type: "checkbox", className: "fw-cb", checked: on, "aria-label": toggleLabel, "data-testid": ids.on, title: on ? "On" : "Off: not sent", onChange: onToggle }, "cb"),
+      jsx71("div", { className: "fw-pick-pic", children: pic }, "p"),
+      jsxs60("div", { className: "fw-pick-n", children: [
+        jsx71("span", { className: "fw-pick-name", "data-testid": ids.name, title: nameTitle || name2, children: name2 }, "n"),
+        sub ? jsx71("span", { className: "fw-pick-sub", children: sub }, "s") : null
+      ] }, "n"),
+      jsx71(FwButton, { variant: "ghost", icon: "x", className: "fw-pick-x", "aria-label": removeLabel, title: "Remove", "data-testid": ids.remove, onClick: onRemove }, "x")
+    ] }, "top"),
+    children ? jsx71("div", { className: "fw-pick-more", children }, "more") : null
+  ] });
+}
+var FW_PICK_CSS = `
+.fw-pick{display:grid;gap:6px;min-width:0;padding:6px 6px 6px 2px;border:1px solid var(--fw-line);border-radius:2px;background:var(--fw-s1)}
+.fw-pick-top{display:flex;align-items:center;gap:6px;min-width:0}
+.fw-pick-hgap{flex:none;width:16px}
+.fw-pick-pic{flex:none;width:36px;height:36px;overflow:hidden;border-radius:0;background:var(--fw-s3)}
+.fw-pick-pic .stb-img{width:36px;height:36px;border-radius:0}
+.fw-pick-pic img{display:block;width:100%;height:100%;object-fit:cover}
+.fw-pick-n{flex:1 1 auto;display:flex;flex-direction:column;min-width:0}
+.fw-pick-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:18px}
+.fw-pick-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);line-height:17px}
+.fw-pick-x{flex:none;width:28px;height:28px;padding:0}
+.fw-pick-more{display:grid;gap:6px;min-width:0;padding-left:42px}
+.fw-pick.is-off .fw-pick-pic,.fw-pick.is-off .fw-pick-n,.fw-pick.is-off .fw-pick-more{opacity:.5}
+`;
+
+// desktop/film-suite/src/image/loras/lora-browser-css.js
+var LORA_BROWSER_CSS = `
+.lrb-grid{padding:16px}
+.lrb-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px}
+.lrb .stb-tile.is-missing .stb-img{opacity:.45}
+.lrb .stb-tile.is-missing .stb-tile-t{color:var(--fw-t3)}
+.lrb-initials{position:absolute;inset:0;display:grid;place-items:center;color:var(--fw-t3);font-size:20px;font-weight:600;letter-spacing:.04em}
+.lrb-tile-base{position:absolute;left:6px;bottom:6px;max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 6px;border-radius:2px;background:rgb(0 0 0 / .72);color:#f2f3f5;font-size:var(--fw-fs,.75rem);line-height:20px}
+.lrb-facts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.lrb-base{flex:none;padding:0 8px;border-radius:2px;background:var(--fw-sel-bg);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:20px}
+.lrb-file{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
+.lrb-examples{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.lrb-ex{margin:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.lrb-ex img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:0;background:var(--fw-s2);box-shadow:0 0 0 1px var(--fw-line)}
+.lrb-ex figcaption{overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);line-height:17px;user-select:text}
+.lrb-about{flex:none;margin:0;white-space:pre-line;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);line-height:1.5;user-select:text;max-height:220px;overflow-y:auto}
+.lrb-civ{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.lrb-note{color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
+.lrb .fw-lora-trigs{display:flex;flex-wrap:wrap;gap:4px}
+.fw .fw-pick-pic .lrb-initials{font-size:var(--fw-fs,.75rem)}
+.fw .fim-lr-str{display:grid;grid-template-columns:minmax(40px,1fr) 96px;align-items:center;gap:8px}
+.fw .fw-insp-b{scroll-padding-bottom:28px}
+.fw .fw-sec.fim-lora:not(.is-collapsed){margin-bottom:16px}
+.fw .fim-model-more-b{display:flex;flex-direction:column;align-items:stretch;gap:4px}
+.fw .fim-model-more-b .fim-model-copy{align-self:flex-start;border:1px solid var(--fw-line-2)}
+.fw .fim-ref.is-add{position:relative}
+.fw .fim-ref.is-add .fim-ref-pic{cursor:pointer}
+.fw .fim-ref.is-add:hover .fim-ref-pic{border-color:var(--fw-t3);color:var(--fw-t1)}
+.fw .fim-ref.is-add .fw-select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.fw .fim-ref.is-add .fw-select:disabled{cursor:not-allowed}
+.fw .fim-ref.is-add:focus-within .fim-ref-pic{box-shadow:0 0 0 2px var(--fw-accent-ring)}
+`;
+
+// desktop/film-suite/src/image/module/parts/grading-css.js
+var GRADING_CSS = `
+/* Light > Auto ("Tone  Auto"): the button ends where the slider tracks end (the reset column follows). */
+.fw-autorow{display:grid;grid-template-columns:minmax(0,1fr) auto 22px;align-items:center;column-gap:2px;min-width:0}
+.fw-autorow>.fw-dev-auto{min-width:56px}
+.fw-grade>.fw-dev-wheel{width:min(100%,280px)}
+/* Region and view tabs share the spare width evenly (flex); a small own padding keeps the names of
+   the Color Mixer views inside a 220 px panel, so its rows stay on the panel's gutter. */
+.fw .fw-seg.fw-grade-tabs>button{padding:0 2px}
+.fw-grade.is-3way{row-gap:8px}
+.fw-grade-dot{display:block;width:12px;height:12px;border-radius:50%;border:1px solid #c4c4ca;box-sizing:border-box}
+.fw-grade-dot.is-shadows{background:#000}
+.fw-grade-dot.is-midtones{background:#8c8c92}
+.fw-grade-dot.is-highlights{background:#ececf0}
+.fw-grade-dot.is-global{background:linear-gradient(90deg,#0c0c0e 50%,#ececf0 50%)}
+.fw .fw-seg.fw-grade-tabs button[data-changed=false]:not([aria-pressed=true])>.fw-grade-dot{opacity:.55}
+.fw-grade3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:16px;justify-self:stretch;min-width:0}
+.fw-grade3-col{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:0}
+.fw-grade3-head{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:2px;height:24px;min-width:0}
+.fw-grade3-head>.fw-btn{grid-column:3;justify-self:start}
+.fw-grade3-head>.fw-lbl{grid-column:2;min-width:0;overflow:hidden;text-overflow:ellipsis;line-height:18px;color:var(--fw-t3);cursor:default}
+.fw-grade3-col.is-changed .fw-grade3-head>.fw-lbl{color:var(--fw-t1)}
+.fw-grade3-head>.fw-btn{flex:none;width:22px;height:24px;min-width:0;padding:0;color:color-mix(in srgb,#f4f4f6 42%,transparent)}
+.fw-grade3-head>.fw-btn:hover{color:var(--fw-t1)}
+.fw-grade3-head>.fw-btn>.fw-ic{width:12px;height:12px}
+.fw-grade3-head>.fw-btn.is-off{visibility:hidden}
+.fw-grade3-col>.fw-dev-wheel{width:100%;margin-bottom:4px}
+.fw-grade3-lum{display:flex;align-items:center;height:24px;min-width:0}
+.fw-grade3-col>.fw-num{align-self:center;width:56px;height:22px;border-color:transparent;background:transparent;box-shadow:none}
+.fw-grade3-col>.fw-num input{text-align:center;padding:0 2px}
+.fw-grade3-col>.fw-num:hover,.fw-grade3-col>.fw-num:focus-within{border-color:var(--fw-line-2);background:var(--fw-s0)}
+`;
+
+// desktop/film-suite/src/image/panel/panel-css.js
+var PANEL_CSS = `
+.fw-sec-meta{flex:none;font-variant-numeric:tabular-nums}
+`;
+
+// desktop/film-suite/src/image/panel/generation-panel.js
+import { jsx as jsx72, jsxs as jsxs61 } from "react/jsx-runtime";
+var SEED_MODES = [["fixed", "lock", "Fixed"], ["increment", "seed-inc", "Increment"], ["decrement", "seed-dec", "Decrement"], ["random", "shuffle", "Random"]];
+var SEED_MODE_TITLE = { fixed: "Fixed: every run uses this seed", increment: "Increment: +1 per picture after each run", decrement: "Decrement: −1 per picture after each run", random: "Random each run" };
+function ScrubLabel({ text: text2, value, step: step2, min, max, integer, onChange, onReset, forId, second = false }) {
+  const drag = useRef(null);
+  const clamp8 = (n) => {
+    const v = Math.min(max, Math.max(min, Number(n.toFixed(4))));
+    return integer ? Math.round(v) : v;
+  };
+  return jsx72("span", {
+    className: second ? "fw-lbl fw-lbl2 fw-scrub" : "fw-lbl fw-scrub",
+    "data-scrub": forId,
+    title: `${text2} · Reset (double-click)`,
+    onPointerDown: (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      if (event.currentTarget.setPointerCapture) event.currentTarget.setPointerCapture(event.pointerId);
+      drag.current = { x: event.clientX, v: Number(value) || 0 };
+    },
+    onPointerMove: (event) => {
+      const d = drag.current;
+      if (!d) return;
+      const px2 = event.clientX - d.x;
+      const n = clamp8(d.v + Math.trunc(px2 / 4) * step2 * (event.shiftKey ? 10 : 1));
+      if (n !== value) onChange(n);
+    },
+    onPointerUp: () => {
+      drag.current = null;
+    },
+    onPointerCancel: () => {
+      drag.current = null;
+    },
+    onDoubleClick: onReset,
+    children: text2
+  });
+}
+function SeedModeMenu({ mode, onPick }) {
+  const [open, setOpen] = useState(false);
+  const [at2, setAt] = useState(null);
+  const btnRef = useRef(null), listRef = useRef(null);
+  const cur = SEED_MODES.find((m) => m[0] === mode) || SEED_MODES[3];
+  const show2 = () => {
+    const r = btnRef.current.getBoundingClientRect();
+    setAt({ right: Math.round(window.innerWidth - r.right), top: Math.round(r.bottom + 4) });
+    setOpen(true);
+  };
+  useLayoutEffect(() => {
+    if (open && listRef.current) {
+      const on = listRef.current.querySelector('[aria-checked="true"]');
+      if (on) on.focus({ preventScroll: true });
+    }
+  }, [open]);
+  useEffect(() => {
+    if (!open) return void 0;
+    const away = (event) => {
+      if (!listRef.current || listRef.current.contains(event.target) || btnRef.current.contains(event.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [open]);
+  const pick = (id) => {
+    onPick(id);
+    setOpen(false);
+    if (btnRef.current) btnRef.current.focus({ preventScroll: true });
+  };
+  return [
+    jsxs61("button", {
+      ref: btnRef,
+      type: "button",
+      className: "fw-btn fw-btn-secondary fw-seed-mm",
+      "data-testid": "fw-seed-mode",
+      "data-mode": cur[0],
+      "aria-haspopup": "menu",
+      "aria-expanded": open,
+      "aria-label": `Seed after each run: ${cur[2]}`,
+      title: SEED_MODE_TITLE[cur[0]],
+      onClick: () => open ? setOpen(false) : show2(),
+      onDoubleClick: () => pick(IMAGE_SEED_DEFAULT.mode),
+      children: [jsx72(FwIcon, { name: cur[1] }, "i"), jsx72(FwIcon, { name: "chev", className: "fw-seed-mm-chev" }, "c")]
+    }, "mm"),
+    open ? jsx72("div", {
+      ref: listRef,
+      className: "fw-menu fw-seed-menu",
+      role: "menu",
+      "aria-label": "Seed after each run",
+      "data-testid": "fw-seed-menu",
+      style: { position: "fixed", right: at2.right + "px", top: at2.top + "px" },
+      onKeyDown: (event) => {
+        const items = [...listRef.current.querySelectorAll("button")], i2 = items.indexOf(document.activeElement);
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          event.stopPropagation();
+          const n = items[(i2 + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length];
+          if (n) n.focus();
+        } else if (event.key === "Escape" || event.key === "Tab") {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(false);
+          btnRef.current.focus();
+        }
+      },
+      children: SEED_MODES.map(([id, icon, label2]) => jsxs61("button", { type: "button", role: "menuitemradio", className: "fw-menu-i", "aria-checked": id === cur[0], "data-mode": id, title: SEED_MODE_TITLE[id], onClick: () => pick(id), children: [
+        jsx72(FwIcon, { name: icon }, "i"),
+        jsx72("span", { className: "fw-grow", children: label2 }, "l"),
+        jsx72("span", { className: "fw-zoom-chk", "aria-hidden": "true", children: id === cur[0] ? jsx72(FwIcon, { name: "check" }) : null }, "c")
+      ] }, id))
+    }, "menu") : null
+  ];
+}
+var label = (text2) => jsx72("span", { className: "fw-lbl", children: text2 }, "l");
+var lbl2 = (text2, props = {}) => jsx72("span", { className: "fw-lbl fw-lbl2", ...props, children: text2 }, "l2");
+function generationSize(w) {
+  const spec = w.specV2;
+  const setSize = (width, height) => {
+    const d = imageRunDims(spec, { format: FORMAT_CUSTOM, width, height });
+    const preset = imageSizePreset(spec, d.width, d.height);
+    w.setRunSize(preset ? { format: preset.format, mp: preset.mp, width: d.width, height: d.height } : { format: FORMAT_CUSTOM, width: d.width, height: d.height });
+  };
+  const setMp = (mp) => {
+    if (w.runSize.format === FORMAT_CUSTOM) {
+      const d = imageDimsAt(spec, w.sizeNow.width / w.sizeNow.height, mp);
+      setSize(d.width, d.height);
+    }
+    w.setRunSize({ mp });
+  };
+  const mpNow = w.runSize.format === FORMAT_CUSTOM ? imageMpValue(w.sizeNow.width, w.sizeNow.height) : w.runSize.mp;
+  const ratioOf = (format) => {
+    const m = /^(\d+):(\d+)$/.exec(format || "");
+    return m ? Number(m[1]) / Number(m[2]) : w.sizeNow.width / w.sizeNow.height;
+  };
+  const reachFor = (format) => imageMpReach(spec, ratioOf(format));
+  const range = imageMpRange(spec), reach = reachFor(w.runSize.format);
+  return { setSize, setMp, mpNow, range, reach, reachFor };
+}
+function generationRows({ w, sampling, setSampling, catalog, seed, seedShown = seed, setSeed, aspectLock, setAspectLock, size, profile }) {
+  const defaults2 = { ...IMAGE_MODEL_FALLBACK[profile === "raw" ? "raw" : "turbo"].values, ...imagePresetValues(w.modelCatalog, profile, catalog) };
+  const num4 = (key, text2, min, max, step2, integer, second = false) => [
+    jsx72(ScrubLabel, { text: text2, value: sampling[key], step: step2, min, max, integer, second, forId: key, onChange: (n) => setSampling(key, n), onReset: () => setSampling(key, defaults2[key]) }, "l" + key),
+    jsx72(FwNumber, { label: text2, value: sampling[key], min, max, step: step2, integer, steppers: false, spin: true, onCommit: (n) => setSampling(key, n) }, "n" + key)
+  ];
+  const choices = (key) => catalog && catalog.sampling && catalog.sampling[key] || (key === "samplers" ? ["euler"] : ["simple"]);
+  const rows = [
+    jsx72(FieldRow, { className: "fw-prow fw-p2", "data-testid": "fw-row-steps-cfg", children: [...num4("steps", "Steps", 1, 100, 1, true), ...num4("cfg", "CFG", 0.1, 20, 0.1, false, true)] }, "steps"),
+    ...[["Sampler", "sampler", "samplers"], ["Scheduler", "scheduler", "schedulers"]].map(([text2, key, list]) => jsx72(FieldRow, { className: "fw-prow", children: [jsx72("span", { className: "fw-lbl", onDoubleClick: () => setSampling(key, defaults2[key]), children: text2 }, "l"), jsx72("div", { className: "fw-pctl", children: jsx72(FwSelect, { label: text2, value: sampling[key], options: choices(list), onChange: (value) => setSampling(key, value) }) }, "c")] }, key)),
+    jsx72(FieldRow, { className: "fw-prow", children: [label("Seed"), jsxs61("div", { className: "fw-pctl fw-seed", children: [
+      jsx72("input", { type: "text", className: "fw-input", inputMode: "numeric", "aria-label": "Seed", "data-testid": "fw-seed", "data-next": String(seed), title: seedShown === seed ? "The seed of the next run" : `Seed of this picture · next run ${seed}`, value: String(seedShown), onChange: (event) => {
+        const n = Number.parseInt(event.target.value, 10);
+        setSeed(Number.isSafeInteger(n) && n >= 0 ? n : 0);
+      } }, "i"),
+      jsx72(FwButton, { icon: "dice", title: "New seed", "aria-label": "New seed", "data-testid": "fw-seed-roll", onClick: () => setSeed(imageRandomSeed(seed)) }, "r"),
+      jsx72(SeedModeMenu, { mode: w.seedMode, onPick: w.setSeedMode }, "mm")
+    ] }, "c")] }, "seed")
+  ];
+  const spec = w.specV2;
+  if (!spec) return [...rows, jsx72(FieldRow, { className: "fw-prow", children: [label("Size"), jsx72("div", { className: "fw-pctl", "data-testid": "fw-size-readout", children: jsx72(SizeFields, { width: 1024, height: 1024, min: 1024, max: 1024, step: 16, disabled: true, title: "This image engine renders 1024 × 1024 only", onChange: () => {
+  } }) }, "c")] }, "size")];
+  const resetSize = () => w.setRunSize({ format: IMAGE_RUN_SIZE_DEFAULT.format, mp: IMAGE_RUN_SIZE_DEFAULT.mp });
+  return [
+    ...rows,
+    jsx72(FieldRow, { className: "fw-prow", children: [jsx72("span", { className: "fw-lbl", onDoubleClick: resetSize, children: "Format" }, "l"), jsx72("div", { className: "fw-pctl", children: jsx72(FormatField, {
+      label: "Format",
+      value: w.runSize.format,
+      options: imageFormats(spec).map((id) => ({ id, label: id })),
+      sizeFields: false,
+      onChange: (value) => value === FORMAT_CUSTOM ? w.setRunSize({ format: FORMAT_CUSTOM, width: w.sizeNow.width, height: w.sizeNow.height }) : w.setRunSize({ format: value }),
+      size: { width: w.sizeNow.width, height: w.sizeNow.height, min: spec.size.min_px, max: spec.size.max_px, step: spec.size.step, onCustom: size.setSize }
+    }) }, "c")] }, "format"),
+    jsx72(FieldRow, { className: "fw-prow", title: `${imageMegapixels(w.sizeNow.width, w.sizeNow.height)} · steps of ${spec.size.step} px, ${spec.size.min_px}–${spec.size.max_px} px, at most ${imageMegapixels(spec.size.max_pixels, 1)}`, children: [jsx72("span", { className: "fw-lbl", onDoubleClick: resetSize, children: "Size" }, "l"), jsx72("div", { className: "fw-pctl", "data-testid": "fw-size-readout", "data-mp": imageMegapixels(w.sizeNow.width, w.sizeNow.height), children: jsx72(SizeFields, {
+      width: w.sizeNow.width,
+      height: w.sizeNow.height,
+      min: spec.size.min_px,
+      max: spec.size.max_px,
+      step: spec.size.step,
+      lock: aspectLock,
+      onChange: size.setSize,
+      between: [jsx72(FwButton, { variant: "ghost", className: "fw-size-tool", icon: "swap", "aria-label": "Swap width and height", title: "Swap width and height", "data-testid": "fw-size-swap", onClick: () => size.setSize(w.sizeNow.height, w.sizeNow.width) }, "s")],
+      after: jsx72(FwButton, { variant: "ghost", className: "fw-size-tool fw-size-lock", icon: aspectLock ? "link" : "unlink", "aria-pressed": aspectLock, "aria-label": "Keep aspect", "data-testid": "fw-aspect-lock", title: aspectLock ? "Aspect locked" : "Aspect free", onClick: () => setAspectLock(!aspectLock) }, "lk")
+    }) }, "c")] }, "size"),
+    jsx72(FieldRow, { className: "fw-prow fw-p2", title: w.runSize.batch > 1 ? `Seeds ${seed}–${seed + w.runSize.batch - 1}` : void 0, children: [
+      jsx72("span", { className: "fw-lbl", onDoubleClick: () => size.setMp(1), children: "MP" }, "l"),
+      jsx72(FwNumber, { label: "Megapixels", testid: "fw-mp", value: size.mpNow, min: size.range.min, max: size.reach, step: 0.1, steppers: false, spin: true, format: (n) => Number(n).toFixed(2), onCommit: size.setMp }, "mp"),
+      lbl2("Batch", { onDoubleClick: () => w.setRunSize({ batch: 1 }) }),
+      jsx72(FwNumber, { label: "Batch", testid: "fw-batch", value: w.runSize.batch, min: spec.batch.min, max: spec.batch.max, integer: true, steppers: false, spin: true, onCommit: (n) => w.setRunSize({ batch: n }) }, "n")
+    ] }, "batch"),
+    profile === "raw" ? jsxs61("label", { className: "fw-field", children: [label("Negative prompt"), jsx72("input", { type: "text", className: "fw-input", "aria-label": "Negative prompt", placeholder: "None", value: sampling.negative, onChange: (event) => setSampling("negative", event.target.value) }, "i")] }, "neg") : null
+  ];
+}
+var GENERATION_CSS = `
+.fw-prow.fw-p2{grid-template-columns:68px minmax(0,1fr) 40px minmax(0,1fr)}
+.fw-prow.fw-p2>.fw-num{width:auto;min-width:0}
+.fw-lbl2{padding-left:2px}
+.fw-scrub{cursor:ew-resize;user-select:none;touch-action:none}
+.fw-scrub:hover{color:var(--fw-t1)}
+.fw-pctl.fw-seed{gap:4px}
+.fw-pctl.fw-seed>.fw-input{flex:1 1 auto;width:auto;min-width:0;text-align:right;font-variant-numeric:tabular-nums}
+.fw-pctl.fw-seed>.fw-btn{flex:none;width:28px;padding:0}
+.fw .fw-pctl.fw-seed>.fw-seed-mm{width:40px;gap:2px;padding:0 4px 0 6px}
+.fw-seed-mm .fw-ic{width:16px;height:16px}
+.fw .fw-seed-mm .fw-seed-mm-chev{width:12px;height:12px;color:var(--fw-t3)}
+.fw-seed-menu{z-index:90;min-width:168px}
+.fw-seed-menu .fw-menu-i .fw-ic{width:16px;height:16px;flex:none}
+.fw-menu-i[aria-checked=true]{color:var(--fw-t1)}
+.fw-wh:has(.fw-size-lock){gap:2px}
+.fw .fw-wh>.fw-size-lock{margin-left:2px}
+`;
+
+// desktop/film-suite/src/image/compare/compare-css.js
+var COMPARE_CSS = `
+.fcmp{position:absolute;inset:0;outline:none;overflow:hidden;background:var(--fw-stage);touch-action:none}
+.fcmp-pane{position:absolute;top:0;overflow:hidden;cursor:grab;background:var(--fw-stage)}
+.fcmp.is-zoomed .fcmp-pane:active{cursor:grabbing}
+.fcmp.is-side .fcmp-pane.is-active::after{content:'';position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 1px var(--fw-line-2)}
+.fcmp-pic{position:absolute;margin:0;border:0;border-radius:0;box-shadow:0 0 0 1px var(--fw-line);background:#0a0a0b;overflow:visible}
+.fcmp-pic img{display:block;width:100%;height:100%;object-fit:fill;border-radius:0;pointer-events:none;user-select:none}
+.fcmp-pic.is-px img{image-rendering:pixelated}
+.fcmp-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
+.fcmp-wipe-b{position:absolute;inset:0;pointer-events:none}
+.fcmp-wipe-line{position:absolute;top:0;bottom:0;width:0;z-index:2}
+.fcmp-wipe-line::before{content:'';position:absolute;top:0;bottom:0;left:-1px;width:2px;background:var(--fw-pick);box-shadow:0 0 0 1px rgb(8 8 10 / .55);pointer-events:none}
+.fcmp-wipe-h{position:absolute;top:50%;left:-14px;width:28px;height:28px;margin-top:-14px;display:grid;place-items:center;border-radius:4px;background:var(--fw-s2);color:var(--fw-t1);box-shadow:0 0 0 1px var(--fw-line-2),0 2px 6px rgb(0 0 0 / .4);cursor:ew-resize;outline:none;touch-action:none}
+.fcmp-wipe-h:focus-visible{box-shadow:0 0 0 2px var(--fw-accent-ring)}
+.fcmp-wipe-h svg{width:14px;height:14px}
+.fcmp-label{position:absolute;left:8px;top:8px;z-index:3;max-width:calc(100% - 16px);box-sizing:border-box;padding:2px 8px;border-radius:3px;background:rgb(8 8 10 / .78);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.fcmp-label.is-right{left:auto;right:8px}
+.fcmp-label b{font-weight:600}
+.fcmp.is-slider .fcmp-label{max-width:calc(50% - 24px)}
+.fw .fw-seg.fcmp-mode button{flex:none;width:auto;padding:0 10px}
+.fcmp-zoom{min-width:44px;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);text-align:right}
+.fsv{position:absolute;inset:0;display:grid;gap:${8}px;justify-content:center;align-content:center;padding:12px;outline:none}
+.fsv-cell{position:relative;overflow:hidden;border-radius:0;background:var(--fw-s1);outline:none;cursor:default}
+.fsv-cell::after{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;box-shadow:inset 0 0 0 1px var(--fw-line)}
+.fsv-cell.is-active::after{box-shadow:inset 0 0 0 2px var(--fw-pick),inset 0 0 0 3px rgb(8 8 10 / .7)}
+.fsv-cell img{display:block;width:100%;height:100%;object-fit:contain;border-radius:0;user-select:none}
+.fsv-wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
+.fsv-n{position:absolute;left:6px;top:6px;z-index:1;min-width:20px;height:20px;box-sizing:border-box;padding:0 5px;border-radius:3px;background:rgb(8 8 10 / .78);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);font-weight:600;line-height:20px;text-align:center}
+.fsv-label{position:absolute;left:32px;top:6px;z-index:1;max-width:calc(100% - 64px);box-sizing:border-box;padding:0 6px;border-radius:3px;background:rgb(8 8 10 / .78);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fsv-acts{position:absolute;right:6px;bottom:6px;z-index:3;display:flex;gap:4px;opacity:0;visibility:hidden;transition:opacity .12s,visibility 0s .12s}
+.fsv-cell:hover .fsv-acts,.fsv-cell.is-active .fsv-acts,.fsv-cell:focus-within .fsv-acts{opacity:1;visibility:visible;transition:opacity .12s}
+.fsv-acts .fw-btn{background:rgb(8 8 10 / .78)}
+`;
+
+// desktop/film-suite/src/image/import/import-api.js
+var IMPORT_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "tif", "tiff"];
+var IMPORT_MAX_BYTES = 64 * 1024 * 1024;
+var IMPORT_TYPES = /^image\/(png|jpeg|webp|tiff)$/;
+var importId = () => "imgop_" + Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+var isImportPath = (path) => IMPORT_EXTENSIONS.includes(String(path || "").split(/[?#]/)[0].split(".").pop().toLowerCase());
+function fileBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+    reader.onerror = () => reject(new Error("The picture could not be read"));
+    reader.readAsDataURL(file);
+  });
+}
+async function shootFolders(wake) {
+  if (shootMediaApi && $shootMediaFolders.get()) return shootMediaApi;
+  if (wake) wake();
+  for (let i2 = 0; i2 < 60 && !(shootMediaApi && $shootMediaFolders.get()); i2 += 1) await new Promise((r) => setTimeout(r, 100));
+  return shootMediaApi && $shootMediaFolders.get() ? shootMediaApi : null;
+}
+async function rootsFor(path, wake) {
+  const known = ($shootMediaFolders.get() || {}).roots || [];
+  if (known.some((root) => mediaPathInRoot(path, root))) return known;
+  const folder = parentPath(path);
+  const why = mediaRootLargeReason(folder, []);
+  if (!folder || /whole drive|home folder/.test(why)) throw new Error(`${basename(path)} is not inside a folder of its own (${why || "no folder"}))`);
+  const api = await shootFolders(wake);
+  if (!api) throw new Error("Media folders not ready");
+  const roots = ($shootMediaFolders.get() || {}).roots || [];
+  if (roots.some((root) => mediaPathInRoot(path, root))) return roots;
+  const added = await api.add([folder]);
+  if (!(added > 0)) throw new Error("Media folders could not be updated");
+  return [.../* @__PURE__ */ new Set([...roots, folder])];
+}
+async function postImport(ownerScope, body2) {
+  const payload = await rest("/projects/image-producer/import", {
+    method: "POST",
+    timeoutMs: 12e4,
+    body: { schema: "studio.image-import-request/1", owner_scope: ownerScope, operation_id: importId(), ...body2 }
+  });
+  if (!payload || payload.error || payload.state !== "published") throw new Error(payload && payload.error && payload.error.message || "The picture could not be imported");
+  return { jobId: payload.image_producer_job_id, width: payload.width, height: payload.height, label: payload.imported && payload.imported.file_name || "Picture" };
+}
+async function importPicture(ownerScope, { path = "", file = null, wake = null } = {}) {
+  if (path) {
+    if (!isImportPath(path)) throw new Error(`${basename(path)} is not a picture Continuo can open (PNG, JPEG, WebP or TIFF)`);
+    const roots = await rootsFor(path, wake);
+    return postImport(ownerScope, { path, ...requestContext(roots) });
+  }
+  if (!file) throw new Error("That drop carried no readable file");
+  if (file.type && !IMPORT_TYPES.test(file.type) && !isImportPath(file.name)) throw new Error(`${file.name || "The file"} is not a picture Continuo can open (PNG, JPEG, WebP or TIFF)`);
+  if (file.size > IMPORT_MAX_BYTES) throw new Error("The file is too large to import (over 64 MB)");
+  return postImport(ownerScope, { data_b64: await fileBase64(file), file_name: file.name || "Pasted picture" });
+}
+function openImported(picture) {
+  $mediaFeedStale.set($mediaFeedStale.get() + 1);
+  $imageOpenRequest.set({ item: { id: picture.jobId, kind: "image", module: "image", label: picture.label, prompt: picture.label, spec: null, kept: false, keptName: null, width: picture.width, height: picture.height }, n: Date.now() });
+}
+
+// desktop/film-suite/src/image/recent/recent-strip.js
+import { atom as atom17 } from "@hermes/plugin-sdk";
+var $recentCurrent = atom17("");
+var $recentOpenPicture = atom17(null);
+
+// desktop/film-suite/src/image/import/use-image-import.js
+import { GlyphSpinner as GlyphSpinner12 } from "@hermes/plugin-sdk";
+import { jsx as jsx73, jsxs as jsxs62 } from "react/jsx-runtime";
+var IMPORT_CSS = `
+.fw-canvas.is-import-over::after{content:"";position:absolute;inset:6px;z-index:7;border:2px dashed var(--fw-accent);border-radius:var(--fw-r1);background:color-mix(in srgb,var(--fw-accent) 8%,transparent);pointer-events:none}
+.fw-import-drop{position:absolute;left:50%;top:50%;z-index:8;transform:translate(-50%,-50%);display:flex;align-items:center;gap:8px;min-height:32px;padding:4px 12px;border:1px solid var(--fw-line-2);border-radius:var(--fw-r2);background:var(--fw-s2);box-shadow:var(--fw-shadow);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:18px;white-space:nowrap;pointer-events:none}
+.fw-import-busy{position:absolute;left:50%;top:16px;z-index:8;transform:translateX(-50%);display:flex;align-items:center;gap:8px;min-height:32px;padding:4px 12px;border:1px solid var(--fw-line-2);border-radius:var(--fw-r2);background:var(--fw-s2);box-shadow:var(--fw-shadow);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:18px;white-space:nowrap}
+.fim-ref.is-file-over .fim-ref-pic{outline:2px dashed var(--fw-accent);outline-offset:-2px}
+`;
+var PICK = { filters: [{ name: "Pictures", extensions: IMPORT_EXTENSIONS }], multiple: false, title: "Open picture" };
+var typingIn = (target) => target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
+function useImageImport(ctx) {
+  const [over, setOver] = useState(false);
+  const [busy2, setBusy] = useState("");
+  const live2 = useRef(ctx);
+  live2.current = ctx;
+  const run = async (label2, source, then) => {
+    const c = live2.current;
+    if (!c.ownerScope || busy2) return null;
+    setBusy(label2);
+    c.setIssue("");
+    try {
+      const picture = await importPicture(c.ownerScope, { ...source, wake: c.wake });
+      if (then) {
+        $mediaFeedStale.set($mediaFeedStale.get() + 1);
+        then(picture);
+      } else openImported(picture);
+      return picture;
+    } catch (error) {
+      live2.current.setIssue(String(error && error.message || error));
+      return null;
+    } finally {
+      setBusy("");
+    }
+  };
+  const fromTransfer = (event) => {
+    const paths = pathsFromDrop(event).filter((path) => !/^https?:/i.test(path));
+    if (paths.length) return { path: paths[0] };
+    const file = [...event.dataTransfer && event.dataTransfer.files || []][0];
+    return file ? { file } : null;
+  };
+  const open = async (then) => {
+    const picked = await pickPaths(PICK);
+    if (picked && picked[0]) return run("Opening", { path: picked[0] }, then);
+    return null;
+  };
+  const canvasDrop = {
+    onDragOver: (event) => {
+      if (!dropHasMedia(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      if (!over) setOver(true);
+    },
+    onDragLeave: (event) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) setOver(false);
+    },
+    onDrop: (event) => {
+      if (!dropHasMedia(event)) return;
+      event.preventDefault();
+      setOver(false);
+      const source = fromTransfer(event);
+      if (!source) {
+        live2.current.setIssue("That drop carried no readable file");
+        return;
+      }
+      void run("Opening", source);
+    }
+  };
+  const slotDrop = (fill) => ({
+    accepts: (event) => dropHasMedia(event),
+    drop: (event) => {
+      const source = fromTransfer(event);
+      if (!source) {
+        live2.current.setIssue("That drop carried no readable file");
+        return;
+      }
+      void run("Adding", source, (picture) => fill(picture.jobId));
+    }
+  });
+  const shiftPasteAt = useRef(0);
+  useEffect(() => {
+    const onKey = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && String(event.key).toLowerCase() === "v") shiftPasteAt.current = Date.now();
+    };
+    const onPaste = (event) => {
+      const c = live2.current;
+      const root = c.rootRef.current;
+      if (!c.visible || !root || typingIn(event.target) || Date.now() - shiftPasteAt.current < 500) return;
+      if (event.target && event.target !== document.body && !root.contains(event.target)) return;
+      const item = [...event.clipboardData && event.clipboardData.items || []].find((entry2) => entry2.kind === "file" && /^image\//.test(entry2.type));
+      const file = item && item.getAsFile();
+      if (!file) return;
+      event.preventDefault();
+      void run("Pasting", { file });
+    };
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("paste", onPaste);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("paste", onPaste);
+    };
+  }, []);
+  useEffect(() => {
+    if (!ctx.visible) return void 0;
+    const entry2 = { run: () => void open() };
+    $recentOpenPicture.set(entry2);
+    return () => {
+      if ($recentOpenPicture.get() === entry2) $recentOpenPicture.set(null);
+    };
+  }, [ctx.visible, ctx.ownerScope]);
+  const overlays = [
+    over ? jsxs62("div", { className: "fw-import-drop", "data-testid": "fw-import-drop", "aria-hidden": "true", children: [jsx73(FwIcon, { name: "image" }, "i"), jsx73("span", { children: "Drop to open" }, "t")] }, "import-drop") : null,
+    busy2 ? jsxs62("div", { className: "fw-import-busy", role: "status", "data-testid": "fw-import-busy", children: [jsx73(GlyphSpinner12, { ariaLabel: busy2 }, "s"), jsx73("span", { children: busy2 + "…" }, "t")] }, "import-busy") : null
+  ];
+  return { over, busy: busy2, canvasDrop, slotDrop, open, overlays, command: { id: "open-picture", label: "Open picture…", icon: "folder", why: ctx.ownerScope ? "" : "Not available here", run: () => void open() } };
+}
+
+// desktop/film-suite/src/image/module/image-module-css.js
+var IMAGE_MODULE_CSS = HISTORY_ROW_CSS + IMAGE_WORKBENCH_CSS + FIM_CSS + FW_CSS + FW_SORT_CSS + FW_PICK_CSS + STYLE_BROWSER_CSS + LORA_BROWSER_CSS + FW_NAV_CSS + TAT_CSS + TAT_MIX_CSS + MIX_ALL_CSS + DEV_PRESETS_CSS + RELIGHT_CSS + GEN_LAYER_CSS + FW_CANVAS_VIEW_CSS + CROP_CSS + GRADING_CSS + PANEL_CSS + GENERATION_CSS + SEL_CSS + COMPARE_CSS + OUTPAINT_CSS + IMPORT_CSS + BOX_CSS + OUTPUT_CSS + IMAGE_G1_CSS;
+
+// desktop/film-suite/src/image/module/parts/use-prompt-blocks.js
+import { jsx as jsx74 } from "react/jsx-runtime";
+
+// desktop/film-suite/src/image/styles/style-api.js
+var STYLE_THUMB_BATCH = 60;
+var STYLE_THUMB_CACHE_MAX = 1500;
+var STYLE_DETAIL_CACHE_MAX = 200;
+var STYLE_NAME_MAX = 60;
+var STYLE_THUMB_RE = /^data:image\/(?:webp|png|jpeg|gif);base64,[A-Za-z0-9+/=]+$/;
+var thumbCache2 = /* @__PURE__ */ new Map();
+var thumbPending = /* @__PURE__ */ new Set();
+var thumbListeners = /* @__PURE__ */ new Set();
+var thumbFailed = /* @__PURE__ */ new Map();
+var STYLE_THUMB_RETRY_MS = 3e4;
+var detailCache = /* @__PURE__ */ new Map();
+var searchCache = /* @__PURE__ */ new Map();
+var searchPending = /* @__PURE__ */ new Map();
+var STYLE_SEARCH_CACHE_MAX = 40;
+var categoryCache = null;
+var FAVOURITES_ID = "cat_000000000000";
+var styleErrorCode = (error) => {
+  const match = String(error && error.message || error || "").match(/"code"\s*:\s*"([a-z_]{1,64})"/);
+  return match ? match[1] : "";
+};
+var styleErrorStatus = (error) => {
+  const status = Number(error && error.statusCode);
+  if (status) return status;
+  const match = String(error && error.message || "").match(/^(\d{3})\b/);
+  return match ? Number(match[1]) : 0;
+};
+var styleErrorText = (error, fallback) => {
+  const match = String(error && error.message || "").match(/"message"\s*:\s*"([^"\\]{1,200})"/);
+  return match ? match[1] : fallback;
+};
+var isStyleConflict = (error) => styleErrorCode(error) === "style_categories_conflict" || styleErrorStatus(error) === 409 && styleErrorCode(error) !== "style_category_exists";
+async function styleCall(path, body2) {
+  if (!rest) throw new Error("Styles are unavailable here");
+  return rest(path, { method: "POST", body: body2, timeoutMs: 2e4 });
+}
+var searchKey = (query) => String(query || "").trim().slice(0, 200);
+var cachedSearch = (query) => searchCache.get(searchKey(query)) || null;
+async function searchStyles(query) {
+  const q = searchKey(query);
+  if (searchCache.has(q)) return searchCache.get(q);
+  if (searchPending.has(q)) return searchPending.get(q);
+  const run = (async () => {
+    const reply = await styleCall("/styles/search", { query: q, limit: 4e3 });
+    const items = (Array.isArray(reply && reply.items) ? reply.items : []).filter((item) => item && typeof item.id === "string" && typeof item.title === "string").map((item) => ({ id: item.id, title: item.title.slice(0, 120) }));
+    const result = { items, total: Number(reply && reply.total) || items.length, catalogTotal: Number(reply && reply.catalog_total) || 0 };
+    if (result.catalogTotal > 0) {
+      searchCache.set(q, result);
+      if (searchCache.size > STYLE_SEARCH_CACHE_MAX) {
+        const first = searchCache.keys().next().value;
+        if (first !== "") searchCache.delete(first);
+      }
+    }
+    return result;
+  })();
+  searchPending.set(q, run);
+  try {
+    return await run;
+  } finally {
+    searchPending.delete(q);
+  }
+}
+var prefetched = false;
+async function prefetchStyles() {
+  if (prefetched || !rest) return;
+  prefetched = true;
+  try {
+    const all = await searchStyles("");
+    await requestThumbs(all.items.slice(0, STYLE_THUMB_BATCH).map((item) => item.id), { cachedOnly: true });
+  } catch {
+    prefetched = false;
+  }
+}
+async function readStyleDetail(id) {
+  if (detailCache.has(id)) return detailCache.get(id);
+  const reply = await styleCall("/styles/detail", { id });
+  const detail = {
+    id,
+    title: String(reply && reply.title || "").slice(0, 120),
+    keywords: (Array.isArray(reply && reply.keywords) ? reply.keywords : []).filter((k) => typeof k === "string").slice(0, 12).map((k) => k.slice(0, 60)),
+    summary: String(reply && reply.summary || "").slice(0, 600),
+    style: String(reply && reply.style || "").slice(0, 4e3)
+  };
+  detailCache.set(id, detail);
+  if (detailCache.size > STYLE_DETAIL_CACHE_MAX) detailCache.delete(detailCache.keys().next().value);
+  return detail;
+}
+var thumbOf3 = (id) => thumbCache2.has(id) ? thumbCache2.get(id) : thumbFailed.has(id) ? null : void 0;
+var onThumbs = (listener) => {
+  thumbListeners.add(listener);
+  return () => {
+    thumbListeners.delete(listener);
+  };
+};
+var thumbOk = (value) => typeof value === "string" && STYLE_THUMB_RE.test(value);
+async function requestThumbs(ids, { cachedOnly = false } = {}) {
+  const now = Date.now();
+  const want = [...new Set(ids)].filter((id) => !thumbCache2.has(id) && !thumbPending.has(id) && !(now - (thumbFailed.get(id) || -Infinity) < STYLE_THUMB_RETRY_MS));
+  const batches = [];
+  for (let i2 = 0; i2 < want.length; i2 += STYLE_THUMB_BATCH) batches.push(want.slice(i2, i2 + STYLE_THUMB_BATCH));
+  const settle = () => {
+    while (thumbCache2.size > STYLE_THUMB_CACHE_MAX) thumbCache2.delete(thumbCache2.keys().next().value);
+    thumbListeners.forEach((listener) => listener());
+  };
+  await Promise.all(batches.map(async (batch) => {
+    batch.forEach((id) => thumbPending.add(id));
+    let rest2 = batch;
+    try {
+      const fast = await styleCall("/styles/thumbs", { ids: batch, cached_only: true });
+      const got = fast && fast.thumbs && typeof fast.thumbs === "object" ? fast.thumbs : {};
+      for (const id of batch) if (thumbOk(got[id])) {
+        thumbCache2.set(id, got[id]);
+        thumbFailed.delete(id);
+      }
+      rest2 = batch.filter((id) => !thumbCache2.has(id));
+      if (rest2.length < batch.length) settle();
+    } catch {
+      rest2 = batch;
+    }
+    if (cachedOnly || !rest2.length) {
+      batch.forEach((id) => thumbPending.delete(id));
+      return;
+    }
+    try {
+      const reply = await styleCall("/styles/thumbs", { ids: rest2 });
+      const thumbs2 = reply && reply.thumbs && typeof reply.thumbs === "object" ? reply.thumbs : {};
+      for (const id of rest2) {
+        thumbCache2.set(id, thumbOk(thumbs2[id]) ? thumbs2[id] : null);
+        thumbFailed.delete(id);
+      }
+    } catch {
+      const at2 = Date.now();
+      for (const id of rest2) thumbFailed.set(id, at2);
+    } finally {
+      batch.forEach((id) => thumbPending.delete(id));
+      settle();
+    }
+  }));
+}
+var cleanCategories = (list) => (Array.isArray(list) ? list : []).filter((item) => item && typeof item.name === "string").map((item) => ({ id: typeof item.id === "string" ? item.id : null, name: item.name, boards: Array.isArray(item.boards) ? item.boards.filter((b) => typeof b === "string") : [] }));
+var categoryDoc = (reply) => ({ revision: Number.isInteger(reply && reply.revision) ? reply.revision : 0, categories: cleanCategories(reply && reply.categories) });
+var keepCategories = (doc2) => {
+  categoryCache = doc2;
+  return doc2;
+};
+var cachedCategories = () => categoryCache;
+var readCategories = async () => keepCategories(categoryDoc(await styleCall("/styles/categories/read", {})));
+var writeCategories = async (revision, categories) => keepCategories(categoryDoc(await styleCall("/styles/categories/write", {
+  expected_revision: revision,
+  categories: categories.map((item) => item.id ? { id: item.id, name: item.name, boards: item.boards } : { name: item.name, boards: item.boards })
+})));
+async function changeCategories(doc2, change) {
+  try {
+    return await writeCategories(doc2.revision, change(doc2.categories));
+  } catch (error) {
+    if (!isStyleConflict(error)) throw error;
+  }
+  const fresh = await readCategories();
+  try {
+    return await writeCategories(fresh.revision, change(fresh.categories));
+  } catch (error) {
+    if (!isStyleConflict(error)) throw error;
+    const again = new Error("Categories changed elsewhere");
+    again.reload = true;
+    throw again;
+  }
+}
+var categoryName = (text2) => String(text2 || "").replace(/\s+/g, " ").trim().slice(0, STYLE_NAME_MAX);
+var addCategory = (name2) => (list) => [...list, { id: null, name: name2, boards: [] }];
+var renameCategory = (id, name2) => (list) => list.map((item) => item.id === id ? { ...item, name: name2 } : item);
+var deleteCategory = (id) => (list) => list.filter((item) => item.id !== id);
+var setBoardInCategory = (id, boardId, on) => (list) => list.map((item) => {
+  if (item.id !== id) return item;
+  const has3 = item.boards.includes(boardId);
+  if (on === has3) return item;
+  return { ...item, boards: on ? [...item.boards, boardId] : item.boards.filter((b) => b !== boardId) };
+});
+var categoryErrorText = (error) => styleErrorCode(error) === "style_category_exists" ? "A category with this name already exists" : error && error.reload ? error.message : styleErrorText(error, "Categories could not be saved");
+var STYLE_TEXT_MAX = 8e3;
+var IMAGE_STYLES_MAX = 24;
+var styleItem = (raw) => {
+  if (!raw || typeof raw.id !== "string" || !raw.id || typeof raw.style !== "string") return null;
+  const style = raw.style.replace(/\s+$/, "").slice(0, STYLE_TEXT_MAX);
+  if (!style.trim()) return null;
+  const text2 = typeof raw.text === "string" && raw.text.trim() ? raw.text.trim().slice(0, STYLE_TEXT_MAX) : style;
+  return { id: raw.id.slice(0, 80), title: String(raw.title || "").slice(0, 160), style, text: text2, on: raw.on !== false };
+};
+var IMAGE_RUN_STYLES_KEY = "filmSuite.image.runStyles";
+var IMAGE_RUN_STYLES_MAX = 300;
+var runStylesKey = (prompt) => String(prompt || "").trim();
+var runStylesNote = (store4, prompt, list) => {
+  const key = runStylesKey(prompt);
+  const all = Array.isArray(store4) ? store4.filter((entry2) => entry2 && entry2.prompt !== key) : [];
+  const kept = (Array.isArray(list) ? list : []).map(styleItem).filter(Boolean).slice(0, IMAGE_STYLES_MAX);
+  if (!key || !kept.some((item) => item.on)) return all.slice(-IMAGE_RUN_STYLES_MAX);
+  return [...all, { prompt: key, styles: kept }].slice(-IMAGE_RUN_STYLES_MAX);
+};
+var runStylesFind = (store4, prompt) => {
+  const key = runStylesKey(prompt);
+  const entry2 = Array.isArray(store4) && key ? store4.find((item) => item && item.prompt === key) : null;
+  return entry2 && Array.isArray(entry2.styles) ? entry2.styles.map(styleItem).filter(Boolean) : null;
+};
+
+// desktop/film-suite/src/image/module/parts/use-prompt-blocks.js
+function editPromptText(area2, next, fallback) {
+  const now = area2 ? area2.value : null;
+  if (now === next) return;
+  if (!area2 || typeof document === "undefined" || typeof document.execCommand !== "function") {
+    fallback(next);
+    return;
+  }
+  let a = 0;
+  while (a < now.length && a < next.length && now[a] === next[a]) a++;
+  let b = 0;
+  while (b < now.length - a && b < next.length - a && now[now.length - 1 - b] === next[next.length - 1 - b]) b++;
+  const active = document.activeElement;
+  let ok4 = false;
+  try {
+    area2.focus({ preventScroll: true });
+    if (document.activeElement === area2) {
+      area2.setSelectionRange(a, now.length - b);
+      const mid = next.slice(a, next.length - b);
+      ok4 = mid ? document.execCommand("insertText", false, mid) : document.execCommand("delete");
+    }
+  } catch {
+    ok4 = false;
+  }
+  if (active && active !== area2 && typeof active.focus === "function") active.focus({ preventScroll: true });
+  if (!ok4 || area2.value !== next) fallback(next);
+}
+function dropWords(text2, words2) {
+  let out = String(text2 || "");
+  for (const word of words2 || []) {
+    if (!word) continue;
+    const at2 = out.indexOf(word);
+    if (at2 < 0) continue;
+    let before = out.slice(0, at2), after = out.slice(at2 + word.length);
+    if (before.endsWith(", ")) before = before.slice(0, -2);
+    else if (/[.;:] $/.test(before)) before = before.slice(0, -1);
+    else if (!before.trim()) after = after.replace(/^,\s*/, "");
+    else before = before.replace(/\s+$/, "");
+    out = before + after;
+  }
+  return out;
+}
+var STYLE_SEP = "\n\n";
+var onOf = (styles) => styles.filter((item) => item.on);
+var textsOf = (styles) => onOf(styles).map((item) => item.text);
+var composePrompt = (head2, texts) => [String(head2 || "").trim(), ...texts].filter(Boolean).join(STYLE_SEP);
+function parseBlocks(text2, texts) {
+  const all = String(text2 || "");
+  let end2 = all.replace(/\s+$/, "").length;
+  const spans = [];
+  for (let i2 = texts.length - 1; i2 >= 0; i2--) {
+    const t2 = texts[i2];
+    if (!t2 || end2 < t2.length || all.slice(end2 - t2.length, end2) !== t2) return null;
+    spans.unshift({ s: end2 - t2.length, e: end2 });
+    end2 = all.slice(0, end2 - t2.length).replace(/\s+$/, "").length;
+  }
+  return { head: all.slice(0, end2), spans };
+}
+function trackEdit(prevText, text2, styles) {
+  const on = onOf(styles);
+  const prev = parseBlocks(prevText, on.map((item) => item.text));
+  if (prev && on.length) {
+    let a = 0;
+    while (a < prevText.length && a < text2.length && prevText[a] === text2[a]) a++;
+    let b = 0;
+    while (b < prevText.length - a && b < text2.length - a && prevText[prevText.length - 1 - b] === text2[text2.length - 1 - b]) b++;
+    const oldEnd = prevText.length - b;
+    const delta = text2.length - prevText.length;
+    for (let k = 0; k < on.length; k++) {
+      const s = prev.spans[k].s;
+      const e = k === on.length - 1 ? prevText.length : prev.spans[k].e;
+      if (s <= a && oldEnd <= e) {
+        const changed2 = text2.slice(s, e + delta).trim();
+        if (!changed2) break;
+        const next = styles.map((item) => item.id === on[k].id ? { ...item, text: changed2 } : item);
+        if (parseBlocks(text2, textsOf(next))) return { styles: next, gone: [] };
+        break;
+      }
+    }
+  }
+  let rest2 = String(text2 || "");
+  const keep = /* @__PURE__ */ new Set();
+  for (let i2 = on.length - 1; i2 >= 0; i2--) {
+    const trimmed = rest2.replace(/\s+$/, "");
+    if (!trimmed.endsWith(on[i2].text)) break;
+    keep.add(on[i2].id);
+    rest2 = trimmed.slice(0, trimmed.length - on[i2].text.length);
+  }
+  const gone2 = [];
+  styles.forEach((item, index) => {
+    if (item.on && !keep.has(item.id)) gone2.push({ item, index });
+  });
+  return { styles: styles.filter((item) => !item.on || keep.has(item.id)), gone: gone2 };
+}
+var sameStyles = (a, b) => a === b || a.length === b.length && a.every((item, i2) => item.id === b[i2].id && item.text === b[i2].text && item.on === b[i2].on);
+function usePromptBlocks({ promptRef, typed, setTyped, styles, setStyles, scope }) {
+  const on = onOf(styles);
+  const parsed = parseBlocks(typed, on.map((item) => item.text));
+  const seenRef = useRef(null);
+  const pendingRef = useRef(null);
+  const recentRef = useRef([]);
+  const remember3 = (gone2, at2) => {
+    recentRef.current = [
+      ...gone2.map((entry2) => ({ ...entry2, scope: at2 })),
+      ...recentRef.current.filter((entry2) => entry2.scope !== at2 || !gone2.some((g) => g.item.id === entry2.item.id))
+    ].slice(0, 12);
+  };
+  const edit = (next) => editPromptText(promptRef.current, next, setTyped);
+  const commit = (nextStyles) => {
+    const head2 = parsed ? parsed.head : typed;
+    const nextText = composePrompt(head2, textsOf(nextStyles));
+    pendingRef.current = { typed: nextText, styles: nextStyles };
+    setStyles(nextStyles);
+    edit(nextText);
+  };
+  const addStyle = (raw) => {
+    const board2 = styleItem({ ...raw, text: void 0, on: true });
+    if (!board2 || !parsed) return;
+    const have = styles.find((item) => item.id === board2.id);
+    if (have && have.on) return;
+    commit(have ? styles.map((item) => item.id === board2.id ? { ...item, on: true } : item) : [...styles, board2]);
+  };
+  const removeStyle = (id) => {
+    const index = styles.findIndex((item) => item.id === id);
+    if (index < 0 || !parsed) return;
+    remember3([{ item: styles[index], index }], scope);
+    commit(styles.filter((item) => item.id !== id));
+  };
+  const toggleStyle = (id) => {
+    if (parsed) commit(styles.map((item) => item.id === id ? { ...item, on: !item.on } : item));
+  };
+  const reorderStyles = (ids) => {
+    const byId2 = new Map(styles.map((item) => [item.id, item]));
+    const next = ids.map((id) => byId2.get(id)).filter(Boolean);
+    if (next.length === styles.length && parsed) commit(next);
+  };
+  useEffect(() => {
+    const pending = pendingRef.current;
+    if (pending) {
+      const textOk = typed === pending.typed;
+      const listOk = sameStyles(styles, pending.styles);
+      if (textOk && listOk) {
+        pendingRef.current = null;
+        seenRef.current = { scope, typed, styles };
+        return;
+      }
+      if (textOk || listOk) return;
+      pendingRef.current = null;
+    }
+    const seen = seenRef.current;
+    if (seen && seen.scope === scope && seen.typed === typed && sameStyles(seen.styles, styles)) return;
+    const texts = textsOf(styles);
+    if (!seen || seen.scope !== scope) {
+      if (texts.length && !parseBlocks(typed, texts)) {
+        const nextText = composePrompt(typed, texts);
+        pendingRef.current = { typed: nextText, styles };
+        setTyped(nextText);
+        return;
+      }
+      seenRef.current = { scope, typed, styles };
+      return;
+    }
+    const back = [
+      ...recentRef.current.filter((entry2) => entry2.scope === scope && !styles.some((item) => item.id === entry2.item.id)).map((entry2) => {
+        const cand = styles.slice();
+        cand.splice(Math.min(entry2.index, cand.length), 0, { ...entry2.item, on: true });
+        return { entry: entry2, cand };
+      }),
+      ...styles.filter((item) => !item.on).map((item) => ({ entry: null, cand: styles.map((other) => other.id === item.id ? { ...other, on: true } : other) }))
+    ].find(({ cand }) => parseBlocks(typed, textsOf(cand)) && !parseBlocks(seen.typed, textsOf(cand)));
+    if (back) {
+      if (back.entry) recentRef.current = recentRef.current.filter((other) => other !== back.entry);
+      pendingRef.current = { typed, styles: back.cand };
+      setStyles(back.cand);
+      return;
+    }
+    if (parseBlocks(typed, texts)) {
+      seenRef.current = { scope, typed, styles };
+      return;
+    }
+    const tracked = trackEdit(seen.typed, typed, styles);
+    if (tracked.gone.length) remember3(tracked.gone, scope);
+    pendingRef.current = { typed, styles: tracked.styles };
+    setStyles(tracked.styles);
+  }, [typed, styles, scope]);
+  const insertTriggers = (words2) => {
+    const add = (Array.isArray(words2) ? words2 : [words2]).filter((word) => word && !typed.includes(word));
+    if (!add.length) return;
+    let joined = (parsed ? parsed.head : typed).replace(/\s+$/, "");
+    for (const word of add) joined = joined ? joined + (/[,.;:]$/.test(joined) ? " " : ", ") + word : word;
+    edit(parsed && on.length ? composePrompt(joined, on.map((item) => item.text)) : joined);
+  };
+  const insertTrigger = (word) => insertTriggers([word]);
+  const dropTriggers = (words2) => {
+    const head2 = parsed ? parsed.head : typed;
+    const next = dropWords(head2, words2);
+    if (next === head2) return;
+    edit(parsed && on.length ? composePrompt(next, on.map((item) => item.text)) : next);
+  };
+  const markChildren = () => {
+    if (!parsed || !on.length) return null;
+    const parts = [];
+    let at2 = 0;
+    parsed.spans.forEach((span2, k) => {
+      parts.push(typed.slice(at2, span2.s));
+      parts.push(jsx74("mark", { className: "fw-pmark-style", "data-testid": "fim-prompt-style", "data-board": on[k].id, children: typed.slice(span2.s, span2.e) }, on[k].id));
+      at2 = span2.e;
+    });
+    parts.push(typed.slice(at2) + "\n");
+    return parts;
+  };
+  return { linked: Boolean(parsed && on.length), styles, addStyle, removeStyle, toggleStyle, reorderStyles, insertTrigger, insertTriggers, dropTriggers, markChildren };
+}
+
+// desktop/film-suite/src/shared/ui/components/panes.js
+import { jsx as jsx75 } from "react/jsx-runtime";
+var FW_CANVAS_MIN_SHARE = 0.4;
+var FW_STRIP_W = 36;
+var FW_PANE_LIMITS = { insp: { min: 220, max: 520 }, dock: { min: 200, max: 480 } };
+var fwStoredWidth = (key, limits) => {
+  const v = storageGet(key, null);
+  return Number.isFinite(v) && v >= limits.min && v <= limits.max ? Math.round(v) : null;
+};
+function useFrameWidth(rootRef) {
+  const [fwW, setFwW] = useState(0);
+  useLayoutEffect(() => {
+    const node = rootRef.current;
+    if (!node) return void 0;
+    const read2 = () => setFwW(node.clientWidth);
+    read2();
+    if (typeof ResizeObserver === "undefined") return void 0;
+    const observer = new ResizeObserver(read2);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return fwW;
+}
+function usePaneWidths({ fwW, keys, defaults: defaults2, fixed = 0, inspOpen = true, dockOpen = true, limits = FW_PANE_LIMITS }) {
+  const [inspW, setInspW] = useState(() => fwStoredWidth(keys.insp, limits.insp));
+  const [dockW, setDockW] = useState(() => fwStoredWidth(keys.dock, limits.dock));
+  const base2 = defaults2(fwW);
+  const narrow = fwW > 0 && fwW < 900;
+  const inspShown = inspOpen ? inspW || base2.insp : FW_STRIP_W;
+  const dockShown = dockOpen ? dockW || base2.dock : FW_STRIP_W;
+  const paneMax = (pane, other) => Math.max(limits[pane].min, Math.min(limits[pane].max, Math.floor(fwW * (1 - FW_CANVAS_MIN_SHARE)) - other - fixed));
+  const inspMax = paneMax("insp", dockShown);
+  const dockMax = paneMax("dock", inspShown);
+  const sizePane = (pane, value) => {
+    const max = pane === "insp" ? inspMax : dockMax;
+    const next = value === null ? null : Math.round(Math.max(limits[pane].min, Math.min(max, value)));
+    if (pane === "insp") {
+      setInspW(next);
+      storageSet(keys.insp, next);
+    } else {
+      setDockW(next);
+      storageSet(keys.dock, next);
+    }
+  };
+  const inspCss = inspOpen ? Math.min(inspShown, inspMax) : FW_STRIP_W;
+  const dockCss = dockOpen ? Math.min(dockShown, dockMax) : FW_STRIP_W;
+  const style = fwW && !narrow ? { "--fw-insp-w": inspCss + "px", "--fw-dock-w": dockCss + "px" } : void 0;
+  return { narrow, inspShown, dockShown, inspMax, dockMax, inspCss, dockCss, sizePane, style, limits };
+}
+function PaneSplitters({ panes, fwW, inspOpen = true, dockOpen = true, flip = false, inspLabel = "Controls width", dockLabel = "Panels width", testids = ["fw-split-insp", "fw-split-dock"] }) {
+  if (!fwW || panes.narrow) return [];
+  return [
+    inspOpen ? jsx75(FwSplitter, { label: inspLabel, testid: testids[0], side: flip ? "right" : "left", value: panes.inspCss, min: panes.limits.insp.min, max: panes.inspMax, onSize: (n) => panes.sizePane("insp", n), onReset: () => panes.sizePane("insp", null) }, "split-insp") : null,
+    dockOpen ? jsx75(FwSplitter, { label: dockLabel, testid: testids[1], side: flip ? "left" : "right", value: panes.dockCss, min: panes.limits.dock.min, max: panes.dockMax, onSize: (n) => panes.sizePane("dock", n), onReset: () => panes.sizePane("dock", null) }, "split-dock") : null
+  ];
+}
+
+// desktop/film-suite/src/image/module/parts/image-zoom-group.js
+import { jsx as jsx76, jsxs as jsxs63 } from "react/jsx-runtime";
+var ZOOM_OFF_WHY = "No picture open";
+var ZOOM_OFF_TEXT = "–";
+function ImageZoomGroup({ on, zoom, scale, zoomText, zoomMenu, zoomBtnRef, zoomBy, zoomFit, zoomActual, openZoomMenu, setZoomMenu, step: step2 }) {
+  const why = (t2) => on ? t2 : `${t2} · ${ZOOM_OFF_WHY}`;
+  return jsxs63("div", { className: "fw-zoom", role: "group", "aria-label": "Zoom", "data-enabled": on ? "true" : "false", children: [
+    jsx76(FwButton, { variant: "ghost", icon: "minus", "aria-label": "Zoom out", title: why("Zoom out (−)"), disabledReason: on ? "" : why("Zoom out (−)"), "data-testid": "fw-zoom-out", disabled: !on, onClick: () => zoomBy(1 / step2) }, "o"),
+    jsxs63("button", { ref: zoomBtnRef, type: "button", className: "fw-btn fw-btn-field fw-zoomv", "data-testid": "fw-zoom-readout", "data-scale": String(scale), "data-mode": zoom.fit ? zoom.fill ? "fill" : "fit" : "scale", "aria-haspopup": "menu", "aria-expanded": Boolean(zoomMenu), "aria-label": on ? `Zoom ${zoomText}` : "Zoom", title: why("Zoom presets"), "aria-disabled": on ? void 0 : "true", onClick: (event) => {
+      if (!on) {
+        event.preventDefault();
+        return;
+      }
+      zoomMenu ? setZoomMenu(null) : openZoomMenu();
+    }, children: [jsx76("span", { children: on ? zoomText : ZOOM_OFF_TEXT }, "t"), jsx76(FwIcon, { name: "chev", className: "fw-zoomv-chev" }, "c")] }, "v"),
+    jsx76(FwButton, { variant: "ghost", icon: "plus", "aria-label": "Zoom in", title: why("Zoom in (+)"), disabledReason: on ? "" : why("Zoom in (+)"), "data-testid": "fw-zoom-in", disabled: !on, onClick: () => zoomBy(step2) }, "i"),
+    jsx76(FwButton, { variant: "ghost", className: "fw-zoom-x", "data-testid": "fw-zoom-fit", "aria-pressed": on && Boolean(zoom.fit && !zoom.fill), title: why("Fit the picture to the canvas (Shift+1)"), disabledReason: on ? "" : why("Fit the picture to the canvas (Shift+1)"), disabled: !on, onClick: zoomFit, children: "Fit" }, "f"),
+    jsx76(FwButton, { variant: "ghost", className: "fw-zoom-x", "data-testid": "fw-zoom-100", "aria-pressed": on && !zoom.fit && Math.abs(scale - 1) < 1e-6, title: why("Actual pixels, 100% (Shift+0)"), disabledReason: on ? "" : why("Actual pixels, 100% (Shift+0)"), disabled: !on, onClick: zoomActual, children: "1:1" }, "a")
+  ] }, "zoom");
+}
+
+// desktop/film-suite/src/image/output/target-run.js
+import { cn as cn26 } from "@hermes/plugin-sdk";
+import { jsx as jsx77, jsxs as jsxs64 } from "react/jsx-runtime";
 var RUN_STATE_LABEL = { rendered: "", wired: "", unsupported: "Not available" };
 function TargetBatchPicker({ target }) {
   if (!target || !target.run || !(target.batchMax > 1)) return null;
   const opts = Array.from({ length: target.batchMax - target.batchMin + 1 }, (_, i2) => String(target.batchMin + i2));
-  return jsx73("div", { className: "fw-box-n-sel fim-batch-n", "data-testid": "fim-batch-n", title: `Pictures per Generate (${target.batchMin}–${target.batchMax}, seed + index)`, children: jsx73(FwSelect, { label: "Pictures", value: String(target.batch), options: opts, labels: Object.fromEntries(opts.map((n) => [n, `× ${n}`])), onChange: (v) => target.setBatch(Number(v)) }) });
+  return jsx77("div", { className: "fw-box-n-sel fim-batch-n", "data-testid": "fim-batch-n", title: `Pictures per Generate (${target.batchMin}–${target.batchMax}, seed + index)`, children: jsx77(FwSelect, { label: "Pictures", value: String(target.batch), options: opts, labels: Object.fromEntries(opts.map((n) => [n, `× ${n}`])), onChange: (v) => target.setBatch(Number(v)) }) });
 }
 function TargetLoraSection({ target, lib, open, onToggle, onBrowse }) {
   const sup = target && target.loraSupport;
@@ -82207,25 +87702,25 @@ function TargetLoraSection({ target, lib, open, onToggle, onBrowse }) {
   const remove2 = (file) => target.setLoras(rows.filter((r) => r.file !== file));
   const setStrength = (file, n) => target.setLoras(rows.map((r) => r.file === file ? { ...r, strength: n } : r));
   const max = sup.max || 32;
-  const section = jsxs60(FwSection, {
+  const section = jsxs64(FwSection, {
     id: "target-lora",
     testid: "fim-target-lora",
-    className: cn24("fim-target-lora", `is-${state}`),
+    className: cn26("fim-target-lora", `is-${state}`),
     title: "LoRAs",
     icon: "lora",
     summary,
     open,
     onToggle,
-    action: on ? jsx73(FwButton, { variant: "ghost", icon: "plus", "data-testid": "fim-target-lora-add", "aria-label": "Add LoRA", disabled: rows.length >= max, title: rows.length >= max ? `Up to ${max} LoRAs` : "Add LoRA", onClick: onBrowse }) : null,
-    children: !on ? [jsxs60("p", { className: "fw-faint", "data-testid": "fim-target-lora-why", "data-state": state, title: sup.reason || void 0, children: [jsx73("b", { children: RUN_STATE_LABEL[state] || "Not available" }, "b"), sup.reason ? ` · ${sup.reason}` : ""] }, "why")] : rows.length ? rows.map((r) => jsxs60("div", { className: "fw-prow fim-target-lora-row", "data-testid": "fim-target-lora-row", "data-file": r.file, children: [
-      jsx73("span", { className: "fw-lbl", title: r.file, children: r.label || r.file }, "l"),
-      jsxs60("div", { className: "fw-pctl", children: [
-        jsx73(FwNumber, { label: `${r.label || r.file} strength`, testid: "fim-target-lora-strength", value: r.strength, min: sup.strength && sup.strength.min || 0, max: sup.strength && sup.strength.max || 2, step: 0.05, onCommit: (n) => setStrength(r.file, Math.round(n * 100) / 100) }, "n"),
-        jsx73(FwButton, { variant: "ghost", icon: "x", "data-testid": "fim-target-lora-remove", "aria-label": `Remove ${r.label || r.file}`, title: "Remove", onClick: () => remove2(r.file) }, "x")
+    action: on ? jsx77(FwButton, { variant: "ghost", icon: "plus", "data-testid": "fim-target-lora-add", "aria-label": "Add LoRA", disabled: rows.length >= max, title: rows.length >= max ? `Up to ${max} LoRAs` : "Add LoRA", onClick: onBrowse }) : null,
+    children: !on ? [jsxs64("p", { className: "fw-faint", "data-testid": "fim-target-lora-why", "data-state": state, title: sup.reason || void 0, children: [jsx77("b", { children: RUN_STATE_LABEL[state] || "Not available" }, "b"), sup.reason ? ` · ${sup.reason}` : ""] }, "why")] : rows.length ? rows.map((r) => jsxs64("div", { className: "fw-prow fim-target-lora-row", "data-testid": "fim-target-lora-row", "data-file": r.file, children: [
+      jsx77("span", { className: "fw-lbl", title: r.file, children: r.label || r.file }, "l"),
+      jsxs64("div", { className: "fw-pctl", children: [
+        jsx77(FwNumber, { label: `${r.label || r.file} strength`, testid: "fim-target-lora-strength", value: r.strength, min: sup.strength && sup.strength.min || 0, max: sup.strength && sup.strength.max || 2, step: 0.05, onCommit: (n) => setStrength(r.file, Math.round(n * 100) / 100) }, "n"),
+        jsx77(FwButton, { variant: "ghost", icon: "x", "data-testid": "fim-target-lora-remove", "aria-label": `Remove ${r.label || r.file}`, title: "Remove", onClick: () => remove2(r.file) }, "x")
       ] }, "c")
-    ] }, r.file)) : [jsx73("p", { className: "fw-faint", "data-testid": "fim-target-lora-none", children: lib && lib.state === "loading" ? "Reading the LoRAs…" : "None" }, "none")]
+    ] }, r.file)) : [jsx77("p", { className: "fw-faint", "data-testid": "fim-target-lora-none", children: lib && lib.state === "loading" ? "Reading the LoRAs…" : "None" }, "none")]
   }, "target-lora");
-  return on && sup.reason ? jsx73("div", { className: "fim-target-lora-wrap", "data-testid": "fim-target-lora-evidence", "data-state": state, title: sup.reason, children: section }, "target-lora") : section;
+  return on && sup.reason ? jsx77("div", { className: "fim-target-lora-wrap", "data-testid": "fim-target-lora-evidence", "data-state": state, title: sup.reason, children: section }, "target-lora") : section;
 }
 var targetLoraAdd = (target, row2) => {
   if (!target || !target.loraSupport || !target.loraSupport.available) return false;
@@ -82481,8 +87976,8 @@ var putThumb = (name2, value) => {
 };
 async function requestLoraThumbs(names) {
   const wanted = [...new Set(names)].filter((name2) => loraNameOk(name2) && !thumbCache3.has(name2) && !thumbPending2.has(name2));
-  for (let at = 0; at < wanted.length; at += LORA_THUMB_BATCH) {
-    const batch = wanted.slice(at, at + LORA_THUMB_BATCH);
+  for (let at2 = 0; at2 < wanted.length; at2 += LORA_THUMB_BATCH) {
+    const batch = wanted.slice(at2, at2 + LORA_THUMB_BATCH);
     batch.forEach((name2) => thumbPending2.add(name2));
     try {
       const reply = await loraCall("/projects/image-producer/lora-thumbs", { kind: "image_producer_lora_thumbs", names: batch });
@@ -82751,19 +88246,23 @@ function useImageState(ctx) {
   const [modelCatalog, setModelCatalog] = useState(null);
   const [modelCatalogState, setModelCatalogState] = useState("loading");
   const [modelCheckN, setModelCheckN] = useState(0);
+  const [modelQuietN, setModelQuietN] = useState(0);
+  const modelReadAtRef = useRef(0);
   useEffect(() => {
     let cancelled = false;
-    setModelCatalogState("loading");
+    const quiet = modelQuietN > 0 && modelReadAtRef.current > 0;
+    if (!quiet) setModelCatalogState("loading");
     (async () => {
       try {
         const payload = await rest("/models/catalog", { method: "POST", body: {}, timeoutMs: 45e3 });
         if (cancelled) return;
         const parsed = parseModelCatalog(payload);
         if (!parsed) throw new Error("The model list is unavailable.");
+        modelReadAtRef.current = Date.now();
         setModelCatalog(parsed);
         setModelCatalogState("ok");
       } catch (error) {
-        if (cancelled) return;
+        if (cancelled || quiet) return;
         const text2 = String(error && error.message || error);
         setModelCatalogState(error && error.statusCode === 404 || /^404\b/.test(text2) ? "old" : "failed");
       }
@@ -82771,7 +88270,18 @@ function useImageState(ctx) {
     return () => {
       cancelled = true;
     };
-  }, [modelCheckN]);
+  }, [modelCheckN, modelQuietN]);
+  useEffect(() => {
+    const again = () => {
+      if (document.visibilityState !== "hidden" && modelReadAtRef.current && Date.now() - modelReadAtRef.current > 3e3) setModelQuietN((n) => n + 1);
+    };
+    window.addEventListener("focus", again);
+    document.addEventListener("visibilitychange", again);
+    return () => {
+      window.removeEventListener("focus", again);
+      document.removeEventListener("visibilitychange", again);
+    };
+  }, []);
   const recheckModels = useCallback(() => setModelCheckN((n) => n + 1), []);
   const applyPreset = useCallback((id) => {
     if (id !== "turbo" && id !== "raw") return null;
@@ -83198,10 +88708,10 @@ function useImageState(ctx) {
 // desktop/film-suite/src/image/workbench/parts/use-image-generation.js
 var imageNamedRefusal = (error) => {
   const text2 = String(error && error.message || error || "");
-  const at = text2.indexOf("{");
-  if (at < 0) return null;
+  const at2 = text2.indexOf("{");
+  if (at2 < 0) return null;
   try {
-    const e = JSON.parse(text2.slice(at)).error;
+    const e = JSON.parse(text2.slice(at2)).error;
     return e && typeof e.code === "string" && typeof e.message === "string" ? { code: e.code, message: e.message, missing: Array.isArray(e.missing) ? e.missing : [] } : null;
   } catch {
     return null;
@@ -85476,7 +90986,7 @@ function useImageWorkbench(options = {}) {
 }
 
 // desktop/film-suite/src/image/styles/style-grid.js
-import { jsx as jsx74, jsxs as jsxs61 } from "react/jsx-runtime";
+import { jsx as jsx78, jsxs as jsxs65 } from "react/jsx-runtime";
 var STYLE_TILE_MIN = 148;
 var STYLE_GAP = 12;
 var STYLE_PAD = 16;
@@ -85496,7 +91006,7 @@ function StyleThumb({ id, title, large = false }) {
     if (id && large) void requestThumbs([id]);
   }, [id]);
   const show2 = src && !broken;
-  return jsx74("div", { className: "stb-img" + (show2 ? "" : " is-none"), "data-thumb": show2 ? "image" : src === null || broken ? "none" : "wait", children: show2 ? jsx74("img", { src, alt: title || "", draggable: false, loading: "lazy", decoding: "async", onError: () => setBroken(true) }) : null });
+  return jsx78("div", { className: "stb-img" + (show2 ? "" : " is-none"), "data-thumb": show2 ? "image" : src === null || broken ? "none" : "wait", children: show2 ? jsx78("img", { src, alt: title || "", draggable: false, loading: "lazy", decoding: "async", onError: () => setBroken(true) }) : null });
 }
 function gridGeometry(width) {
   const inner = Math.max(0, width - STYLE_PAD * 2);
@@ -85551,8 +91061,8 @@ function StyleGrid({ items, selectedId, appliedIds, onSelect, onApply, gridRef, 
   };
   const move2 = (delta) => {
     if (!items.length) return;
-    const at = indexOf(selectedId);
-    const next = at < 0 ? 0 : Math.max(0, Math.min(items.length - 1, at + delta));
+    const at2 = indexOf(selectedId);
+    const next = at2 < 0 ? 0 : Math.max(0, Math.min(items.length - 1, at2 + delta));
     onSelect(items[next].id);
     reveal(next);
   };
@@ -85563,8 +91073,8 @@ function StyleGrid({ items, selectedId, appliedIds, onSelect, onApply, gridRef, 
       const item = items[r * cols + c];
       if (!item) break;
       const fav = favourites ? favourites.has(item.id) : false;
-      tiles.push(jsxs61("div", { className: "stb-cell", role: "presentation", children: [
-        jsxs61("button", {
+      tiles.push(jsxs65("div", { className: "stb-cell", role: "presentation", children: [
+        jsxs65("button", {
           type: "button",
           className: "stb-tile",
           role: "option",
@@ -85576,15 +91086,15 @@ function StyleGrid({ items, selectedId, appliedIds, onSelect, onApply, gridRef, 
           onClick: () => onSelect(item.id),
           onDoubleClick: () => onApply(item.id),
           children: [
-            jsxs61("div", { style: { position: "relative" }, children: [
-              jsx74(StyleThumb, { id: item.id, title: item.title }, "i"),
-              appliedIds.has(item.id) ? jsx74("span", { className: "stb-on", title: "Applied", children: jsx74(FwIcon, { name: "check" }) }, "on") : null
+            jsxs65("div", { style: { position: "relative" }, children: [
+              jsx78(StyleThumb, { id: item.id, title: item.title }, "i"),
+              appliedIds.has(item.id) ? jsx78("span", { className: "stb-on", title: "Applied", children: jsx78(FwIcon, { name: "check" }) }, "on") : null
             ] }, "f"),
-            jsx74("span", { className: "stb-tile-t", children: item.title }, "t")
+            jsx78("span", { className: "stb-tile-t", children: item.title }, "t")
           ]
         }, "b"),
         // WP8 ST2: a star adds the board to Favourites without selecting it.
-        favourites ? jsx74("button", {
+        favourites ? jsx78("button", {
           type: "button",
           tabIndex: -1,
           className: "stb-fav",
@@ -85595,13 +91105,13 @@ function StyleGrid({ items, selectedId, appliedIds, onSelect, onApply, gridRef, 
           "aria-label": fav ? `Remove ${item.title} from Favourites` : `Add ${item.title} to Favourites`,
           title: fav ? "Remove from Favourites" : "Add to Favourites",
           onClick: () => onFavourite(item.id),
-          children: jsx74(FwIcon, { name: "star" })
+          children: jsx78(FwIcon, { name: "star" })
         }, "fav") : null
       ] }, item.id));
     }
-    rowEls.push(jsx74("div", { className: "stb-row", "data-testid": "stb-row", role: "presentation", style: { top: STYLE_PAD + r * rowH + "px", gridTemplateColumns: `repeat(${cols}, ${tile}px)` }, children: tiles }, r));
+    rowEls.push(jsx78("div", { className: "stb-row", "data-testid": "stb-row", role: "presentation", style: { top: STYLE_PAD + r * rowH + "px", gridTemplateColumns: `repeat(${cols}, ${tile}px)` }, children: tiles }, r));
   }
-  return jsxs61("div", {
+  return jsxs65("div", {
     ref,
     className: "stb-grid",
     role: "listbox",
@@ -85633,225 +91143,15 @@ function StyleGrid({ items, selectedId, appliedIds, onSelect, onApply, gridRef, 
       }
     },
     children: [
-      jsx74("div", { className: "stb-space", style: { height: (rows ? STYLE_PAD * 2 + rows * rowH - STYLE_GAP : 0) + "px" }, children: rowEls }, "space"),
+      jsx78("div", { className: "stb-space", style: { height: (rows ? STYLE_PAD * 2 + rows * rowH - STYLE_GAP : 0) + "px" }, children: rowEls }, "space"),
       empty || null
     ]
   });
 }
 
-// desktop/film-suite/src/shared/ui/components/pick-row.js
-import { cn as cn25 } from "@hermes/plugin-sdk";
-import { jsx as jsx75, jsxs as jsxs62 } from "react/jsx-runtime";
-function FwPickRow({ handle, on, onToggle, toggleLabel, pic, name: name2, nameTitle, sub, onRemove, removeLabel, ids = {}, rowProps, children, className }) {
-  return jsxs62("div", { ...rowProps, className: cn25("fw-pick", !on && "is-off", className), "data-testid": ids.row, "data-on": on ? "true" : "false", children: [
-    jsxs62("div", { className: "fw-pick-top", children: [
-      handle || jsx75("span", { className: "fw-pick-hgap", "aria-hidden": "true" }, "h"),
-      jsx75("input", { type: "checkbox", className: "fw-cb", checked: on, "aria-label": toggleLabel, "data-testid": ids.on, title: on ? "On" : "Off: not sent", onChange: onToggle }, "cb"),
-      jsx75("div", { className: "fw-pick-pic", children: pic }, "p"),
-      jsxs62("div", { className: "fw-pick-n", children: [
-        jsx75("span", { className: "fw-pick-name", "data-testid": ids.name, title: nameTitle || name2, children: name2 }, "n"),
-        sub ? jsx75("span", { className: "fw-pick-sub", children: sub }, "s") : null
-      ] }, "n"),
-      jsx75(FwButton, { variant: "ghost", icon: "x", className: "fw-pick-x", "aria-label": removeLabel, title: "Remove", "data-testid": ids.remove, onClick: onRemove }, "x")
-    ] }, "top"),
-    children ? jsx75("div", { className: "fw-pick-more", children }, "more") : null
-  ] });
-}
-var FW_PICK_CSS = `
-.fw-pick{display:grid;gap:6px;min-width:0;padding:6px 6px 6px 2px;border:1px solid var(--fw-line);border-radius:2px;background:var(--fw-s1)}
-.fw-pick-top{display:flex;align-items:center;gap:6px;min-width:0}
-.fw-pick-hgap{flex:none;width:16px}
-.fw-pick-pic{flex:none;width:36px;height:36px;overflow:hidden;border-radius:0;background:var(--fw-s3)}
-.fw-pick-pic .stb-img{width:36px;height:36px;border-radius:0}
-.fw-pick-pic img{display:block;width:100%;height:100%;object-fit:cover}
-.fw-pick-n{flex:1 1 auto;display:flex;flex-direction:column;min-width:0}
-.fw-pick-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:18px}
-.fw-pick-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);line-height:17px}
-.fw-pick-x{flex:none;width:28px;height:28px;padding:0}
-.fw-pick-more{display:grid;gap:6px;min-width:0;padding-left:42px}
-.fw-pick.is-off .fw-pick-pic,.fw-pick.is-off .fw-pick-n,.fw-pick.is-off .fw-pick-more{opacity:.5}
-`;
-
-// desktop/film-suite/src/shared/ui/components/sortable-list.js
-import { cn as cn26 } from "@hermes/plugin-sdk";
-import { jsx as jsx76, jsxs as jsxs63 } from "react/jsx-runtime";
-var moveItem = (list, from, to) => {
-  const next = list.slice();
-  const [it] = next.splice(from, 1);
-  next.splice(to, 0, it);
-  return next;
-};
-var dropIndex = (mids, y, from) => {
-  let to = 0;
-  for (let i2 = 0; i2 < mids.length; i2++) if (i2 !== from && y > mids[i2]) to += 1;
-  return to;
-};
-function GripDots() {
-  const dot2 = (x, y, k) => jsx76("rect", { x, y, width: 2, height: 2 }, k);
-  return jsx76("svg", {
-    viewBox: "0 0 6 12",
-    width: 6,
-    height: 12,
-    fill: "currentColor",
-    "aria-hidden": true,
-    focusable: "false",
-    children: [dot2(0, 0, 1), dot2(4, 0, 2), dot2(0, 5, 3), dot2(4, 5, 4), dot2(0, 10, 5), dot2(4, 10, 6)]
-  });
-}
-var SETTLE_MS3 = 150;
-function FwSortableList({ items, onReorder, renderItem, noun = "Item", testid, className }) {
-  const [drag, setDrag] = useState(null);
-  const refs = useRef({});
-  const geo = useRef(null);
-  const ids = items.map((item) => item.id);
-  const canSort = Boolean(onReorder) && ids.length > 1;
-  const dragRef = useRef(null);
-  dragRef.current = drag;
-  const key = ids.join("|");
-  useEffect(() => {
-    if (dragRef.current && !ids.includes(dragRef.current.id)) setDrag(null);
-  }, [key]);
-  const commit = (from, to) => {
-    if (from !== to) onReorder(moveItem(ids, from, to));
-  };
-  const measure = () => {
-    const rects = ids.map((id) => refs.current[id] ? refs.current[id].getBoundingClientRect() : null);
-    return { tops: rects.map((r) => r ? r.top : 0), heights: rects.map((r) => r ? r.height : 0), mids: rects.map((r) => r ? r.top + r.height / 2 : 0) };
-  };
-  const startPointer = (event, id) => {
-    if (!canSort || event.button !== 0) return;
-    event.preventDefault();
-    const from = ids.indexOf(id);
-    const y0 = event.clientY;
-    geo.current = { ...measure(), y0 };
-    setDrag({ id, from, to: from, dy: 0, kbd: false });
-    const body2 = event.currentTarget.ownerDocument.body;
-    body2.style.cursor = "grabbing";
-    const win = event.currentTarget.ownerDocument.defaultView;
-    const sel = win.getSelection && win.getSelection();
-    if (sel && sel.removeAllRanges) sel.removeAllRanges();
-    const move2 = (ev) => {
-      ev.preventDefault();
-      const g = geo.current;
-      const dy = ev.clientY - g.y0;
-      const to = dropIndex(g.mids, g.mids[from] + dy, from);
-      setDrag((d) => d ? { ...d, dy, to } : d);
-    };
-    const cleanup = () => {
-      win.removeEventListener("pointermove", move2);
-      win.removeEventListener("pointerup", up);
-      win.removeEventListener("pointercancel", cancel);
-      body2.style.cursor = "";
-    };
-    const up = () => {
-      cleanup();
-      setDrag((d) => d ? { ...d, settling: true } : d);
-      setTimeout(() => {
-        const d = dragRef.current;
-        setDrag(null);
-        if (d && d.id === id) commit(d.from, d.to);
-      }, SETTLE_MS3);
-    };
-    const cancel = () => {
-      cleanup();
-      setDrag(null);
-    };
-    win.addEventListener("pointermove", move2);
-    win.addEventListener("pointerup", up);
-    win.addEventListener("pointercancel", cancel);
-  };
-  const onKey = (event, id) => {
-    if (!canSort) return;
-    const i2 = ids.indexOf(id);
-    const d = dragRef.current;
-    if (!d || !d.kbd) {
-      if (event.key === " " || event.key === "Enter") {
-        event.preventDefault();
-        geo.current = measure();
-        setDrag({ id, from: i2, to: i2, dy: 0, kbd: true });
-      }
-      return;
-    }
-    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      event.preventDefault();
-      setDrag((cur) => ({ ...cur, to: Math.max(0, Math.min(ids.length - 1, cur.to + (event.key === "ArrowUp" ? -1 : 1))) }));
-    } else if (event.key === " " || event.key === "Enter") {
-      event.preventDefault();
-      setDrag(null);
-      commit(d.from, d.to);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      setDrag(null);
-    } else if (event.key === "Tab") setDrag(null);
-  };
-  const shiftFor = (i2) => {
-    if (!drag || !geo.current) return 0;
-    const { from, to } = drag;
-    const g = geo.current;
-    const h = (g.heights[from] || 0) + (from + 1 < g.tops.length ? g.tops[from + 1] - g.tops[from] - g.heights[from] : from > 0 ? g.tops[from] - g.tops[from - 1] - g.heights[from - 1] : 0);
-    if (i2 === from) {
-      if (!drag.kbd && !drag.settling) return drag.dy;
-      return to > from ? g.tops[to] + g.heights[to] - (g.tops[from] + g.heights[from]) : g.tops[to] - g.tops[from];
-    }
-    if (from < to && i2 > from && i2 <= to) return -h;
-    if (from > to && i2 >= to && i2 < from) return h;
-    return 0;
-  };
-  return jsx76("div", {
-    className: cn26("fw-sort", drag && "is-sorting", className),
-    "data-testid": testid,
-    role: "list",
-    children: items.map((item, i2) => {
-      const dragging = Boolean(drag && drag.id === item.id);
-      const lifted = dragging && !drag.settling;
-      const pos2 = dragging ? drag.to : i2;
-      const handle = canSort ? jsx76("button", {
-        type: "button",
-        className: "fw-sort-h",
-        "data-testid": "fw-sort-handle",
-        "aria-pressed": dragging && drag.kbd ? true : void 0,
-        "aria-label": `${noun} ${pos2 + 1} of ${ids.length} · Move (Space, arrow keys)`,
-        title: "Reorder",
-        onPointerDown: (event) => startPointer(event, item.id),
-        onKeyDown: (event) => onKey(event, item.id),
-        onBlur: () => {
-          const d = dragRef.current;
-          if (d && d.kbd) setDrag(null);
-        },
-        children: jsx76(GripDots, {})
-      }, "h") : null;
-      return jsx76("div", {
-        ref: (node) => {
-          refs.current[item.id] = node;
-        },
-        role: "listitem",
-        className: cn26("fw-sort-i", lifted && "is-lifted", dragging && "is-dragging"),
-        "data-sort-id": item.id,
-        style: {
-          transform: drag ? `translateY(${shiftFor(i2)}px)` : void 0,
-          transition: drag && !(dragging && !drag.kbd && !drag.settling) ? "transform 140ms cubic-bezier(.2,.7,.3,1)" : "none",
-          zIndex: dragging ? 2 : void 0
-        },
-        children: renderItem(item, { handle, index: i2, dragging })
-      }, item.id);
-    })
-  });
-}
-var FW_SORT_CSS = `
-.fw-sort{position:relative;display:grid;gap:6px;min-width:0}
-.fw-sort-i{position:relative;min-width:0}
-.fw-sort.is-sorting{user-select:none}
-.fw-sort-i.is-lifted{box-shadow:0 0 0 1px var(--fw-accent-ring),0 10px 24px rgb(0 0 0 / .55)}
-.fw-sort-h{flex:none;display:grid;place-items:center;width:16px;height:28px;padding:0;border:0;border-radius:2px;background:transparent;color:var(--fw-t3);cursor:grab;touch-action:none}
-.fw-sort-h:hover{background:var(--fw-hover);color:var(--fw-t1)}
-.fw-sort-i.is-dragging .fw-sort-h{cursor:grabbing}
-.fw-sort-h[aria-pressed=true]{color:var(--fw-t1);background:var(--fw-sel-bg);box-shadow:var(--fw-sel-shadow)}
-`;
-
 // desktop/film-suite/src/image/styles/style-browser.js
-import { GlyphSpinner as GlyphSpinner12, cn as cn27 } from "@hermes/plugin-sdk";
-import { jsx as jsx77, jsxs as jsxs64 } from "react/jsx-runtime";
+import { GlyphSpinner as GlyphSpinner13, cn as cn27 } from "@hermes/plugin-sdk";
+import { jsx as jsx79, jsxs as jsxs66 } from "react/jsx-runtime";
 var ALL = "";
 var styleParts = (text2) => String(text2 || "").split(/(?<=[.!?])\s+(?=[A-Z][A-Za-z]*(?: [a-z]+){0,2}:\s)/).map((part) => {
   const m = part.match(/^([A-Z][A-Za-z]*(?: [a-z]+){0,2}):\s+([\s\S]*)$/);
@@ -85934,8 +91234,8 @@ function CategoryRow({ cat, current: current2, onPick, onRename, onDelete, busy:
       }
       if (await onRename(next)) setMode("");
     };
-    return jsxs64("div", { className: "stb-cat-edit", "data-testid": "stb-cat-rename", children: [
-      jsx77("input", {
+    return jsxs66("div", { className: "stb-cat-edit", "data-testid": "stb-cat-rename", children: [
+      jsx79("input", {
         className: "fw-input",
         "aria-label": "Category name",
         maxLength: STYLE_NAME_MAX,
@@ -85954,31 +91254,31 @@ function CategoryRow({ cat, current: current2, onPick, onRename, onDelete, busy:
           }
         }
       }, "i"),
-      jsx77(FwButton, { variant: "ghost", icon: "check", "aria-label": "Save name", title: "Save name", disabled: busy2, onClick: () => void commit() }, "ok")
+      jsx79(FwButton, { variant: "ghost", icon: "check", "aria-label": "Save name", title: "Save name", disabled: busy2, onClick: () => void commit() }, "ok")
     ] });
   }
   if (mode === "delete") {
-    return jsxs64("div", { className: "stb-cat", "aria-current": current2, "data-testid": "stb-cat-confirm", children: [
-      jsx77("span", { className: "stb-cat-name", title: `Delete “${cat.name}”`, children: `Delete “${cat.name}”?` }, "n"),
-      jsx77(FwButton, { variant: "danger", "data-testid": "stb-cat-delete-ok", disabled: busy2, onClick: async () => {
+    return jsxs66("div", { className: "stb-cat", "aria-current": current2, "data-testid": "stb-cat-confirm", children: [
+      jsx79("span", { className: "stb-cat-name", title: `Delete “${cat.name}”`, children: `Delete “${cat.name}”?` }, "n"),
+      jsx79(FwButton, { variant: "danger", "data-testid": "stb-cat-delete-ok", disabled: busy2, onClick: async () => {
         if (await onDelete()) setMode("");
       }, children: "Delete" }, "y"),
-      jsx77(FwButton, { variant: "ghost", icon: "x", "aria-label": "Keep category", title: "Keep", onClick: () => setMode("") }, "n2")
+      jsx79(FwButton, { variant: "ghost", icon: "x", "aria-label": "Keep category", title: "Keep", onClick: () => setMode("") }, "n2")
     ] });
   }
   const builtIn2 = cat.id === FAVOURITES_ID;
-  return jsxs64("div", { className: "stb-cat", "aria-current": current2, "data-testid": "stb-cat", "data-name": cat.name, children: [
-    jsxs64("button", { type: "button", className: "stb-cat-pick", onClick: onPick, title: cat.name, children: [
-      builtIn2 ? jsx77(FwIcon, { name: "star", className: "stb-cat-ic" }, "i") : null,
-      jsx77("span", { className: "stb-cat-name", children: cat.name }, "n"),
-      jsx77("span", { className: "stb-cat-n", children: cat.boards.length }, "c")
+  return jsxs66("div", { className: "stb-cat", "aria-current": current2, "data-testid": "stb-cat", "data-name": cat.name, children: [
+    jsxs66("button", { type: "button", className: "stb-cat-pick", onClick: onPick, title: cat.name, children: [
+      builtIn2 ? jsx79(FwIcon, { name: "star", className: "stb-cat-ic" }, "i") : null,
+      jsx79("span", { className: "stb-cat-name", children: cat.name }, "n"),
+      jsx79("span", { className: "stb-cat-n", children: cat.boards.length }, "c")
     ] }, "p"),
-    builtIn2 ? null : jsxs64("span", { className: "stb-cat-acts", children: [
-      jsx77(FwButton, { variant: "ghost", icon: "pencil", "aria-label": `Rename ${cat.name}`, title: "Rename", "data-testid": "stb-cat-rename-btn", onClick: () => {
+    builtIn2 ? null : jsxs66("span", { className: "stb-cat-acts", children: [
+      jsx79(FwButton, { variant: "ghost", icon: "pencil", "aria-label": `Rename ${cat.name}`, title: "Rename", "data-testid": "stb-cat-rename-btn", onClick: () => {
         setName(cat.name);
         setMode("rename");
       } }, "r"),
-      jsx77(FwButton, { variant: "ghost", icon: "x", "aria-label": `Delete ${cat.name}`, title: "Delete category", "data-testid": "stb-cat-delete-btn", onClick: () => setMode("delete") }, "d")
+      jsx79(FwButton, { variant: "ghost", icon: "x", "aria-label": `Delete ${cat.name}`, title: "Delete category", "data-testid": "stb-cat-delete-btn", onClick: () => setMode("delete") }, "d")
     ] }, "a")
   ] });
 }
@@ -85996,19 +91296,19 @@ function StyleCategories({ cats, filter, setFilter, total }) {
       setName("");
     }
   };
-  return jsxs64("nav", { className: "stb-cats", "aria-label": "Style categories", "data-testid": "stb-cats", children: [
-    jsx77("div", { className: "stb-cat", "aria-current": filter === ALL, children: jsxs64("button", { type: "button", className: "stb-cat-pick", "data-testid": "stb-cat-all", onClick: () => setFilter(ALL), children: [
-      jsx77("span", { className: "stb-cat-name", children: "All styles" }, "n"),
-      jsx77("span", { className: "stb-cat-n", children: total || "" }, "c")
+  return jsxs66("nav", { className: "stb-cats", "aria-label": "Style categories", "data-testid": "stb-cats", children: [
+    jsx79("div", { className: "stb-cat", "aria-current": filter === ALL, children: jsxs66("button", { type: "button", className: "stb-cat-pick", "data-testid": "stb-cat-all", onClick: () => setFilter(ALL), children: [
+      jsx79("span", { className: "stb-cat-name", children: "All styles" }, "n"),
+      jsx79("span", { className: "stb-cat-n", children: total || "" }, "c")
     ] }) }, "all"),
-    jsxs64("div", { className: "stb-cats-h", children: [
-      jsx77("span", { className: "fw-grow", children: "My categories" }, "t"),
-      jsx77(FwButton, { variant: "ghost", icon: "plus", "aria-label": "New category", "data-testid": "stb-cat-new", title: "New category", disabled: cats.busy, onClick: () => {
+    jsxs66("div", { className: "stb-cats-h", children: [
+      jsx79("span", { className: "fw-grow", children: "My categories" }, "t"),
+      jsx79(FwButton, { variant: "ghost", icon: "plus", "aria-label": "New category", "data-testid": "stb-cat-new", title: "New category", disabled: cats.busy, onClick: () => {
         cats.clearError();
         setAdding(true);
       } }, "add")
     ] }, "h"),
-    ...cats.categories.map((cat) => jsx77(CategoryRow, {
+    ...cats.categories.map((cat) => jsx79(CategoryRow, {
       cat,
       current: filter === cat.id,
       busy: cats.busy,
@@ -86020,9 +91320,9 @@ function StyleCategories({ cats, filter, setFilter, total }) {
         return ok4;
       }
     }, cat.id || cat.name)),
-    !cats.categories.length && !adding ? jsx77("p", { className: "stb-cats-none", children: "No categories" }, "none") : null,
-    adding ? jsxs64("div", { className: "stb-cat-edit", children: [
-      jsx77("input", {
+    !cats.categories.length && !adding ? jsx79("p", { className: "stb-cats-none", children: "No categories" }, "none") : null,
+    adding ? jsxs66("div", { className: "stb-cat-edit", children: [
+      jsx79("input", {
         className: "fw-input",
         "aria-label": "New category name",
         "data-testid": "stb-cat-name",
@@ -86043,9 +91343,9 @@ function StyleCategories({ cats, filter, setFilter, total }) {
           }
         }
       }, "i"),
-      jsx77(FwButton, { variant: "ghost", icon: "check", "aria-label": "Create category", title: "Create", "data-testid": "stb-cat-create", disabled: cats.busy, onClick: () => void create() }, "ok")
+      jsx79(FwButton, { variant: "ghost", icon: "check", "aria-label": "Create category", title: "Create", "data-testid": "stb-cat-create", disabled: cats.busy, onClick: () => void create() }, "ok")
     ] }, "new") : null,
-    cats.error ? jsx77("p", { className: "stb-cats-err", role: "alert", "data-testid": "stb-cats-error", children: cats.error }, "err") : null
+    cats.error ? jsx79("p", { className: "stb-cats-err", role: "alert", "data-testid": "stb-cats-error", children: cats.error }, "err") : null
   ] });
 }
 function StyleDetail({ id, appliedIds, onApply, cats }) {
@@ -86069,21 +91369,21 @@ function StyleDetail({ id, appliedIds, onApply, cats }) {
       live2 = false;
     };
   }, [id]);
-  if (!id) return jsx77("aside", { className: "stb-detail is-empty", "aria-label": "Style", "data-testid": "stb-detail" });
+  if (!id) return jsx79("aside", { className: "stb-detail is-empty", "aria-label": "Style", "data-testid": "stb-detail" });
   const ready = detail && detail.id === id;
-  return jsxs64("aside", { className: "stb-detail", "aria-label": "Style", "data-testid": "stb-detail", children: [
-    jsxs64("div", { className: "stb-detail-b", children: [
-      jsx77(StyleThumb, { id, title: ready ? detail.title : "", large: true }, "img"),
+  return jsxs66("aside", { className: "stb-detail", "aria-label": "Style", "data-testid": "stb-detail", children: [
+    jsxs66("div", { className: "stb-detail-b", children: [
+      jsx79(StyleThumb, { id, title: ready ? detail.title : "", large: true }, "img"),
       ready ? [
-        jsx77("h3", { className: "stb-detail-t", "data-testid": "stb-detail-title", children: detail.title }, "t"),
-        detail.keywords.length ? jsx77("div", { className: "stb-kw", children: detail.keywords.map((k) => jsx77("span", { children: k }, k)) }, "kw") : null,
-        jsx77("span", { className: "stb-lbl", children: "Style text" }, "l"),
-        jsx77("div", { className: "stb-text", "data-testid": "stb-style-text", "data-text": detail.style, children: styleParts(detail.style).map((part, i2) => jsxs64("span", { children: [part.label ? jsx77("b", { children: part.label + ": " }, "l") : null, part.text] }, i2)) }, "s"),
+        jsx79("h3", { className: "stb-detail-t", "data-testid": "stb-detail-title", children: detail.title }, "t"),
+        detail.keywords.length ? jsx79("div", { className: "stb-kw", children: detail.keywords.map((k) => jsx79("span", { children: k }, k)) }, "kw") : null,
+        jsx79("span", { className: "stb-lbl", children: "Style text" }, "l"),
+        jsx79("div", { className: "stb-text", "data-testid": "stb-style-text", "data-text": detail.style, children: styleParts(detail.style).map((part, i2) => jsxs66("span", { children: [part.label ? jsx79("b", { children: part.label + ": " }, "l") : null, part.text] }, i2)) }, "s"),
         cats.categories.length ? [
-          jsx77("span", { className: "stb-lbl", children: "Categories" }, "cl"),
-          jsx77("div", { className: "stb-incat", role: "group", "aria-label": "Categories", children: cats.categories.map((cat) => {
+          jsx79("span", { className: "stb-lbl", children: "Categories" }, "cl"),
+          jsx79("div", { className: "stb-incat", role: "group", "aria-label": "Categories", children: cats.categories.map((cat) => {
             const on = cat.boards.includes(id);
-            return jsx77(FwButton, {
+            return jsx79(FwButton, {
               variant: "secondary",
               "aria-pressed": on,
               "data-testid": "stb-incat",
@@ -86096,10 +91396,10 @@ function StyleDetail({ id, appliedIds, onApply, cats }) {
             }, cat.id);
           }) }, "cats")
         ] : null
-      ] : error ? jsx77("p", { className: "stb-err", role: "alert", children: error }, "e") : jsx77("div", { className: "stb-wait", style: { position: "static" }, children: jsx77(GlyphSpinner12, { ariaLabel: "Loading style" }) }, "w")
+      ] : error ? jsx79("p", { className: "stb-err", role: "alert", children: error }, "e") : jsx79("div", { className: "stb-wait", style: { position: "static" }, children: jsx79(GlyphSpinner13, { ariaLabel: "Loading style" }) }, "w")
     ] }, "b"),
-    jsxs64("div", { className: "stb-detail-f", children: [
-      jsx77(FwButton, {
+    jsxs66("div", { className: "stb-detail-f", children: [
+      jsx79(FwButton, {
         variant: "primary",
         "data-testid": "stb-apply",
         disabled: !ready || appliedId === id,
@@ -86138,9 +91438,9 @@ function StyleBrowser({ applied, onApply, onClose }) {
     if (board2) onApply(board2);
   };
   const countText = search.loading && search.q === null ? "" : category ? `${items.length} in ${category.name}` : search.q ? `${search.total} of ${search.catalogTotal}` : `${search.catalogTotal || search.total} styles`;
-  return jsxs64("div", { className: "stb-layer", children: [
-    jsx77("div", { className: "stb-scrim", "aria-hidden": "true", onClick: onClose }, "scrim"),
-    jsxs64("div", {
+  return jsxs66("div", { className: "stb-layer", children: [
+    jsx79("div", { className: "stb-scrim", "aria-hidden": "true", onClick: onClose }, "scrim"),
+    jsxs66("div", {
       className: "stb",
       role: "dialog",
       "aria-modal": "true",
@@ -86154,11 +91454,11 @@ function StyleBrowser({ applied, onApply, onClose }) {
         }
       },
       children: [
-        jsxs64("header", { className: "stb-head", children: [
-          jsx77("span", { className: "stb-title", children: "Styles" }, "t"),
-          jsxs64("label", { className: "stb-q", children: [
-            jsx77(FwIcon, { name: "search" }, "i"),
-            jsx77("input", {
+        jsxs66("header", { className: "stb-head", children: [
+          jsx79("span", { className: "stb-title", children: "Styles" }, "t"),
+          jsxs66("label", { className: "stb-q", children: [
+            jsx79(FwIcon, { name: "search" }, "i"),
+            jsx79("input", {
               ref: inputRef,
               className: "fw-input",
               type: "search",
@@ -86179,13 +91479,13 @@ function StyleBrowser({ applied, onApply, onClose }) {
               }
             }, "q")
           ] }, "q"),
-          search.loading ? jsx77(GlyphSpinner12, { ariaLabel: "Searching" }, "spin") : null,
-          jsx77("span", { className: "stb-count", "data-testid": "stb-count", children: countText }, "n"),
-          jsx77("span", { className: "fw-grow" }, "g"),
-          jsx77(FwButton, { variant: "ghost", icon: "x", "aria-label": "Close styles", title: "Close (Esc)", "data-testid": "stb-close", onClick: onClose }, "x")
+          search.loading ? jsx79(GlyphSpinner13, { ariaLabel: "Searching" }, "spin") : null,
+          jsx79("span", { className: "stb-count", "data-testid": "stb-count", children: countText }, "n"),
+          jsx79("span", { className: "fw-grow" }, "g"),
+          jsx79(FwButton, { variant: "ghost", icon: "x", "aria-label": "Close styles", title: "Close (Esc)", "data-testid": "stb-close", onClick: onClose }, "x")
         ] }, "head"),
-        jsx77(StyleCategories, { cats, filter, setFilter, total: search.catalogTotal }, "cats"),
-        jsx77(StyleGrid, {
+        jsx79(StyleCategories, { cats, filter, setFilter, total: search.catalogTotal }, "cats"),
+        jsx79(StyleGrid, {
           items,
           selectedId,
           appliedIds,
@@ -86194,16 +91494,16 @@ function StyleBrowser({ applied, onApply, onClose }) {
           favourites: cats.hasFavourites ? cats.favSet : null,
           onFavourite: (id) => void cats.toggleFavourite(id),
           favBusy: cats.busy,
-          empty: search.loading && search.q === null ? jsx77("div", { className: "stb-wait", children: jsx77(GlyphSpinner12, { ariaLabel: "Loading styles" }) }, "w") : search.error ? jsx77("div", { className: cn27("stb-empty", "stb-err"), role: "alert", children: search.error }, "e") : !items.length && !search.loading ? jsx77("div", { className: "stb-empty", "data-testid": "stb-empty", children: category && !category.boards.length ? "No styles in this category" : "No style matches" }, "e") : null
+          empty: search.loading && search.q === null ? jsx79("div", { className: "stb-wait", children: jsx79(GlyphSpinner13, { ariaLabel: "Loading styles" }) }, "w") : search.error ? jsx79("div", { className: cn27("stb-empty", "stb-err"), role: "alert", children: search.error }, "e") : !items.length && !search.loading ? jsx79("div", { className: "stb-empty", "data-testid": "stb-empty", children: category && !category.boards.length ? "No styles in this category" : "No style matches" }, "e") : null
         }, "grid"),
-        jsx77(StyleDetail, { id: selectedId, appliedIds, onApply: (board2) => void apply(board2), cats }, "detail")
+        jsx79(StyleDetail, { id: selectedId, appliedIds, onApply: (board2) => void apply(board2), cats }, "detail")
       ]
     }, "dlg")
   ] });
 }
 function StyleSection({ styles, onBrowse, onToggle, onRemove, onReorder, FwSection: FwSection2, open = true, onFold }) {
   const onNames = styles.filter((item) => item.on).map((item) => item.title);
-  return jsx77(FwSection2, {
+  return jsx79(FwSection2, {
     id: "style",
     testid: "fim-style",
     title: "Style",
@@ -86211,18 +91511,18 @@ function StyleSection({ styles, onBrowse, onToggle, onRemove, onReorder, FwSecti
     open,
     onToggle: onFold,
     summary: onNames.length ? onNames.join(", ") : "none",
-    action: jsx77(FwButton, { variant: "ghost", icon: "plus", "data-testid": "fim-style-browse", title: "Browse styles", "aria-label": "Browse styles", onClick: onBrowse }),
-    children: styles.length ? jsx77(FwSortableList, {
+    action: jsx79(FwButton, { variant: "ghost", icon: "plus", "data-testid": "fim-style-browse", title: "Browse styles", "aria-label": "Browse styles", onClick: onBrowse }),
+    children: styles.length ? jsx79(FwSortableList, {
       items: styles,
       noun: "Style",
       testid: "fim-style-list",
       onReorder,
-      renderItem: (item, { handle }) => jsx77(FwPickRow, {
+      renderItem: (item, { handle }) => jsx79(FwPickRow, {
         handle,
         on: item.on,
         onToggle: () => onToggle(item.id),
         toggleLabel: `Use ${item.title}`,
-        pic: jsx77(StyleThumb, { id: item.id, title: item.title, large: true }),
+        pic: jsx79(StyleThumb, { id: item.id, title: item.title, large: true }),
         name: item.title,
         sub: item.text !== item.style ? "Edited" : "",
         onRemove: () => onRemove(item.id),
@@ -86230,89 +91530,13 @@ function StyleSection({ styles, onBrowse, onToggle, onRemove, onReorder, FwSecti
         ids: { row: "fim-style-row", on: "fim-style-on", name: "fim-style-name", remove: "fim-style-remove" },
         rowProps: { "data-board": item.id }
       })
-    }) : jsx77("span", { className: "fim-style-none", "data-testid": "fim-style-none", children: "None" })
+    }) : jsx79("span", { className: "fim-style-none", "data-testid": "fim-style-none", children: "None" })
   });
 }
 
-// desktop/film-suite/src/image/styles/style-browser-css.js
-var STYLE_BROWSER_CSS = `
-.stb-scrim{position:absolute;inset:0;z-index:70;background:rgb(0 0 0 / .66)}
-.stb{position:absolute;z-index:75;inset:24px;display:grid;grid-template-columns:200px minmax(0,1fr) 340px;grid-template-rows:48px minmax(0,1fr);
-  grid-template-areas:"head head head" "cats grid detail";border-radius:var(--fw-r2);background:var(--fw-s1);box-shadow:var(--fw-shadow);overflow:hidden;color:var(--fw-t3)}
-@container fim (max-width:1280px){.stb{inset:12px;grid-template-columns:176px minmax(0,1fr) 296px}}
-@container fim (max-width:900px){.stb{inset:0;border-radius:0;grid-template-columns:minmax(0,1fr);grid-template-rows:48px auto minmax(0,1fr);grid-template-areas:"head" "cats" "grid"}
-  .stb-detail{position:absolute;inset:48px 0 0 0;z-index:2}.stb-detail.is-empty{display:none}.stb-cats{border-right:0;border-bottom:1px solid var(--fw-line);max-height:132px}}
-.stb-head{grid-area:head;display:flex;align-items:center;gap:8px;padding:0 8px 0 16px;border-bottom:1px solid var(--fw-line-2);background:var(--fw-s2)}
-.stb-title{flex:none;color:var(--fw-t1);font-weight:600;font-size:var(--fw-fs-title,.875rem)}
-.stb-q{position:relative;flex:0 1 420px;display:flex;align-items:center;min-width:120px;margin:0 8px 0 12px}
-.stb-q .fw-ic{position:absolute;left:8px;width:16px;height:16px;color:var(--fw-t3);pointer-events:none}
-.stb-q .fw-input{padding-left:30px}
-.stb-count{flex:none;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);font-variant-numeric:tabular-nums;white-space:nowrap}
-.stb-cats{grid-area:cats;display:flex;flex-direction:column;min-height:0;overflow-y:auto;padding:8px 6px;gap:2px;border-right:1px solid var(--fw-line);background:var(--fw-s1)}
-.stb-cats-h{display:flex;align-items:center;gap:4px;height:28px;padding:8px 6px 0 8px;color:var(--fw-t3);font-size:var(--fw-fs-meta,.6875rem);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
-.stb-cat{position:relative;display:flex;align-items:center;gap:6px;min-width:0;height:30px;padding:0 8px;border-radius:var(--fw-r1);color:var(--fw-t3)}
-.stb-cat:hover{background:var(--fw-hover)}
-.stb-cat[aria-current=true]{background:var(--fw-sel-bg);color:var(--fw-t1);font-weight:600}
-.stb-cat-pick{flex:1 1 auto;display:flex;align-items:center;gap:6px;min-width:0;height:100%;border:0;background:transparent;color:inherit;font:inherit;font-size:var(--fw-fs,.75rem);text-align:left;cursor:pointer;padding:0}
-.stb-cat-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.stb-cat-n{flex:none;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);font-variant-numeric:tabular-nums}
-.stb-cat-acts{position:absolute;right:2px;top:3px;display:none;gap:0;border-radius:var(--fw-r1);background:var(--fw-s3)}
-.stb-cat:hover .stb-cat-acts,.stb-cat:focus-within .stb-cat-acts{display:flex}
-.stb-cat:hover .stb-cat-n,.stb-cat:focus-within .stb-cat-n{visibility:hidden}
-.stb-cat-acts .fw-btn{width:24px;height:24px;padding:0}
-.stb-cat-acts .fw-ic{width:14px;height:14px}
-.stb-cat-edit{display:flex;gap:4px;padding:2px 0}
-.stb-cat-edit .fw-input{height:28px}
-.stb-cats-err{margin:4px 8px;color:var(--fw-err);font-size:var(--fw-fs,.75rem)}
-.stb-grid{grid-area:grid;position:relative;min-height:0;overflow-y:auto;overflow-x:hidden;background:var(--fw-s0)}
-.stb-grid:focus-visible{outline:2px solid var(--fw-accent-ring);outline-offset:-2px}
-.stb-space{position:relative;width:100%}
-.stb-row{position:absolute;left:0;right:0;display:grid;gap:12px;padding:0 16px}
-.stb-tile{display:flex;flex-direction:column;gap:6px;min-width:0;padding:0;border:0;background:transparent;color:var(--fw-t3);font:inherit;text-align:left;cursor:pointer}
-.stb-img{position:relative;width:100%;aspect-ratio:1/1;border-radius:0;overflow:hidden;background:var(--fw-s2);box-shadow:0 0 0 1px var(--fw-line)}
-.stb-img img{display:block;width:100%;height:100%;object-fit:cover}
-.stb-img.is-none{background:linear-gradient(135deg,var(--fw-s2),var(--fw-s3))}
-.stb-tile:hover .stb-img{box-shadow:0 0 0 1px var(--fw-line-2)}
-.stb-tile[aria-selected=true] .stb-img{box-shadow:0 0 0 2px var(--fw-pick)}
-.stb-tile:focus-visible{outline:none}.stb-tile:focus-visible .stb-img{box-shadow:0 0 0 2px var(--fw-accent-ring)}
-.stb-tile-t{min-width:0;height:32px;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:var(--fw-fs,.75rem);line-height:16px}
-.stb-tile[aria-selected=true] .stb-tile-t{color:var(--fw-t1)}
-.stb-on{position:absolute;top:6px;right:6px;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--fw-accent);color:var(--fw-on-accent)}
-.stb-on .fw-ic{width:12px;height:12px}
-.stb-cell{position:relative;min-width:0}
-.stb-cell > .stb-tile{width:100%}
-.stb-fav{position:absolute;top:4px;left:4px;display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:2px;background:rgb(0 0 0 / .55);color:#f2f3f5;cursor:pointer;opacity:0;transition:opacity .12s}
-.stb-fav .fw-ic{width:14px;height:14px}
-.stb-cell:hover .stb-fav,.stb-fav:focus-visible,.stb-fav[aria-pressed=true]{opacity:1}
-.stb-fav[aria-pressed=true]{color:#f2c94c}
-.stb-fav[aria-pressed=true] .fw-ic{fill:currentColor}
-.stb-fav:hover{background:rgb(0 0 0 / .75)}
-.stb-cat-ic{flex:none;width:14px;height:14px;color:var(--fw-t3)}
-.stb-wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--fw-t3)}
-.stb-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--fw-t3)}
-.stb-detail{grid-area:detail;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--fw-line);background:var(--fw-s1)}
-.stb-detail-b{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:16px 16px 24px}
-.stb-detail-b .stb-img{flex:none;border-radius:0}
-.stb-cats-none{margin:2px 8px;color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
-.stb-detail-t{margin:0;color:var(--fw-t1);font-size:var(--fw-fs-title,.875rem);font-weight:600;line-height:1.3}
-.stb-kw{display:flex;flex-wrap:wrap;gap:4px}
-.stb-kw span{padding:1px 8px;border-radius:2px;background:var(--fw-s3);color:var(--fw-t3);font-size:var(--fw-fs,.75rem);line-height:20px}
-.stb-lbl{color:var(--fw-t3);font-size:var(--fw-fs-meta,.6875rem);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
-.stb-text{margin:0;display:grid;gap:6px;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);line-height:1.5;user-select:text}
-.stb-text b{color:var(--fw-t1);font-weight:600}
-.stb-incat{display:flex;flex-wrap:wrap;gap:4px}
-.stb-incat .fw-btn{height:26px;padding:0 10px;border-color:var(--fw-line-2)}
-.stb-incat .fw-btn[aria-pressed=true]{background:var(--fw-sel-bg);box-shadow:var(--fw-sel-shadow);color:var(--fw-t1)}
-.stb-incat .fw-ic{width:14px;height:14px}
-.stb-detail-f{flex:none;display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--fw-line)}
-.stb-detail-f .fw-btn-primary{flex:1 1 auto}
-.stb-err{color:var(--fw-err);font-size:var(--fw-fs,.75rem)}
-.fim-style-none{color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
-`;
-
 // desktop/film-suite/src/image/loras/lora-browser.js
-import { GlyphSpinner as GlyphSpinner13, cn as cn28 } from "@hermes/plugin-sdk";
-import { jsx as jsx78, jsxs as jsxs65 } from "react/jsx-runtime";
+import { GlyphSpinner as GlyphSpinner14, cn as cn28 } from "@hermes/plugin-sdk";
+import { jsx as jsx80, jsxs as jsxs67 } from "react/jsx-runtime";
 var ALL2 = "";
 var NO_BASE = "\0none";
 var catalogTrigger = (option) => String(option && option.text || "").trim().replace(/[,\s]+$/, "");
@@ -86358,13 +91582,13 @@ function LoraThumb({ row: row2, large = false }) {
     if (row2 && row2.has_preview && large) void requestLoraThumbs([row2.name]);
   }, [row2 && row2.name]);
   const show2 = src && !broken;
-  return jsx78("div", { className: cn28("stb-img", !show2 && "is-none"), "data-thumb": show2 ? "image" : "none", children: show2 ? jsx78("img", { src, alt: row2.label || "", draggable: false, loading: "lazy", decoding: "async", onError: () => setBroken(true) }) : jsx78("span", { className: "lrb-initials", "aria-hidden": "true", children: String(row2 ? row2.label : "?").split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() }) });
+  return jsx80("div", { className: cn28("stb-img", !show2 && "is-none"), "data-thumb": show2 ? "image" : "none", children: show2 ? jsx80("img", { src, alt: row2.label || "", draggable: false, loading: "lazy", decoding: "async", onError: () => setBroken(true) }) : jsx80("span", { className: "lrb-initials", "aria-hidden": "true", children: String(row2 ? row2.label : "?").split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() }) });
 }
 function TriggerChips({ words: words2, typed, onInsert, testid = "fim-lora-trigger" }) {
   if (!words2.length) return null;
-  return jsx78("div", { className: "fw-lora-trigs", children: words2.map((word) => {
+  return jsx80("div", { className: "fw-lora-trigs", children: words2.map((word) => {
     const has3 = typed.includes(word);
-    return jsxs65("button", {
+    return jsxs67("button", {
       type: "button",
       className: "fw-trig",
       "data-testid": testid,
@@ -86372,7 +91596,7 @@ function TriggerChips({ words: words2, typed, onInsert, testid = "fim-lora-trigg
       "aria-pressed": has3,
       title: has3 ? "In the prompt" : "Add to the prompt",
       onClick: () => onInsert(word),
-      children: [jsx78(FwIcon, { name: has3 ? "check" : "plus" }, "i"), jsx78("span", { className: "fw-trig-t", children: word }, "t")]
+      children: [jsx80(FwIcon, { name: has3 ? "check" : "plus" }, "i"), jsx80("span", { className: "fw-trig-t", children: word }, "t")]
     }, word);
   }) });
 }
@@ -86425,39 +91649,39 @@ function LoraDetail({ row: row2, added, full, onAdd, onRemove, typed, onInsert, 
       live2 = false;
     };
   }, [name2]);
-  if (!row2) return jsx78("aside", { className: "stb-detail is-empty", "aria-label": "LoRA", "data-testid": "lrb-detail" });
+  if (!row2) return jsx80("aside", { className: "stb-detail is-empty", "aria-label": "LoRA", "data-testid": "lrb-detail" });
   const ready = info && info.name === name2;
   const shown = ready ? { ...row2, ...info } : row2;
   const installed2 = row2.installed !== false;
-  return jsxs65("aside", { className: "stb-detail", "aria-label": "LoRA", "data-testid": "lrb-detail", "data-name": name2, children: [
-    jsxs65("div", { className: "stb-detail-b", children: [
-      jsx78(LoraThumb, { row: { ...row2, has_preview: row2.has_preview || Boolean(ready && info.thumb) }, large: true }, "img"),
-      jsx78("h3", { className: "stb-detail-t", "data-testid": "lrb-detail-title", children: shown.label }, "t"),
-      jsxs65("div", { className: "lrb-facts", children: [
-        shown.base_model ? jsx78("span", { className: "lrb-base", "data-testid": "lrb-detail-base", title: "Base model", children: shown.base_model }, "b") : null,
-        jsx78("span", { className: "lrb-file", title: name2, children: name2 }, "f")
+  return jsxs67("aside", { className: "stb-detail", "aria-label": "LoRA", "data-testid": "lrb-detail", "data-name": name2, children: [
+    jsxs67("div", { className: "stb-detail-b", children: [
+      jsx80(LoraThumb, { row: { ...row2, has_preview: row2.has_preview || Boolean(ready && info.thumb) }, large: true }, "img"),
+      jsx80("h3", { className: "stb-detail-t", "data-testid": "lrb-detail-title", children: shown.label }, "t"),
+      jsxs67("div", { className: "lrb-facts", children: [
+        shown.base_model ? jsx80("span", { className: "lrb-base", "data-testid": "lrb-detail-base", title: "Base model", children: shown.base_model }, "b") : null,
+        jsx80("span", { className: "lrb-file", title: name2, children: name2 }, "f")
       ] }, "facts"),
-      shown.triggers && shown.triggers.length ? [jsx78("span", { className: "stb-lbl", children: "Trigger words" }, "tl"), jsx78(TriggerChips, { words: shown.triggers, typed, onInsert, testid: "lrb-trigger" }, "tw")] : ready && shown.tags && shown.tags.length ? [jsx78("span", { className: "stb-lbl", children: "Training tags" }, "gl"), jsx78("div", { className: "stb-kw", "data-testid": "lrb-tags", children: shown.tags.map((t2) => jsx78("span", { children: t2 }, t2)) }, "gt")] : null,
-      ready && info.examples.length ? [jsx78("span", { className: "stb-lbl", children: "Examples" }, "el"), jsx78("div", { className: "lrb-examples", "data-testid": "lrb-examples", children: info.examples.map((ex, i2) => jsxs65("figure", { className: "lrb-ex", title: ex.prompt || void 0, children: [
-        jsx78("img", { src: ex.src, alt: ex.prompt ? ex.prompt.slice(0, 120) : `Example ${i2 + 1}`, draggable: false }, "i"),
-        ex.prompt ? jsx78("figcaption", { "data-testid": "lrb-example-prompt", children: ex.prompt }, "c") : null
+      shown.triggers && shown.triggers.length ? [jsx80("span", { className: "stb-lbl", children: "Trigger words" }, "tl"), jsx80(TriggerChips, { words: shown.triggers, typed, onInsert, testid: "lrb-trigger" }, "tw")] : ready && shown.tags && shown.tags.length ? [jsx80("span", { className: "stb-lbl", children: "Training tags" }, "gl"), jsx80("div", { className: "stb-kw", "data-testid": "lrb-tags", children: shown.tags.map((t2) => jsx80("span", { children: t2 }, t2)) }, "gt")] : null,
+      ready && info.examples.length ? [jsx80("span", { className: "stb-lbl", children: "Examples" }, "el"), jsx80("div", { className: "lrb-examples", "data-testid": "lrb-examples", children: info.examples.map((ex, i2) => jsxs67("figure", { className: "lrb-ex", title: ex.prompt || void 0, children: [
+        jsx80("img", { src: ex.src, alt: ex.prompt ? ex.prompt.slice(0, 120) : `Example ${i2 + 1}`, draggable: false }, "i"),
+        ex.prompt ? jsx80("figcaption", { "data-testid": "lrb-example-prompt", children: ex.prompt }, "c") : null
       ] }, i2)) }, "ex")] : null,
-      ready && info.description ? [jsx78("span", { className: "stb-lbl", children: "About" }, "dl"), jsx78("p", { className: "lrb-about", "data-testid": "lrb-about", children: info.description }, "d")] : null,
-      !installed2 ? jsx78("p", { className: "lrb-note", children: "Not installed" }, "ni") : null,
-      error ? jsx78("p", { className: "stb-err", role: "alert", children: error }, "e") : null,
-      installed2 && row2.installed !== null && !ready && !error ? jsx78("div", { className: "stb-wait", style: { position: "static" }, children: jsx78(GlyphSpinner13, { ariaLabel: "Loading LoRA" }) }, "w") : null,
-      installed2 && row2.installed !== null ? jsxs65("div", { className: "lrb-civ", children: [
-        jsx78(FwButton, { variant: "secondary", icon: "cloud", "data-testid": "lrb-fetch", disabled: fetching || !ready, title: "Look this file up on Civitai", onClick: () => void fetchInfo(name2), children: fetching ? "Fetching…" : ready && info.civitai === "found" ? "Refresh info" : "Fetch info" }, "f"),
-        ready && info.link ? jsx78("a", { className: "fw-link", "data-testid": "lrb-link", href: info.link, rel: "noreferrer noopener", onClick: (event) => {
+      ready && info.description ? [jsx80("span", { className: "stb-lbl", children: "About" }, "dl"), jsx80("p", { className: "lrb-about", "data-testid": "lrb-about", children: info.description }, "d")] : null,
+      !installed2 ? jsx80("p", { className: "lrb-note", children: "Not installed" }, "ni") : null,
+      error ? jsx80("p", { className: "stb-err", role: "alert", children: error }, "e") : null,
+      installed2 && row2.installed !== null && !ready && !error ? jsx80("div", { className: "stb-wait", style: { position: "static" }, children: jsx80(GlyphSpinner14, { ariaLabel: "Loading LoRA" }) }, "w") : null,
+      installed2 && row2.installed !== null ? jsxs67("div", { className: "lrb-civ", children: [
+        jsx80(FwButton, { variant: "secondary", icon: "cloud", "data-testid": "lrb-fetch", disabled: fetching || !ready, title: "Look this file up on Civitai", onClick: () => void fetchInfo(name2), children: fetching ? "Fetching…" : ready && info.civitai === "found" ? "Refresh info" : "Fetch info" }, "f"),
+        ready && info.link ? jsx80("a", { className: "fw-link", "data-testid": "lrb-link", href: info.link, rel: "noreferrer noopener", onClick: (event) => {
           event.preventDefault();
           if (os && os.openExternal) void os.openExternal(info.link);
         }, children: "Civitai page" }, "l") : null,
-        fetchNote ? jsx78("span", { className: "lrb-note", "data-testid": "lrb-fetch-note", role: "status", children: fetchNote }, "n") : null
+        fetchNote ? jsx80("span", { className: "lrb-note", "data-testid": "lrb-fetch-note", role: "status", children: fetchNote }, "n") : null
       ] }, "civ") : null
     ] }, "b"),
-    jsxs65("div", { className: "stb-detail-f", children: [
-      added ? jsx78(FwButton, { variant: "secondary", icon: "x", "data-testid": "lrb-remove", onClick: () => onRemove(row2), children: "Remove" }, "r") : null,
-      jsx78(FwButton, { variant: "primary", "data-testid": "lrb-add", disabled: added || !installed2 || full, title: added ? "Added" : !installed2 ? "Not installed" : full ? `Up to ${LORA_MAX} LoRAs` : "Add this LoRA", onClick: () => onAdd(row2), children: added ? "Added" : "Add LoRA" }, "a")
+    jsxs67("div", { className: "stb-detail-f", children: [
+      added ? jsx80(FwButton, { variant: "secondary", icon: "x", "data-testid": "lrb-remove", onClick: () => onRemove(row2), children: "Remove" }, "r") : null,
+      jsx80(FwButton, { variant: "primary", "data-testid": "lrb-add", disabled: added || !installed2 || full, title: added ? "Added" : !installed2 ? "Not installed" : full ? `Up to ${LORA_MAX} LoRAs` : "Add this LoRA", onClick: () => onAdd(row2), children: added ? "Added" : "Add LoRA" }, "a")
     ] }, "f")
   ] });
 }
@@ -86508,8 +91732,8 @@ function LoraBrowser({ lib, catalogOptions, addedKeys, onAdd, onRemove, onClose,
   };
   const move2 = (delta) => {
     if (!items.length) return;
-    const at = items.findIndex((row2) => row2.name === selected);
-    const next = items[at < 0 ? 0 : Math.max(0, Math.min(items.length - 1, at + delta))];
+    const at2 = items.findIndex((row2) => row2.name === selected);
+    const next = items[at2 < 0 ? 0 : Math.max(0, Math.min(items.length - 1, at2 + delta))];
     setSelected(next.name);
     const el = gridRef.current && gridRef.current.querySelector(`[data-name="${CSS.escape(next.name)}"]`);
     if (el) el.scrollIntoView({ block: "nearest" });
@@ -86520,9 +91744,9 @@ function LoraBrowser({ lib, catalogOptions, addedKeys, onAdd, onRemove, onClose,
     return first ? Math.max(1, Math.round(g.clientWidth / (first.getBoundingClientRect().width + 12))) : 1;
   };
   const countText = lib.state === "loading" ? "" : base2 !== ALL2 || words2.length ? `${items.length} of ${rows.length}` : `${rows.length} LoRAs`;
-  return jsxs65("div", { className: "stb-layer", children: [
-    jsx78("div", { className: "stb-scrim", "aria-hidden": "true", onClick: onClose }, "scrim"),
-    jsxs65("div", {
+  return jsxs67("div", { className: "stb-layer", children: [
+    jsx80("div", { className: "stb-scrim", "aria-hidden": "true", onClick: onClose }, "scrim"),
+    jsxs67("div", {
       className: "stb lrb",
       role: "dialog",
       "aria-modal": "true",
@@ -86536,11 +91760,11 @@ function LoraBrowser({ lib, catalogOptions, addedKeys, onAdd, onRemove, onClose,
         }
       },
       children: [
-        jsxs65("header", { className: "stb-head", children: [
-          jsx78("span", { className: "stb-title", children: "LoRAs" }, "t"),
-          jsxs65("label", { className: "stb-q", children: [
-            jsx78(FwIcon, { name: "search" }, "i"),
-            jsx78("input", {
+        jsxs67("header", { className: "stb-head", children: [
+          jsx80("span", { className: "stb-title", children: "LoRAs" }, "t"),
+          jsxs67("label", { className: "stb-q", children: [
+            jsx80(FwIcon, { name: "search" }, "i"),
+            jsx80("input", {
               ref: inputRef,
               className: "fw-input",
               type: "search",
@@ -86560,25 +91784,25 @@ function LoraBrowser({ lib, catalogOptions, addedKeys, onAdd, onRemove, onClose,
               }
             }, "q")
           ] }, "q"),
-          lib.state === "loading" || lib.refreshing ? jsx78(GlyphSpinner13, { ariaLabel: "Loading LoRAs" }, "spin") : null,
-          jsx78("span", { className: "stb-count", "data-testid": "lrb-count", children: countText }, "n"),
-          lib.state === "unreachable" ? jsx78("span", { className: "lrb-note", "data-testid": "lrb-offline", title: "The image engine did not answer; catalog LoRAs only", children: "Engine offline" }, "off") : null,
-          jsx78("span", { className: "fw-grow" }, "g"),
-          jsx78(FwButton, { variant: "ghost", icon: "restore", "aria-label": "Reload LoRAs", title: "Read the LoRA folder again", "data-testid": "lrb-reload", disabled: lib.refreshing, onClick: () => void lib.reload() }, "r"),
-          jsx78(FwButton, { variant: "ghost", icon: "x", "aria-label": "Close LoRAs", title: "Close (Esc)", "data-testid": "lrb-close", onClick: onClose }, "x")
+          lib.state === "loading" || lib.refreshing ? jsx80(GlyphSpinner14, { ariaLabel: "Loading LoRAs" }, "spin") : null,
+          jsx80("span", { className: "stb-count", "data-testid": "lrb-count", children: countText }, "n"),
+          lib.state === "unreachable" ? jsx80("span", { className: "lrb-note", "data-testid": "lrb-offline", title: "The image engine did not answer; catalog LoRAs only", children: "Engine offline" }, "off") : null,
+          jsx80("span", { className: "fw-grow" }, "g"),
+          jsx80(FwButton, { variant: "ghost", icon: "restore", "aria-label": "Reload LoRAs", title: "Read the LoRA folder again", "data-testid": "lrb-reload", disabled: lib.refreshing, onClick: () => void lib.reload() }, "r"),
+          jsx80(FwButton, { variant: "ghost", icon: "x", "aria-label": "Close LoRAs", title: "Close (Esc)", "data-testid": "lrb-close", onClick: onClose }, "x")
         ] }, "head"),
-        jsxs65("nav", { className: "stb-cats", "aria-label": "Base models", "data-testid": "lrb-bases", children: [
-          jsx78("div", { className: "stb-cat", "aria-current": base2 === ALL2, children: jsxs65("button", { type: "button", className: "stb-cat-pick", "data-testid": "lrb-base-all", onClick: () => setBase(ALL2), children: [
-            jsx78("span", { className: "stb-cat-name", children: "All LoRAs" }, "n"),
-            jsx78("span", { className: "stb-cat-n", children: rows.length || "" }, "c")
+        jsxs67("nav", { className: "stb-cats", "aria-label": "Base models", "data-testid": "lrb-bases", children: [
+          jsx80("div", { className: "stb-cat", "aria-current": base2 === ALL2, children: jsxs67("button", { type: "button", className: "stb-cat-pick", "data-testid": "lrb-base-all", onClick: () => setBase(ALL2), children: [
+            jsx80("span", { className: "stb-cat-name", children: "All LoRAs" }, "n"),
+            jsx80("span", { className: "stb-cat-n", children: rows.length || "" }, "c")
           ] }) }, "all"),
-          jsx78("div", { className: "stb-cats-h", children: jsx78("span", { className: "fw-grow", children: "Base model" }) }, "h"),
-          ...bases.map(([k, n]) => jsx78("div", { className: "stb-cat", "aria-current": base2 === k, children: jsxs65("button", { type: "button", className: "stb-cat-pick", "data-testid": "lrb-base", "data-base": k === NO_BASE ? "" : k, title: k === NO_BASE ? "Unknown" : k, onClick: () => setBase(k), children: [
-            jsx78("span", { className: "stb-cat-name", children: k === NO_BASE ? "Unknown" : k }, "n"),
-            jsx78("span", { className: "stb-cat-n", children: n }, "c")
+          jsx80("div", { className: "stb-cats-h", children: jsx80("span", { className: "fw-grow", children: "Base model" }) }, "h"),
+          ...bases.map(([k, n]) => jsx80("div", { className: "stb-cat", "aria-current": base2 === k, children: jsxs67("button", { type: "button", className: "stb-cat-pick", "data-testid": "lrb-base", "data-base": k === NO_BASE ? "" : k, title: k === NO_BASE ? "Unknown" : k, onClick: () => setBase(k), children: [
+            jsx80("span", { className: "stb-cat-name", children: k === NO_BASE ? "Unknown" : k }, "n"),
+            jsx80("span", { className: "stb-cat-n", children: n }, "c")
           ] }) }, k))
         ] }, "bases"),
-        jsxs65("div", {
+        jsxs67("div", {
           ref: gridRef,
           className: "stb-grid lrb-grid",
           role: "listbox",
@@ -86604,9 +91828,9 @@ function LoraBrowser({ lib, catalogOptions, addedKeys, onAdd, onRemove, onClose,
             }
           },
           children: [
-            jsx78("div", { className: "lrb-tiles", children: items.map((row2) => {
+            jsx80("div", { className: "lrb-tiles", children: items.map((row2) => {
               const on = addedKeys.includes(row2.keyId);
-              return jsxs65("button", {
+              return jsxs67("button", {
                 type: "button",
                 className: cn28("stb-tile", row2.installed === false && "is-missing"),
                 role: "option",
@@ -86618,19 +91842,19 @@ function LoraBrowser({ lib, catalogOptions, addedKeys, onAdd, onRemove, onClose,
                 onClick: () => setSelected(row2.name),
                 onDoubleClick: () => add(row2),
                 children: [
-                  jsxs65("div", { style: { position: "relative" }, children: [
-                    jsx78(LoraThumb, { row: row2 }, "i"),
-                    on ? jsx78("span", { className: "stb-on", title: "Added", children: jsx78(FwIcon, { name: "check" }) }, "on") : null,
-                    row2.base_model ? jsx78("span", { className: "lrb-tile-base", children: row2.base_model }, "b") : null
+                  jsxs67("div", { style: { position: "relative" }, children: [
+                    jsx80(LoraThumb, { row: row2 }, "i"),
+                    on ? jsx80("span", { className: "stb-on", title: "Added", children: jsx80(FwIcon, { name: "check" }) }, "on") : null,
+                    row2.base_model ? jsx80("span", { className: "lrb-tile-base", children: row2.base_model }, "b") : null
                   ] }, "f"),
-                  jsx78("span", { className: "stb-tile-t", children: row2.label }, "t")
+                  jsx80("span", { className: "stb-tile-t", children: row2.label }, "t")
                 ]
               }, row2.name);
             }) }, "tiles"),
-            lib.state === "loading" && !rows.length ? jsx78("div", { className: "stb-wait", children: jsx78(GlyphSpinner13, { ariaLabel: "Loading LoRAs" }) }, "w") : !items.length ? jsx78("div", { className: "stb-empty", "data-testid": "lrb-empty", children: "No LoRA matches" }, "e") : null
+            lib.state === "loading" && !rows.length ? jsx80("div", { className: "stb-wait", children: jsx80(GlyphSpinner14, { ariaLabel: "Loading LoRAs" }) }, "w") : !items.length ? jsx80("div", { className: "stb-empty", "data-testid": "lrb-empty", children: "No LoRA matches" }, "e") : null
           ]
         }, "grid"),
-        jsx78(LoraDetail, { row: current2, added: current2 ? addedKeys.includes(current2.keyId) : false, full, onAdd: add, onRemove, typed, onInsert, onInfo: lib.patchRow }, "detail")
+        jsx80(LoraDetail, { row: current2, added: current2 ? addedKeys.includes(current2.keyId) : false, full, onAdd: add, onRemove, typed, onInsert, onInfo: lib.patchRow }, "detail")
       ]
     }, "dlg")
   ] });
@@ -86642,8 +91866,8 @@ function LoraRows({ picked, off, strengths, setStrength, toggle, remove: remove2
     const names = picked.map((o) => o.file).filter((name2) => byName[name2] && byName[name2].has_preview);
     if (names.length) void requestLoraThumbs(names);
   }, [picked.map((o) => o.file).join("|"), rows.length]);
-  if (!picked.length) return jsx78("span", { className: "fim-style-none", "data-testid": "fim-lora-none", children: "None" });
-  return jsx78(FwSortableList, {
+  if (!picked.length) return jsx80("span", { className: "fim-style-none", "data-testid": "fim-lora-none", children: "None" });
+  return jsx80(FwSortableList, {
     items: picked.map((option) => ({ id: option.key, option })),
     noun: "LoRA",
     testid: "fim-lora-list",
@@ -86656,12 +91880,12 @@ function LoraRows({ picked, off, strengths, setStrength, toggle, remove: remove2
       const libWords = byName[option.file] ? row2.triggers || [] : option.triggers || [];
       const words2 = [...own2 ? [own2] : [], ...libWords.filter((w) => !own2.includes(w))].slice(0, 8);
       const value = strengths[option.key] ?? option.strength;
-      return jsx78(FwPickRow, {
+      return jsx80(FwPickRow, {
         handle,
         on: !isOff,
         onToggle: () => toggle(option.key),
         toggleLabel: `Use ${option.label}`,
-        pic: jsx78(LoraThumb, { row: { ...row2, label: option.label } }),
+        pic: jsx80(LoraThumb, { row: { ...row2, label: option.label } }),
         name: option.label,
         nameTitle: option.file,
         sub: row2.base_model || "",
@@ -86670,12 +91894,12 @@ function LoraRows({ picked, off, strengths, setStrength, toggle, remove: remove2
         ids: { row: "fim-lora-row", on: "fim-lora-on", name: "fim-lora-name", remove: "fim-lora-remove" },
         rowProps: { "data-file": option.file, title: rawTitle(option) },
         children: [
-          jsxs65("div", { className: "fim-lr-str", children: [
-            jsx78(FwSlider, { label: `${option.label} strength`, min: 0, max: 2, step: 0.05, value, onChange: (n) => setStrength(option.key, n) }, "r"),
-            jsx78(FwNumber, { label: `${option.label} strength number`, value, min: 0, max: 2, step: 0.05, onCommit: (n) => setStrength(option.key, n) }, "n2")
+          jsxs67("div", { className: "fim-lr-str", children: [
+            jsx80(FwSlider, { label: `${option.label} strength`, min: 0, max: 2, step: 0.05, value, onChange: (n) => setStrength(option.key, n) }, "r"),
+            jsx80(FwNumber, { label: `${option.label} strength number`, value, min: 0, max: 2, step: 0.05, onCommit: (n) => setStrength(option.key, n) }, "n2")
           ] }, "str"),
           // WP5 P3: trigger words are offered, never added silently.
-          jsx78(TriggerChips, { words: words2, typed, onInsert }, "trig")
+          jsx80(TriggerChips, { words: words2, typed, onInsert }, "trig")
         ]
       });
     }
@@ -86719,285 +91943,6 @@ function useLoraTriggerText({ w, loraLib, typed, blocks }) {
     else if (put.length) blocks.insertTriggers(put);
   }, [activeLoraKey]);
 }
-
-// desktop/film-suite/src/image/loras/lora-browser-css.js
-var LORA_BROWSER_CSS = `
-.lrb-grid{padding:16px}
-.lrb-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px}
-.lrb .stb-tile.is-missing .stb-img{opacity:.45}
-.lrb .stb-tile.is-missing .stb-tile-t{color:var(--fw-t3)}
-.lrb-initials{position:absolute;inset:0;display:grid;place-items:center;color:var(--fw-t3);font-size:20px;font-weight:600;letter-spacing:.04em}
-.lrb-tile-base{position:absolute;left:6px;bottom:6px;max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 6px;border-radius:2px;background:rgb(0 0 0 / .72);color:#f2f3f5;font-size:var(--fw-fs,.75rem);line-height:20px}
-.lrb-facts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
-.lrb-base{flex:none;padding:0 8px;border-radius:2px;background:var(--fw-sel-bg);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:20px}
-.lrb-file{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
-.lrb-examples{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.lrb-ex{margin:0;display:flex;flex-direction:column;gap:4px;min-width:0}
-.lrb-ex img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:0;background:var(--fw-s2);box-shadow:0 0 0 1px var(--fw-line)}
-.lrb-ex figcaption{overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);line-height:17px;user-select:text}
-.lrb-about{flex:none;margin:0;white-space:pre-line;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);line-height:1.5;user-select:text;max-height:220px;overflow-y:auto}
-.lrb-civ{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
-.lrb-note{color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
-.lrb .fw-lora-trigs{display:flex;flex-wrap:wrap;gap:4px}
-.fw .fw-pick-pic .lrb-initials{font-size:var(--fw-fs,.75rem)}
-.fw .fim-lr-str{display:grid;grid-template-columns:minmax(40px,1fr) 96px;align-items:center;gap:8px}
-.fw .fw-insp-b{scroll-padding-bottom:28px}
-.fw .fw-sec.fim-lora:not(.is-collapsed){margin-bottom:16px}
-.fw .fim-model-more-b{display:flex;flex-direction:column;align-items:stretch;gap:4px}
-.fw .fim-model-more-b .fim-model-copy{align-self:flex-start;border:1px solid var(--fw-line-2)}
-.fw .fim-ref.is-add{position:relative}
-.fw .fim-ref.is-add .fim-ref-pic{cursor:pointer}
-.fw .fim-ref.is-add:hover .fim-ref-pic{border-color:var(--fw-t3);color:var(--fw-t1)}
-.fw .fim-ref.is-add .fw-select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
-.fw .fim-ref.is-add .fw-select:disabled{cursor:not-allowed}
-.fw .fim-ref.is-add:focus-within .fim-ref-pic{box-shadow:0 0 0 2px var(--fw-accent-ring)}
-`;
-
-// desktop/film-suite/src/image/module/parts/grading-css.js
-var GRADING_CSS = `
-/* Light > Auto ("Tone  Auto"): the button ends where the slider tracks end (the reset column follows). */
-.fw-autorow{display:grid;grid-template-columns:minmax(0,1fr) auto 22px;align-items:center;column-gap:2px;min-width:0}
-.fw-autorow>.fw-dev-auto{min-width:56px}
-.fw-grade>.fw-dev-wheel{width:min(100%,280px)}
-/* Region and view tabs share the spare width evenly (flex); a small own padding keeps the names of
-   the Color Mixer views inside a 220 px panel, so its rows stay on the panel's gutter. */
-.fw .fw-seg.fw-grade-tabs>button{padding:0 2px}
-.fw-grade.is-3way{row-gap:8px}
-.fw-grade-dot{display:block;width:12px;height:12px;border-radius:50%;border:1px solid #c4c4ca;box-sizing:border-box}
-.fw-grade-dot.is-shadows{background:#000}
-.fw-grade-dot.is-midtones{background:#8c8c92}
-.fw-grade-dot.is-highlights{background:#ececf0}
-.fw-grade-dot.is-global{background:linear-gradient(90deg,#0c0c0e 50%,#ececf0 50%)}
-.fw .fw-seg.fw-grade-tabs button[data-changed=false]:not([aria-pressed=true])>.fw-grade-dot{opacity:.55}
-.fw-grade3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:16px;justify-self:stretch;min-width:0}
-.fw-grade3-col{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:0}
-.fw-grade3-head{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:2px;height:24px;min-width:0}
-.fw-grade3-head>.fw-btn{grid-column:3;justify-self:start}
-.fw-grade3-head>.fw-lbl{grid-column:2;min-width:0;overflow:hidden;text-overflow:ellipsis;line-height:18px;color:var(--fw-t3);cursor:default}
-.fw-grade3-col.is-changed .fw-grade3-head>.fw-lbl{color:var(--fw-t1)}
-.fw-grade3-head>.fw-btn{flex:none;width:22px;height:24px;min-width:0;padding:0;color:color-mix(in srgb,#f4f4f6 42%,transparent)}
-.fw-grade3-head>.fw-btn:hover{color:var(--fw-t1)}
-.fw-grade3-head>.fw-btn>.fw-ic{width:12px;height:12px}
-.fw-grade3-head>.fw-btn.is-off{visibility:hidden}
-.fw-grade3-col>.fw-dev-wheel{width:100%;margin-bottom:4px}
-.fw-grade3-lum{display:flex;align-items:center;height:24px;min-width:0}
-.fw-grade3-col>.fw-num{align-self:center;width:56px;height:22px;border-color:transparent;background:transparent;box-shadow:none}
-.fw-grade3-col>.fw-num input{text-align:center;padding:0 2px}
-.fw-grade3-col>.fw-num:hover,.fw-grade3-col>.fw-num:focus-within{border-color:var(--fw-line-2);background:var(--fw-s0)}
-`;
-
-// desktop/film-suite/src/image/panel/panel-css.js
-var PANEL_CSS = `
-.fw-sec-meta{flex:none;font-variant-numeric:tabular-nums}
-`;
-
-// desktop/film-suite/src/image/panel/generation-panel.js
-import { jsx as jsx79, jsxs as jsxs66 } from "react/jsx-runtime";
-var SEED_MODES = [["fixed", "lock", "Fixed"], ["increment", "seed-inc", "Increment"], ["decrement", "seed-dec", "Decrement"], ["random", "shuffle", "Random"]];
-var SEED_MODE_TITLE = { fixed: "Fixed: every run uses this seed", increment: "Increment: +1 per picture after each run", decrement: "Decrement: −1 per picture after each run", random: "Random each run" };
-function ScrubLabel({ text: text2, value, step: step2, min, max, integer, onChange, onReset, forId, second = false }) {
-  const drag = useRef(null);
-  const clamp8 = (n) => {
-    const v = Math.min(max, Math.max(min, Number(n.toFixed(4))));
-    return integer ? Math.round(v) : v;
-  };
-  return jsx79("span", {
-    className: second ? "fw-lbl fw-lbl2 fw-scrub" : "fw-lbl fw-scrub",
-    "data-scrub": forId,
-    title: `${text2} · Reset (double-click)`,
-    onPointerDown: (event) => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-      if (event.currentTarget.setPointerCapture) event.currentTarget.setPointerCapture(event.pointerId);
-      drag.current = { x: event.clientX, v: Number(value) || 0 };
-    },
-    onPointerMove: (event) => {
-      const d = drag.current;
-      if (!d) return;
-      const px = event.clientX - d.x;
-      const n = clamp8(d.v + Math.trunc(px / 4) * step2 * (event.shiftKey ? 10 : 1));
-      if (n !== value) onChange(n);
-    },
-    onPointerUp: () => {
-      drag.current = null;
-    },
-    onPointerCancel: () => {
-      drag.current = null;
-    },
-    onDoubleClick: onReset,
-    children: text2
-  });
-}
-function SeedModeMenu({ mode, onPick }) {
-  const [open, setOpen] = useState(false);
-  const [at, setAt] = useState(null);
-  const btnRef = useRef(null), listRef = useRef(null);
-  const cur = SEED_MODES.find((m) => m[0] === mode) || SEED_MODES[3];
-  const show2 = () => {
-    const r = btnRef.current.getBoundingClientRect();
-    setAt({ right: Math.round(window.innerWidth - r.right), top: Math.round(r.bottom + 4) });
-    setOpen(true);
-  };
-  useLayoutEffect(() => {
-    if (open && listRef.current) {
-      const on = listRef.current.querySelector('[aria-checked="true"]');
-      if (on) on.focus({ preventScroll: true });
-    }
-  }, [open]);
-  useEffect(() => {
-    if (!open) return void 0;
-    const away = (event) => {
-      if (!listRef.current || listRef.current.contains(event.target) || btnRef.current.contains(event.target)) return;
-      setOpen(false);
-    };
-    document.addEventListener("pointerdown", away, true);
-    return () => document.removeEventListener("pointerdown", away, true);
-  }, [open]);
-  const pick = (id) => {
-    onPick(id);
-    setOpen(false);
-    if (btnRef.current) btnRef.current.focus({ preventScroll: true });
-  };
-  return [
-    jsxs66("button", {
-      ref: btnRef,
-      type: "button",
-      className: "fw-btn fw-btn-secondary fw-seed-mm",
-      "data-testid": "fw-seed-mode",
-      "data-mode": cur[0],
-      "aria-haspopup": "menu",
-      "aria-expanded": open,
-      "aria-label": `Seed after each run: ${cur[2]}`,
-      title: SEED_MODE_TITLE[cur[0]],
-      onClick: () => open ? setOpen(false) : show2(),
-      onDoubleClick: () => pick(IMAGE_SEED_DEFAULT.mode),
-      children: [jsx79(FwIcon, { name: cur[1] }, "i"), jsx79(FwIcon, { name: "chev", className: "fw-seed-mm-chev" }, "c")]
-    }, "mm"),
-    open ? jsx79("div", {
-      ref: listRef,
-      className: "fw-menu fw-seed-menu",
-      role: "menu",
-      "aria-label": "Seed after each run",
-      "data-testid": "fw-seed-menu",
-      style: { position: "fixed", right: at.right + "px", top: at.top + "px" },
-      onKeyDown: (event) => {
-        const items = [...listRef.current.querySelectorAll("button")], i2 = items.indexOf(document.activeElement);
-        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-          event.preventDefault();
-          event.stopPropagation();
-          const n = items[(i2 + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length];
-          if (n) n.focus();
-        } else if (event.key === "Escape" || event.key === "Tab") {
-          event.preventDefault();
-          event.stopPropagation();
-          setOpen(false);
-          btnRef.current.focus();
-        }
-      },
-      children: SEED_MODES.map(([id, icon, label2]) => jsxs66("button", { type: "button", role: "menuitemradio", className: "fw-menu-i", "aria-checked": id === cur[0], "data-mode": id, title: SEED_MODE_TITLE[id], onClick: () => pick(id), children: [
-        jsx79(FwIcon, { name: icon }, "i"),
-        jsx79("span", { className: "fw-grow", children: label2 }, "l"),
-        jsx79("span", { className: "fw-zoom-chk", "aria-hidden": "true", children: id === cur[0] ? jsx79(FwIcon, { name: "check" }) : null }, "c")
-      ] }, id))
-    }, "menu") : null
-  ];
-}
-var label = (text2) => jsx79("span", { className: "fw-lbl", children: text2 }, "l");
-var lbl2 = (text2, props = {}) => jsx79("span", { className: "fw-lbl fw-lbl2", ...props, children: text2 }, "l2");
-function generationSize(w) {
-  const spec = w.specV2;
-  const setSize = (width, height) => {
-    const d = imageRunDims(spec, { format: FORMAT_CUSTOM, width, height });
-    const preset = imageSizePreset(spec, d.width, d.height);
-    w.setRunSize(preset ? { format: preset.format, mp: preset.mp, width: d.width, height: d.height } : { format: FORMAT_CUSTOM, width: d.width, height: d.height });
-  };
-  const setMp = (mp) => {
-    if (w.runSize.format === FORMAT_CUSTOM) {
-      const d = imageDimsAt(spec, w.sizeNow.width / w.sizeNow.height, mp);
-      setSize(d.width, d.height);
-    }
-    w.setRunSize({ mp });
-  };
-  const mpNow = w.runSize.format === FORMAT_CUSTOM ? imageMpValue(w.sizeNow.width, w.sizeNow.height) : w.runSize.mp;
-  const ratioOf = (format) => {
-    const m = /^(\d+):(\d+)$/.exec(format || "");
-    return m ? Number(m[1]) / Number(m[2]) : w.sizeNow.width / w.sizeNow.height;
-  };
-  const reachFor = (format) => imageMpReach(spec, ratioOf(format));
-  const range = imageMpRange(spec), reach = reachFor(w.runSize.format);
-  return { setSize, setMp, mpNow, range, reach, reachFor };
-}
-function generationRows({ w, sampling, setSampling, catalog, seed, seedShown = seed, setSeed, aspectLock, setAspectLock, size, profile }) {
-  const defaults2 = { ...IMAGE_MODEL_FALLBACK[profile === "raw" ? "raw" : "turbo"].values, ...imagePresetValues(w.modelCatalog, profile, catalog) };
-  const num4 = (key, text2, min, max, step2, integer, second = false) => [
-    jsx79(ScrubLabel, { text: text2, value: sampling[key], step: step2, min, max, integer, second, forId: key, onChange: (n) => setSampling(key, n), onReset: () => setSampling(key, defaults2[key]) }, "l" + key),
-    jsx79(FwNumber, { label: text2, value: sampling[key], min, max, step: step2, integer, steppers: false, spin: true, onCommit: (n) => setSampling(key, n) }, "n" + key)
-  ];
-  const choices = (key) => catalog && catalog.sampling && catalog.sampling[key] || (key === "samplers" ? ["euler"] : ["simple"]);
-  const rows = [
-    jsx79(FieldRow, { className: "fw-prow fw-p2", "data-testid": "fw-row-steps-cfg", children: [...num4("steps", "Steps", 1, 100, 1, true), ...num4("cfg", "CFG", 0.1, 20, 0.1, false, true)] }, "steps"),
-    ...[["Sampler", "sampler", "samplers"], ["Scheduler", "scheduler", "schedulers"]].map(([text2, key, list]) => jsx79(FieldRow, { className: "fw-prow", children: [jsx79("span", { className: "fw-lbl", onDoubleClick: () => setSampling(key, defaults2[key]), children: text2 }, "l"), jsx79("div", { className: "fw-pctl", children: jsx79(FwSelect, { label: text2, value: sampling[key], options: choices(list), onChange: (value) => setSampling(key, value) }) }, "c")] }, key)),
-    jsx79(FieldRow, { className: "fw-prow", children: [label("Seed"), jsxs66("div", { className: "fw-pctl fw-seed", children: [
-      jsx79("input", { type: "text", className: "fw-input", inputMode: "numeric", "aria-label": "Seed", "data-testid": "fw-seed", "data-next": String(seed), title: seedShown === seed ? "The seed of the next run" : `Seed of this picture · next run ${seed}`, value: String(seedShown), onChange: (event) => {
-        const n = Number.parseInt(event.target.value, 10);
-        setSeed(Number.isSafeInteger(n) && n >= 0 ? n : 0);
-      } }, "i"),
-      jsx79(FwButton, { icon: "dice", title: "New seed", "aria-label": "New seed", "data-testid": "fw-seed-roll", onClick: () => setSeed(imageRandomSeed(seed)) }, "r"),
-      jsx79(SeedModeMenu, { mode: w.seedMode, onPick: w.setSeedMode }, "mm")
-    ] }, "c")] }, "seed")
-  ];
-  const spec = w.specV2;
-  if (!spec) return [...rows, jsx79(FieldRow, { className: "fw-prow", children: [label("Size"), jsx79("div", { className: "fw-pctl", "data-testid": "fw-size-readout", children: jsx79(SizeFields, { width: 1024, height: 1024, min: 1024, max: 1024, step: 16, disabled: true, title: "This image engine renders 1024 × 1024 only", onChange: () => {
-  } }) }, "c")] }, "size")];
-  const resetSize = () => w.setRunSize({ format: IMAGE_RUN_SIZE_DEFAULT.format, mp: IMAGE_RUN_SIZE_DEFAULT.mp });
-  return [
-    ...rows,
-    jsx79(FieldRow, { className: "fw-prow", children: [jsx79("span", { className: "fw-lbl", onDoubleClick: resetSize, children: "Format" }, "l"), jsx79("div", { className: "fw-pctl", children: jsx79(FormatField, {
-      label: "Format",
-      value: w.runSize.format,
-      options: imageFormats(spec).map((id) => ({ id, label: id })),
-      sizeFields: false,
-      onChange: (value) => value === FORMAT_CUSTOM ? w.setRunSize({ format: FORMAT_CUSTOM, width: w.sizeNow.width, height: w.sizeNow.height }) : w.setRunSize({ format: value }),
-      size: { width: w.sizeNow.width, height: w.sizeNow.height, min: spec.size.min_px, max: spec.size.max_px, step: spec.size.step, onCustom: size.setSize }
-    }) }, "c")] }, "format"),
-    jsx79(FieldRow, { className: "fw-prow", title: `${imageMegapixels(w.sizeNow.width, w.sizeNow.height)} · steps of ${spec.size.step} px, ${spec.size.min_px}–${spec.size.max_px} px, at most ${imageMegapixels(spec.size.max_pixels, 1)}`, children: [jsx79("span", { className: "fw-lbl", onDoubleClick: resetSize, children: "Size" }, "l"), jsx79("div", { className: "fw-pctl", "data-testid": "fw-size-readout", "data-mp": imageMegapixels(w.sizeNow.width, w.sizeNow.height), children: jsx79(SizeFields, {
-      width: w.sizeNow.width,
-      height: w.sizeNow.height,
-      min: spec.size.min_px,
-      max: spec.size.max_px,
-      step: spec.size.step,
-      lock: aspectLock,
-      onChange: size.setSize,
-      between: [jsx79(FwButton, { variant: "ghost", className: "fw-size-tool", icon: "swap", "aria-label": "Swap width and height", title: "Swap width and height", "data-testid": "fw-size-swap", onClick: () => size.setSize(w.sizeNow.height, w.sizeNow.width) }, "s")],
-      after: jsx79(FwButton, { variant: "ghost", className: "fw-size-tool fw-size-lock", icon: aspectLock ? "link" : "unlink", "aria-pressed": aspectLock, "aria-label": "Keep aspect", "data-testid": "fw-aspect-lock", title: aspectLock ? "Aspect locked" : "Aspect free", onClick: () => setAspectLock(!aspectLock) }, "lk")
-    }) }, "c")] }, "size"),
-    jsx79(FieldRow, { className: "fw-prow fw-p2", title: w.runSize.batch > 1 ? `Seeds ${seed}–${seed + w.runSize.batch - 1}` : void 0, children: [
-      jsx79("span", { className: "fw-lbl", onDoubleClick: () => size.setMp(1), children: "MP" }, "l"),
-      jsx79(FwNumber, { label: "Megapixels", testid: "fw-mp", value: size.mpNow, min: size.range.min, max: size.reach, step: 0.1, steppers: false, spin: true, format: (n) => Number(n).toFixed(2), onCommit: size.setMp }, "mp"),
-      lbl2("Batch", { onDoubleClick: () => w.setRunSize({ batch: 1 }) }),
-      jsx79(FwNumber, { label: "Batch", testid: "fw-batch", value: w.runSize.batch, min: spec.batch.min, max: spec.batch.max, integer: true, steppers: false, spin: true, onCommit: (n) => w.setRunSize({ batch: n }) }, "n")
-    ] }, "batch"),
-    profile === "raw" ? jsxs66("label", { className: "fw-field", children: [label("Negative prompt"), jsx79("input", { type: "text", className: "fw-input", "aria-label": "Negative prompt", placeholder: "None", value: sampling.negative, onChange: (event) => setSampling("negative", event.target.value) }, "i")] }, "neg") : null
-  ];
-}
-var GENERATION_CSS = `
-.fw-prow.fw-p2{grid-template-columns:68px minmax(0,1fr) 40px minmax(0,1fr)}
-.fw-prow.fw-p2>.fw-num{width:auto;min-width:0}
-.fw-lbl2{padding-left:2px}
-.fw-scrub{cursor:ew-resize;user-select:none;touch-action:none}
-.fw-scrub:hover{color:var(--fw-t1)}
-.fw-pctl.fw-seed{gap:4px}
-.fw-pctl.fw-seed>.fw-input{flex:1 1 auto;width:auto;min-width:0;text-align:right;font-variant-numeric:tabular-nums}
-.fw-pctl.fw-seed>.fw-btn{flex:none;width:28px;padding:0}
-.fw .fw-pctl.fw-seed>.fw-seed-mm{width:40px;gap:2px;padding:0 4px 0 6px}
-.fw-seed-mm .fw-ic{width:16px;height:16px}
-.fw .fw-seed-mm .fw-seed-mm-chev{width:12px;height:12px;color:var(--fw-t3)}
-.fw-seed-menu{z-index:90;min-width:168px}
-.fw-seed-menu .fw-menu-i .fw-ic{width:16px;height:16px;flex:none}
-.fw-menu-i[aria-checked=true]{color:var(--fw-t1)}
-.fw-wh:has(.fw-size-lock){gap:2px}
-.fw .fw-wh>.fw-size-lock{margin-left:2px}
-`;
 
 // desktop/film-suite/src/image/compare/compare-items.js
 function cmpStageItem(ctx) {
@@ -87090,7 +92035,7 @@ function compareDiff(a, b) {
 
 // desktop/film-suite/src/image/compare/compare-view.js
 import { cn as cn29 } from "@hermes/plugin-sdk";
-import { jsx as jsx80, jsxs as jsxs67 } from "react/jsx-runtime";
+import { jsx as jsx81, jsxs as jsxs68 } from "react/jsx-runtime";
 var CMP_INSET = 12;
 var CMP_MAX_SCALE = 32;
 var CMP_FIT = Object.freeze({ z: 1, cx: 0.5, cy: 0.5 });
@@ -87113,10 +92058,10 @@ var cmpClamp = (view, pane, nat) => {
 function cmpZoomAt(view, z, cursor, pane, nat) {
   const [lo, hi] = cmpZBounds(pane, nat), z2 = cmpClampN(z, lo, hi);
   const L = cmpLayout(view, pane, nat);
-  const px = cursor ? cursor.x : pane.w / 2, py = cursor ? cursor.y : pane.h / 2;
-  const u = (px - L.left) / L.W, v = (py - L.top) / L.H;
+  const px2 = cursor ? cursor.x : pane.w / 2, py2 = cursor ? cursor.y : pane.h / 2;
+  const u = (px2 - L.left) / L.W, v = (py2 - L.top) / L.H;
   const s2 = cmpFit(pane, nat) * z2;
-  return cmpClamp({ z: z2, cx: u - (px - pane.w / 2) / (nat.w * s2), cy: v - (py - pane.h / 2) / (nat.h * s2) }, pane, nat);
+  return cmpClamp({ z: z2, cx: u - (px2 - pane.w / 2) / (nat.w * s2), cy: v - (py2 - pane.h / 2) / (nat.h * s2) }, pane, nat);
 }
 function cmpPan(view, dx, dy, pane, nat) {
   const L = cmpLayout(view, pane, nat);
@@ -87127,22 +92072,22 @@ var cmpNat = (item) => ({
   h: Math.max(1, Number(item && item.picture && item.picture.height || item && item.spec && item.spec.height) || 1024)
 });
 function CmpPicture({ item, L, side }) {
-  return jsxs67("div", {
+  return jsxs68("div", {
     className: cn29("fim-rbox fcmp-pic", L.s >= 2 && "is-px"),
     "data-testid": "fcmp-pic",
     "data-side": side,
     "data-job": item.key,
     style: { width: L.W + "px", height: L.H + "px", left: L.left + "px", top: L.top + "px" },
     children: [
-      item.picture ? jsx80("img", { src: item.picture.src, alt: item.label || (side === "a" ? "Picture A" : "Picture B"), draggable: false }, "i") : jsx80("span", { className: "fcmp-empty", children: item.missing ? "Picture unavailable" : "Loading…" }, "e"),
-      item.kept ? jsx80(FimKeptBadge, {}, "k") : null
+      item.picture ? jsx81("img", { src: item.picture.src, alt: item.label || (side === "a" ? "Picture A" : "Picture B"), draggable: false }, "i") : jsx81("span", { className: "fcmp-empty", children: item.missing ? "Picture unavailable" : "Loading…" }, "e"),
+      item.kept ? jsx81(FimKeptBadge, {}, "k") : null
     ]
   });
 }
 function CmpLabel({ side, label: label2, right }) {
-  return jsxs67("div", { className: cn29("fcmp-label", right && "is-right"), "data-testid": "fcmp-label", "data-side": side, title: label2.title, children: [
-    jsx80("b", { children: side.toUpperCase() }, "b"),
-    label2.parts.length ? jsx80("span", { children: " · " + label2.parts.join(" · ") }, "t") : null
+  return jsxs68("div", { className: cn29("fcmp-label", right && "is-right"), "data-testid": "fcmp-label", "data-side": side, title: label2.title, children: [
+    jsx81("b", { children: side.toUpperCase() }, "b"),
+    label2.parts.length ? jsx81("span", { children: " · " + label2.parts.join(" · ") }, "t") : null
   ] });
 }
 function CompareView({ cmp }) {
@@ -87226,8 +92171,8 @@ function CompareView({ cmp }) {
       event.currentTarget.focus({ preventScroll: true });
       const r = rootRef.current.getBoundingClientRect();
       dragRef.current = null;
-      const at = (e) => cmp.setWipe((e.clientX - r.left - rootRef.current.clientLeft) / pane.w);
-      event.currentTarget.onpointermove = at;
+      const at2 = (e) => cmp.setWipe((e.clientX - r.left - rootRef.current.clientLeft) / pane.w);
+      event.currentTarget.onpointermove = at2;
       event.currentTarget.onpointerup = (e) => {
         e.currentTarget.onpointermove = null;
         e.currentTarget.onpointerup = null;
@@ -87241,10 +92186,10 @@ function CompareView({ cmp }) {
       event.stopPropagation();
       cmp.setWipe(next);
     };
-    body2 = jsxs67("div", { ...paneProps("both", pane, "is-wipe"), children: [
-      jsx80(CmpPicture, { item: pair.a, L: La, side: "a" }, "a"),
-      jsx80("div", { className: "fcmp-wipe-b", style: { clipPath: `inset(0 0 0 ${pct3}%)` }, children: jsx80(CmpPicture, { item: pair.b, L: Lb, side: "b" }) }, "b"),
-      jsx80("div", { className: "fcmp-wipe-line", "data-testid": "fcmp-wipe-line", style: { left: pct3 + "%" }, children: jsx80("div", {
+    body2 = jsxs68("div", { ...paneProps("both", pane, "is-wipe"), children: [
+      jsx81(CmpPicture, { item: pair.a, L: La, side: "a" }, "a"),
+      jsx81("div", { className: "fcmp-wipe-b", style: { clipPath: `inset(0 0 0 ${pct3}%)` }, children: jsx81(CmpPicture, { item: pair.b, L: Lb, side: "b" }) }, "b"),
+      jsx81("div", { className: "fcmp-wipe-line", "data-testid": "fcmp-wipe-line", style: { left: pct3 + "%" }, children: jsx81("div", {
         className: "fcmp-wipe-h",
         role: "slider",
         tabIndex: 0,
@@ -87257,21 +92202,21 @@ function CompareView({ cmp }) {
         title: "Wipe (← →)",
         onPointerDown: wipeDown,
         onKeyDown: wipeKey,
-        children: jsx80(FwIcon, { name: "grip" })
+        children: jsx81(FwIcon, { name: "grip" })
       }) }, "line"),
-      jsx80(CmpLabel, { side: "a", label: cmp.labels.a }, "la"),
-      jsx80(CmpLabel, { side: "b", label: cmp.labels.b, right: true }, "lb")
+      jsx81(CmpLabel, { side: "a", label: cmp.labels.a }, "la"),
+      jsx81(CmpLabel, { side: "b", label: cmp.labels.b, right: true }, "lb")
     ] }, "wipe");
   } else if (ready) {
     body2 = ["a", "b"].map((side) => {
       const pane = cmp.panes[side];
-      return jsxs67("div", { ...paneProps(side, pane), "data-job": pair[side].key, children: [
-        jsx80(CmpPicture, { item: pair[side], L: cmpLayout(cmp.views[side], pane, cmpNat(pair[side])), side }, "p"),
-        jsx80(CmpLabel, { side, label: cmp.labels[side] }, "l")
+      return jsxs68("div", { ...paneProps(side, pane), "data-job": pair[side].key, children: [
+        jsx81(CmpPicture, { item: pair[side], L: cmpLayout(cmp.views[side], pane, cmpNat(pair[side])), side }, "p"),
+        jsx81(CmpLabel, { side, label: cmp.labels[side] }, "l")
       ] }, side);
     });
   }
-  return jsx80("div", {
+  return jsx81("div", {
     ref: rootRef,
     className: cn29("fcmp", "is-" + mode, cmp.zoomed && "is-zoomed"),
     "data-testid": "fim-compare",
@@ -87286,7 +92231,7 @@ function CompareView({ cmp }) {
 }
 
 // desktop/film-suite/src/image/compare/use-image-compare.js
-import { jsx as jsx81 } from "react/jsx-runtime";
+import { jsx as jsx82 } from "react/jsx-runtime";
 var CMP_MODE_KEY = "filmSuite.image.compareMode";
 var CMP_GAP = 8;
 var CMP_STEP = 1.25;
@@ -87423,15 +92368,15 @@ function useImageCompare(ctx) {
     return false;
   };
   const cmp = { pair, mode, setMode, linked: linked2, linkedShown, views, wipe, setWipe, active, activeShown, setActive, box, setBox, panes, labels, diff, hit: hit2, zoomBy, pan, zoomFit, zoomTo, clickZoom, swap, close, zoomed, pctOf };
-  const view = pair ? jsx81(CompareView, { cmp }, "cmp") : null;
+  const view = pair ? jsx82(CompareView, { cmp }, "cmp") : null;
   const bar = pair ? [
-    jsx81(FwSeg, { label: "Compare mode", className: "fcmp-mode", testid: "fcmp-mode", value: mode, onChange: setMode, options: [
+    jsx82(FwSeg, { label: "Compare mode", className: "fcmp-mode", testid: "fcmp-mode", value: mode, onChange: setMode, options: [
       { id: "side", label: "Side by side", attrs: { "data-mode": "side" }, title: "Side by side" },
       { id: "slider", label: "Slider", attrs: { "data-mode": "slider" }, title: "Wipe slider" }
     ] }, "mode"),
-    jsx81(FwButton, { variant: "ghost", icon: linkedShown ? "link" : "unlink", "data-testid": "fcmp-link", "aria-pressed": linkedShown, disabled: mode === "slider", title: linkedShown ? "Linked zoom and position" : "Unlinked zoom and position", "aria-label": "Link zoom and position", onClick: () => setLink(!linked2) }, "link"),
-    jsx81(FwButton, { variant: "ghost", icon: "swap", "data-testid": "fcmp-swap", title: "Swap A and B", "aria-label": "Swap A and B", onClick: swap }, "swap"),
-    jsx81("span", { className: "fcmp-zoom fw-num-t", "data-testid": "fcmp-zoom", title: "Zoom of the active picture", children: `${pctOf(activeShown)}%` }, "zoom")
+    jsx82(FwButton, { variant: "ghost", icon: linkedShown ? "link" : "unlink", "data-testid": "fcmp-link", "aria-pressed": linkedShown, disabled: mode === "slider", title: linkedShown ? "Linked zoom and position" : "Unlinked zoom and position", "aria-label": "Link zoom and position", onClick: () => setLink(!linked2) }, "link"),
+    jsx82(FwButton, { variant: "ghost", icon: "swap", "data-testid": "fcmp-swap", title: "Swap A and B", "aria-label": "Swap A and B", onClick: swap }, "swap"),
+    jsx82("span", { className: "fcmp-zoom fw-num-t", "data-testid": "fcmp-zoom", title: "Zoom of the active picture", children: `${pctOf(activeShown)}%` }, "zoom")
   ] : null;
   const stateRef = useRef(null);
   stateRef.current = { pair, mode, linked: linkedShown, wipe };
@@ -87491,7 +92436,7 @@ function useImageCompare(ctx) {
 
 // desktop/film-suite/src/image/compare/use-image-survey.js
 import { cn as cn30 } from "@hermes/plugin-sdk";
-import { jsx as jsx82, jsxs as jsxs68 } from "react/jsx-runtime";
+import { jsx as jsx83, jsxs as jsxs69 } from "react/jsx-runtime";
 var SURVEY_MIN = 2;
 var SURVEY_MAX = 12;
 var SURVEY_GAP = 8;
@@ -87523,8 +92468,8 @@ function SurveyView({ sv, gridRef }) {
     return () => observer.disconnect();
   }, []);
   useEffect(() => {
-    const node = rootRef.current, at = document.activeElement;
-    if (!node || at && (at.tagName === "INPUT" || at.tagName === "TEXTAREA" || at.isContentEditable)) return;
+    const node = rootRef.current, at2 = document.activeElement;
+    if (!node || at2 && (at2.tagName === "INPUT" || at2.tagName === "TEXTAREA" || at2.isContentEditable)) return;
     const cell = node.querySelector('[data-testid="fsv-cell"][tabindex="0"]');
     if (cell) cell.focus({ preventScroll: true });
   }, [box.w > 0]);
@@ -87537,7 +92482,7 @@ function SurveyView({ sv, gridRef }) {
   const { items } = sv;
   const n0 = cmpNat(items[0]);
   const L = box.w ? surveyLayout(items.length, box, Math.max(0.2, Math.min(5, n0.w / n0.h))) : null;
-  return jsx82("div", {
+  return jsx83("div", {
     ref: rootRef,
     className: "fsv",
     "data-testid": "fim-survey",
@@ -87549,7 +92494,7 @@ function SurveyView({ sv, gridRef }) {
     children: L ? items.map((item, i2) => {
       const on = item.key === sv.active;
       const label2 = sv.labels[i2];
-      return jsxs68("div", {
+      return jsxs69("div", {
         className: cn30("fsv-cell", on && "is-active"),
         role: "gridcell",
         tabIndex: on ? 0 : -1,
@@ -87567,13 +92512,13 @@ function SurveyView({ sv, gridRef }) {
           if (!on && event.target === event.currentTarget) live2.current.setActive(item.key);
         },
         children: [
-          item.picture ? jsx82("img", { src: item.picture.src, alt: item.label || `Picture ${i2 + 1}`, draggable: false }, "i") : jsx82("span", { className: "fsv-wait", children: item.missing ? "Picture unavailable" : "Loading…" }, "w"),
-          jsx82("span", { className: "fsv-n", "aria-hidden": "true", children: String(i2 + 1) }, "n"),
-          item.kept ? jsx82(FimKeptBadge, {}, "k") : null,
-          label2.parts.length ? jsx82("span", { className: "fsv-label", "data-testid": "fsv-label", children: label2.parts.join(" · ") }, "l") : null,
-          jsxs68("div", { className: "fsv-acts", role: "group", "aria-label": `Picture ${i2 + 1} actions`, children: [
-            jsx82(FwButton, { icon: "fit", "data-testid": "fsv-open", title: "Open (Enter)", "aria-label": "Open", disabled: !item.picture, disabledReason: item.picture ? "" : item.missing ? "Open · Picture unavailable" : "Open · The picture is loading", onClick: () => live2.current.pick(item.key) }, "o"),
-            jsx82(FwButton, { icon: "x", "data-testid": "fsv-remove", title: "Remove from survey (Delete)", "aria-label": "Remove from survey", disabled: items.length <= SURVEY_MIN, disabledReason: items.length <= SURVEY_MIN ? `Remove · A survey keeps at least ${SURVEY_MIN} pictures` : "", onClick: () => live2.current.remove(item.key) }, "x")
+          item.picture ? jsx83("img", { src: item.picture.src, alt: item.label || `Picture ${i2 + 1}`, draggable: false }, "i") : jsx83("span", { className: "fsv-wait", children: item.missing ? "Picture unavailable" : "Loading…" }, "w"),
+          jsx83("span", { className: "fsv-n", "aria-hidden": "true", children: String(i2 + 1) }, "n"),
+          item.kept ? jsx83(FimKeptBadge, {}, "k") : null,
+          label2.parts.length ? jsx83("span", { className: "fsv-label", "data-testid": "fsv-label", children: label2.parts.join(" · ") }, "l") : null,
+          jsxs69("div", { className: "fsv-acts", role: "group", "aria-label": `Picture ${i2 + 1} actions`, children: [
+            jsx83(FwButton, { icon: "fit", "data-testid": "fsv-open", title: "Open (Enter)", "aria-label": "Open", disabled: !item.picture, disabledReason: item.picture ? "" : item.missing ? "Open · Picture unavailable" : "Open · The picture is loading", onClick: () => live2.current.pick(item.key) }, "o"),
+            jsx83(FwButton, { icon: "x", "data-testid": "fsv-remove", title: "Remove from survey (Delete)", "aria-label": "Remove from survey", disabled: items.length <= SURVEY_MIN, disabledReason: items.length <= SURVEY_MIN ? `Remove · A survey keeps at least ${SURVEY_MIN} pictures` : "", onClick: () => live2.current.remove(item.key) }, "x")
           ] }, "a")
         ]
       }, item.key);
@@ -87597,10 +92542,10 @@ function useImageSurvey(ctx) {
   const setActive = (key2) => ctx.setCompare((cur) => cur && cur.survey && cur.active !== key2 && cur.items.some((item) => item.key === key2) ? { ...cur, active: key2 } : cur);
   const remove2 = (key2) => ctx.setCompare((cur) => {
     if (!cur || !cur.survey || cur.items.length <= SURVEY_MIN) return cur;
-    const at = cur.items.findIndex((item) => item.key === key2);
-    if (at < 0) return cur;
+    const at2 = cur.items.findIndex((item) => item.key === key2);
+    if (at2 < 0) return cur;
     const next = cur.items.filter((item) => item.key !== key2);
-    return { ...cur, items: next, active: cur.active === key2 ? next[Math.min(at, next.length - 1)].key : cur.active };
+    return { ...cur, items: next, active: cur.active === key2 ? next[Math.min(at2, next.length - 1)].key : cur.active };
   });
   const pick = (key2) => {
     const item = items.find((entry2) => entry2.key === key2);
@@ -87622,19 +92567,19 @@ function useImageSurvey(ctx) {
       fn();
       return true;
     };
-    const at = Math.max(0, items.findIndex((item) => item.key === active));
+    const at2 = Math.max(0, items.findIndex((item) => item.key === active));
     const node = gridRef.current;
     const cols = node ? Math.max(1, Number(node.dataset.cols) || 1) : colsRef.current;
     colsRef.current = cols;
     const move2 = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[event.key];
     if (event.key === "Escape") return run(close);
-    if (move2) return run(() => setActive(items[Math.max(0, Math.min(items.length - 1, at + move2))].key));
+    if (move2) return run(() => setActive(items[Math.max(0, Math.min(items.length - 1, at2 + move2))].key));
     if (event.key === "Enter" && !(t2 && t2.tagName === "BUTTON")) return run(() => pick(active));
     if (event.key === "Delete" || event.key === "Backspace") return run(() => remove2(active));
     return false;
   };
   const sv = { items, labels, active, setActive, remove: remove2, pick };
-  const view = open ? jsx82(SurveyView, { sv, gridRef }, "survey") : null;
+  const view = open ? jsx83(SurveyView, { sv, gridRef }, "survey") : null;
   const stateRef = useRef(null);
   stateRef.current = { items, active };
   const bridge2 = {
@@ -87698,230 +92643,19 @@ function useCompareSurface(ctx) {
   };
 }
 
-// desktop/film-suite/src/image/compare/compare-css.js
-var COMPARE_CSS = `
-.fcmp{position:absolute;inset:0;outline:none;overflow:hidden;background:var(--fw-stage);touch-action:none}
-.fcmp-pane{position:absolute;top:0;overflow:hidden;cursor:grab;background:var(--fw-stage)}
-.fcmp.is-zoomed .fcmp-pane:active{cursor:grabbing}
-.fcmp.is-side .fcmp-pane.is-active::after{content:'';position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 1px var(--fw-line-2)}
-.fcmp-pic{position:absolute;margin:0;border:0;border-radius:0;box-shadow:0 0 0 1px var(--fw-line);background:#0a0a0b;overflow:visible}
-.fcmp-pic img{display:block;width:100%;height:100%;object-fit:fill;border-radius:0;pointer-events:none;user-select:none}
-.fcmp-pic.is-px img{image-rendering:pixelated}
-.fcmp-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
-.fcmp-wipe-b{position:absolute;inset:0;pointer-events:none}
-.fcmp-wipe-line{position:absolute;top:0;bottom:0;width:0;z-index:2}
-.fcmp-wipe-line::before{content:'';position:absolute;top:0;bottom:0;left:-1px;width:2px;background:var(--fw-pick);box-shadow:0 0 0 1px rgb(8 8 10 / .55);pointer-events:none}
-.fcmp-wipe-h{position:absolute;top:50%;left:-14px;width:28px;height:28px;margin-top:-14px;display:grid;place-items:center;border-radius:4px;background:var(--fw-s2);color:var(--fw-t1);box-shadow:0 0 0 1px var(--fw-line-2),0 2px 6px rgb(0 0 0 / .4);cursor:ew-resize;outline:none;touch-action:none}
-.fcmp-wipe-h:focus-visible{box-shadow:0 0 0 2px var(--fw-accent-ring)}
-.fcmp-wipe-h svg{width:14px;height:14px}
-.fcmp-label{position:absolute;left:8px;top:8px;z-index:3;max-width:calc(100% - 16px);box-sizing:border-box;padding:2px 8px;border-radius:3px;background:rgb(8 8 10 / .78);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
-.fcmp-label.is-right{left:auto;right:8px}
-.fcmp-label b{font-weight:600}
-.fcmp.is-slider .fcmp-label{max-width:calc(50% - 24px)}
-.fw .fw-seg.fcmp-mode button{flex:none;width:auto;padding:0 10px}
-.fcmp-zoom{min-width:44px;color:var(--fw-t3);font-size:var(--fw-fs,.75rem);text-align:right}
-.fsv{position:absolute;inset:0;display:grid;gap:${8}px;justify-content:center;align-content:center;padding:12px;outline:none}
-.fsv-cell{position:relative;overflow:hidden;border-radius:0;background:var(--fw-s1);outline:none;cursor:default}
-.fsv-cell::after{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;box-shadow:inset 0 0 0 1px var(--fw-line)}
-.fsv-cell.is-active::after{box-shadow:inset 0 0 0 2px var(--fw-pick),inset 0 0 0 3px rgb(8 8 10 / .7)}
-.fsv-cell img{display:block;width:100%;height:100%;object-fit:contain;border-radius:0;user-select:none}
-.fsv-wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--fw-t3);font-size:var(--fw-fs,.75rem)}
-.fsv-n{position:absolute;left:6px;top:6px;z-index:1;min-width:20px;height:20px;box-sizing:border-box;padding:0 5px;border-radius:3px;background:rgb(8 8 10 / .78);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);font-weight:600;line-height:20px;text-align:center}
-.fsv-label{position:absolute;left:32px;top:6px;z-index:1;max-width:calc(100% - 64px);box-sizing:border-box;padding:0 6px;border-radius:3px;background:rgb(8 8 10 / .78);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fsv-acts{position:absolute;right:6px;bottom:6px;z-index:3;display:flex;gap:4px;opacity:0;visibility:hidden;transition:opacity .12s,visibility 0s .12s}
-.fsv-cell:hover .fsv-acts,.fsv-cell.is-active .fsv-acts,.fsv-cell:focus-within .fsv-acts{opacity:1;visibility:visible;transition:opacity .12s}
-.fsv-acts .fw-btn{background:rgb(8 8 10 / .78)}
-`;
-
 // desktop/film-suite/src/image/entry/keep-edit-on-open.js
 var keepEditOnOpen = (current2, next) => current2 === "edit" && next === "result" ? "edit" : next;
 
 // desktop/film-suite/src/image/module/image-doc-head.js
-import { jsx as jsx83, jsxs as jsxs69 } from "react/jsx-runtime";
+import { jsx as jsx84, jsxs as jsxs70 } from "react/jsx-runtime";
 function ImageDocHead({ selDoc, stagePicture, name: name2, onUndo, onRedo }) {
   const histAt = selDoc ? selDoc.at : 0, histN = selDoc ? selDoc.hist.length : 0;
   const docText = selDoc ? `${name2} · ${selDoc.w} × ${selDoc.h}` : stagePicture ? name2 : "";
-  return jsxs69("div", { className: "fw-dochead", "data-testid": "fw-doc", children: [
-    docText ? jsx83("span", { className: "fw-doc-title", "data-testid": "fw-doc-title", title: docText, children: docText }, "t") : null,
-    jsx83(FwButton, { variant: "ghost", icon: "undo", className: "fw-btn-icon", "data-testid": "fw-undo", "aria-label": "Undo", title: `Undo (${IS_MAC ? "⌘Z" : "Ctrl+Z"})`, disabled: !selDoc || histAt <= 0, disabledReason: !selDoc ? "Undo · No picture open in Edit" : histAt <= 0 ? "Undo · Nothing to undo" : "", onClick: onUndo }, "u"),
-    jsx83(FwButton, { variant: "ghost", icon: "redo", className: "fw-btn-icon", "data-testid": "fw-redo", "aria-label": "Redo", title: `Redo (${IS_MAC ? "⇧⌘Z" : "Ctrl+Y"})`, disabled: !selDoc || histAt >= histN - 1, disabledReason: !selDoc ? "Redo · No picture open in Edit" : histAt >= histN - 1 ? "Redo · Nothing to redo" : "", onClick: onRedo }, "r")
+  return jsxs70("div", { className: "fw-dochead", "data-testid": "fw-doc", children: [
+    docText ? jsx84("span", { className: "fw-doc-title", "data-testid": "fw-doc-title", title: docText, children: docText }, "t") : null,
+    jsx84(FwButton, { variant: "ghost", icon: "undo", className: "fw-btn-icon", "data-testid": "fw-undo", "aria-label": "Undo", title: `Undo (${IS_MAC ? "⌘Z" : "Ctrl+Z"})`, disabled: !selDoc || histAt <= 0, disabledReason: !selDoc ? "Undo · No picture open in Edit" : histAt <= 0 ? "Undo · Nothing to undo" : "", onClick: onUndo }, "u"),
+    jsx84(FwButton, { variant: "ghost", icon: "redo", className: "fw-btn-icon", "data-testid": "fw-redo", "aria-label": "Redo", title: `Redo (${IS_MAC ? "⇧⌘Z" : "Ctrl+Y"})`, disabled: !selDoc || histAt >= histN - 1, disabledReason: !selDoc ? "Redo · No picture open in Edit" : histAt >= histN - 1 ? "Redo · Nothing to redo" : "", onClick: onRedo }, "r")
   ] }, "doc");
-}
-
-// desktop/film-suite/src/image/import/import-api.js
-var IMPORT_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "tif", "tiff"];
-var IMPORT_MAX_BYTES = 64 * 1024 * 1024;
-var IMPORT_TYPES = /^image\/(png|jpeg|webp|tiff)$/;
-var importId = () => "imgop_" + Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-var isImportPath = (path) => IMPORT_EXTENSIONS.includes(String(path || "").split(/[?#]/)[0].split(".").pop().toLowerCase());
-function fileBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
-    reader.onerror = () => reject(new Error("The picture could not be read"));
-    reader.readAsDataURL(file);
-  });
-}
-async function shootFolders(wake) {
-  if (shootMediaApi && $shootMediaFolders.get()) return shootMediaApi;
-  if (wake) wake();
-  for (let i2 = 0; i2 < 60 && !(shootMediaApi && $shootMediaFolders.get()); i2 += 1) await new Promise((r) => setTimeout(r, 100));
-  return shootMediaApi && $shootMediaFolders.get() ? shootMediaApi : null;
-}
-async function rootsFor(path, wake) {
-  const known = ($shootMediaFolders.get() || {}).roots || [];
-  if (known.some((root) => mediaPathInRoot(path, root))) return known;
-  const folder = parentPath(path);
-  const why = mediaRootLargeReason(folder, []);
-  if (!folder || /whole drive|home folder/.test(why)) throw new Error(`${basename(path)} is not inside a folder of its own (${why || "no folder"}))`);
-  const api = await shootFolders(wake);
-  if (!api) throw new Error("Media folders not ready");
-  const roots = ($shootMediaFolders.get() || {}).roots || [];
-  if (roots.some((root) => mediaPathInRoot(path, root))) return roots;
-  const added = await api.add([folder]);
-  if (!(added > 0)) throw new Error("Media folders could not be updated");
-  return [.../* @__PURE__ */ new Set([...roots, folder])];
-}
-async function postImport(ownerScope, body2) {
-  const payload = await rest("/projects/image-producer/import", {
-    method: "POST",
-    timeoutMs: 12e4,
-    body: { schema: "studio.image-import-request/1", owner_scope: ownerScope, operation_id: importId(), ...body2 }
-  });
-  if (!payload || payload.error || payload.state !== "published") throw new Error(payload && payload.error && payload.error.message || "The picture could not be imported");
-  return { jobId: payload.image_producer_job_id, width: payload.width, height: payload.height, label: payload.imported && payload.imported.file_name || "Picture" };
-}
-async function importPicture(ownerScope, { path = "", file = null, wake = null } = {}) {
-  if (path) {
-    if (!isImportPath(path)) throw new Error(`${basename(path)} is not a picture Continuo can open (PNG, JPEG, WebP or TIFF)`);
-    const roots = await rootsFor(path, wake);
-    return postImport(ownerScope, { path, ...requestContext(roots) });
-  }
-  if (!file) throw new Error("That drop carried no readable file");
-  if (file.type && !IMPORT_TYPES.test(file.type) && !isImportPath(file.name)) throw new Error(`${file.name || "The file"} is not a picture Continuo can open (PNG, JPEG, WebP or TIFF)`);
-  if (file.size > IMPORT_MAX_BYTES) throw new Error("The file is too large to import (over 64 MB)");
-  return postImport(ownerScope, { data_b64: await fileBase64(file), file_name: file.name || "Pasted picture" });
-}
-function openImported(picture) {
-  $mediaFeedStale.set($mediaFeedStale.get() + 1);
-  $imageOpenRequest.set({ item: { id: picture.jobId, kind: "image", module: "image", label: picture.label, prompt: picture.label, spec: null, kept: false, keptName: null, width: picture.width, height: picture.height }, n: Date.now() });
-}
-
-// desktop/film-suite/src/image/import/use-image-import.js
-import { GlyphSpinner as GlyphSpinner14 } from "@hermes/plugin-sdk";
-import { jsx as jsx84, jsxs as jsxs70 } from "react/jsx-runtime";
-var IMPORT_CSS = `
-.fw-canvas.is-import-over::after{content:"";position:absolute;inset:6px;z-index:7;border:2px dashed var(--fw-accent);border-radius:var(--fw-r1);background:color-mix(in srgb,var(--fw-accent) 8%,transparent);pointer-events:none}
-.fw-import-drop{position:absolute;left:50%;top:50%;z-index:8;transform:translate(-50%,-50%);display:flex;align-items:center;gap:8px;min-height:32px;padding:4px 12px;border:1px solid var(--fw-line-2);border-radius:var(--fw-r2);background:var(--fw-s2);box-shadow:var(--fw-shadow);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:18px;white-space:nowrap;pointer-events:none}
-.fw-import-busy{position:absolute;left:50%;top:16px;z-index:8;transform:translateX(-50%);display:flex;align-items:center;gap:8px;min-height:32px;padding:4px 12px;border:1px solid var(--fw-line-2);border-radius:var(--fw-r2);background:var(--fw-s2);box-shadow:var(--fw-shadow);color:var(--fw-t1);font-size:var(--fw-fs,.75rem);line-height:18px;white-space:nowrap}
-.fim-ref.is-file-over .fim-ref-pic{outline:2px dashed var(--fw-accent);outline-offset:-2px}
-`;
-var PICK = { filters: [{ name: "Pictures", extensions: IMPORT_EXTENSIONS }], multiple: false, title: "Open picture" };
-var typingIn = (target) => target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
-function useImageImport(ctx) {
-  const [over, setOver] = useState(false);
-  const [busy2, setBusy] = useState("");
-  const live2 = useRef(ctx);
-  live2.current = ctx;
-  const run = async (label2, source, then) => {
-    const c = live2.current;
-    if (!c.ownerScope || busy2) return null;
-    setBusy(label2);
-    c.setIssue("");
-    try {
-      const picture = await importPicture(c.ownerScope, { ...source, wake: c.wake });
-      if (then) {
-        $mediaFeedStale.set($mediaFeedStale.get() + 1);
-        then(picture);
-      } else openImported(picture);
-      return picture;
-    } catch (error) {
-      live2.current.setIssue(String(error && error.message || error));
-      return null;
-    } finally {
-      setBusy("");
-    }
-  };
-  const fromTransfer = (event) => {
-    const paths = pathsFromDrop(event).filter((path) => !/^https?:/i.test(path));
-    if (paths.length) return { path: paths[0] };
-    const file = [...event.dataTransfer && event.dataTransfer.files || []][0];
-    return file ? { file } : null;
-  };
-  const open = async (then) => {
-    const picked = await pickPaths(PICK);
-    if (picked && picked[0]) return run("Opening", { path: picked[0] }, then);
-    return null;
-  };
-  const canvasDrop = {
-    onDragOver: (event) => {
-      if (!dropHasMedia(event)) return;
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-      if (!over) setOver(true);
-    },
-    onDragLeave: (event) => {
-      if (!event.currentTarget.contains(event.relatedTarget)) setOver(false);
-    },
-    onDrop: (event) => {
-      if (!dropHasMedia(event)) return;
-      event.preventDefault();
-      setOver(false);
-      const source = fromTransfer(event);
-      if (!source) {
-        live2.current.setIssue("That drop carried no readable file");
-        return;
-      }
-      void run("Opening", source);
-    }
-  };
-  const slotDrop = (fill) => ({
-    accepts: (event) => dropHasMedia(event),
-    drop: (event) => {
-      const source = fromTransfer(event);
-      if (!source) {
-        live2.current.setIssue("That drop carried no readable file");
-        return;
-      }
-      void run("Adding", source, (picture) => fill(picture.jobId));
-    }
-  });
-  const shiftPasteAt = useRef(0);
-  useEffect(() => {
-    const onKey = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && String(event.key).toLowerCase() === "v") shiftPasteAt.current = Date.now();
-    };
-    const onPaste = (event) => {
-      const c = live2.current;
-      const root = c.rootRef.current;
-      if (!c.visible || !root || typingIn(event.target) || Date.now() - shiftPasteAt.current < 500) return;
-      if (event.target && event.target !== document.body && !root.contains(event.target)) return;
-      const item = [...event.clipboardData && event.clipboardData.items || []].find((entry2) => entry2.kind === "file" && /^image\//.test(entry2.type));
-      const file = item && item.getAsFile();
-      if (!file) return;
-      event.preventDefault();
-      void run("Pasting", { file });
-    };
-    document.addEventListener("keydown", onKey, true);
-    document.addEventListener("paste", onPaste);
-    return () => {
-      document.removeEventListener("keydown", onKey, true);
-      document.removeEventListener("paste", onPaste);
-    };
-  }, []);
-  useEffect(() => {
-    if (!ctx.visible) return void 0;
-    const entry2 = { run: () => void open() };
-    $recentOpenPicture.set(entry2);
-    return () => {
-      if ($recentOpenPicture.get() === entry2) $recentOpenPicture.set(null);
-    };
-  }, [ctx.visible, ctx.ownerScope]);
-  const overlays = [
-    over ? jsxs70("div", { className: "fw-import-drop", "data-testid": "fw-import-drop", "aria-hidden": "true", children: [jsx84(FwIcon, { name: "image" }, "i"), jsx84("span", { children: "Drop to open" }, "t")] }, "import-drop") : null,
-    busy2 ? jsxs70("div", { className: "fw-import-busy", role: "status", "data-testid": "fw-import-busy", children: [jsx84(GlyphSpinner14, { ariaLabel: busy2 }, "s"), jsx84("span", { children: busy2 + "…" }, "t")] }, "import-busy") : null
-  ];
-  return { over, busy: busy2, canvasDrop, slotDrop, open, overlays, command: { id: "open-picture", label: "Open picture…", icon: "folder", why: ctx.ownerScope ? "" : "Not available here", run: () => void open() } };
 }
 
 // desktop/film-suite/src/image/module/image-palette.js
@@ -88166,19 +92900,19 @@ function FilmSuiteImageModule({ visible, onOpenLarge, onOpenMedia, onOpenJobs, o
   const blocks = usePromptBlocks({ promptRef, typed, setTyped, styles: w.styles, setStyles: w.setStyles, scope: w.ownerScope });
   const markRef = useRef(null);
   useLayoutEffect(() => {
-    const area = promptRef.current;
-    if (!area) return;
-    area.style.height = "auto";
-    const full = area.scrollHeight;
+    const area2 = promptRef.current;
+    if (!area2) return;
+    area2.style.height = "auto";
+    const full = area2.scrollHeight;
     const h = promptH != null ? promptH : Math.min(full, FIM_PROMPT_OPEN_PX);
-    area.style.height = h + "px";
-    area.style.overflowY = full > h + 1 ? "auto" : "hidden";
+    area2.style.height = h + "px";
+    area2.style.overflowY = full > h + 1 ? "auto" : "hidden";
   }, [typed, promptH, controlsOpen, sheet, inspTab]);
   const gripDown = (event) => {
-    const area = promptRef.current;
-    if (!area || event.button !== 0) return;
+    const area2 = promptRef.current;
+    if (!area2 || event.button !== 0) return;
     event.preventDefault();
-    const h0 = area.getBoundingClientRect().height;
+    const h0 = area2.getBoundingClientRect().height;
     const y0 = event.clientY;
     let last2 = h0;
     const move2 = (ev) => {
@@ -88196,10 +92930,10 @@ function FilmSuiteImageModule({ visible, onOpenLarge, onOpenMedia, onOpenJobs, o
     window.addEventListener("pointercancel", up);
   };
   const gripKey = (event) => {
-    const area = promptRef.current;
-    if (!area || event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    const area2 = promptRef.current;
+    if (!area2 || event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
     event.preventDefault();
-    setPromptH(fimPromptClamp(area.getBoundingClientRect().height + (event.key === "ArrowDown" ? 20 : -20)));
+    setPromptH(fimPromptClamp(area2.getBoundingClientRect().height + (event.key === "ArrowDown" ? 20 : -20)));
   };
   const measureMore = useCallback(() => {
     const node = scrollRef.current;
@@ -88359,11 +93093,12 @@ function FilmSuiteImageModule({ visible, onOpenLarge, onOpenMedia, onOpenJobs, o
     if (isRunning) setView("vary");
   }, [setVaryRunning]);
   const presetVariant = w.modelCatalogState === "ok" ? imageModelVariant(w.modelCatalog, IMAGE_PRESENTATION.family.id, profile) : null;
-  const presetBlocked = w.imageTarget.descriptor || w.imageTarget.blocked ? w.imageTarget.missingMedia ? "No reference picture" : w.imageTarget.blocked ? "Model or media not ready" : "" : presetVariant && presetVariant.health && presetVariant.health.selectable === false ? imageModelView(w.modelCatalog, "ok", profile).health.text : "";
+  const presetBlocked = w.imageTarget.descriptor || w.imageTarget.blocked ? w.imageTarget.missingMedia ? "No reference picture" : w.imageTarget.blocked ? "Model or media not ready" : "" : presetVariant && presetVariant.health && (presetVariant.health.selectable === false || w.modelCatalog && w.modelCatalog.engine && w.modelCatalog.engine.reachable === false) ? imageModelView(w.modelCatalog, "ok", profile).health.text : "";
   const canGenerate = !busy2 && !varyRunning && Boolean(effectivePrompt.trim()) && !presetBlocked;
   const varyOff = !effectivePrompt.trim() && !varyRunning && view !== "vary" && !varyCells.length;
   const varyWhy = "Vary needs a prompt: it reruns the current prompt with one setting changed";
   const generateWhy = varyRunning ? "A comparison is running — one run at a time" : busy2 ? "Starting…" : presetBlocked ? presetBlocked : "";
+  const whyShown = generateWhy && generateWhy !== "Starting…" && generateWhy !== presetBlocked ? generateWhy : "";
   const generateTitle = generateWhy || (IS_MAC ? "Generate (⌘↵)" : "Generate (Ctrl+Enter)");
   const gridPick = w.runJobs.length > 1 ? w.runJobs[Math.min(gridSel, w.runJobs.length - 1)] : null;
   const gridPickSeed = !gridPick ? null : gridPick.spec && Number.isSafeInteger(gridPick.spec.seed) ? gridPick.spec.seed : Number.isSafeInteger(gridPick.seed) ? gridPick.seed : null;
@@ -89267,7 +94002,7 @@ function FilmSuiteImageModule({ visible, onOpenLarge, onOpenMedia, onOpenJobs, o
       if (event.key === " ") spaceRef.current = false;
     },
     children: [
-      jsx85("style", { children: HISTORY_ROW_CSS + IMAGE_WORKBENCH_CSS + FIM_CSS + FW_CSS + FW_SORT_CSS + FW_PICK_CSS + STYLE_BROWSER_CSS + LORA_BROWSER_CSS + FW_NAV_CSS + TAT_CSS + TAT_MIX_CSS + MIX_ALL_CSS + DEV_PRESETS_CSS + RELIGHT_CSS + GEN_LAYER_CSS + FW_CANVAS_VIEW_CSS + CROP_CSS + GRADING_CSS + PANEL_CSS + GENERATION_CSS + SEL_CSS + COMPARE_CSS + OUTPAINT_CSS + IMPORT_CSS + BOX_CSS + OUTPUT_CSS + IMAGE_G1_CSS }, "css"),
+      jsx85("style", { children: IMAGE_MODULE_CSS }, "css"),
       // ---- collapsed panes: one icon strip each, one click opens ----
       !controlsOpen && !narrow ? jsxs71("nav", { className: "fw-pstrip fw-pstrip-insp", "aria-label": "Controls (collapsed)", "data-testid": "fw-strip-insp", children: [
         jsx85(FwButton, { variant: "ghost", icon: "sliders", "data-testid": "fw-strip-insp-open", "aria-label": "Show controls", title: "Show controls (Ctrl+[)", onClick: () => setControlsOpen(true) }, "o"),
@@ -89407,11 +94142,11 @@ function FilmSuiteImageModule({ visible, onOpenLarge, onOpenMedia, onOpenJobs, o
             // WP3 T1: the runs-on chip shared with Shoot; Image renders locally, so it shows nothing.
             jsx85(RunsOnChip, { testid: "fim-meta-line", local: true }, "meta"),
             // w35-ui GEM-220 (artist 09.11.): no "Local · about N s" line; the footer is Generate × N like the other pages'.
-            jsx85("span", { className: "fim-why fw-why", id: "fim-generate-why", "data-testid": "fim-generate-why", role: "status", title: generateWhy && generateWhy !== "Starting…" ? generateWhy : void 0, children: generateWhy && generateWhy !== "Starting…" ? generateWhy : "" }, "why"),
+            jsx85("span", { className: "fim-why fw-why", id: "fim-generate-why", "data-testid": "fim-generate-why", role: "status", title: whyShown || void 0, children: whyShown }, "why"),
             // E1: Generate stays Generate; during a run it queues the next one.
             // The run on the stage has its own Stop (Esc); Jobs cancels any run.
             running ? jsx85(FwButton, { large: true, icon: "stop", className: "fim-stop", "data-testid": "fim-stop", "aria-label": "Stop this run", title: "Stop this run (Esc)", onClick: () => void cancelGeneration() }, "s") : null,
-            jsxs71(GenerateButton, { type: "button", className: "fw-btn fw-btn-primary fw-btn-lg fw-generate", "data-testid": "fim-generate", disabled: !canGenerate, disabledReason: !canGenerate ? `Generate · ${generateWhy || "Write a prompt first"}` : void 0, title: running && !generateWhy ? `Queue another run (${IS_MAC ? "⌘↵" : "Ctrl+Enter"})` : generateTitle, "aria-describedby": generateWhy ? "fim-generate-why" : void 0, onClick: (event) => {
+            jsxs71(GenerateButton, { type: "button", className: "fw-btn fw-btn-primary fw-btn-lg fw-generate", "data-testid": "fim-generate", disabled: !canGenerate, disabledReason: !canGenerate ? `Generate · ${generateWhy || "No prompt"}` : void 0, title: running && !generateWhy ? `Queue another run (${IS_MAC ? "⌘↵" : "Ctrl+Enter"})` : generateTitle, "aria-describedby": generateWhy ? "fim-generate-why" : void 0, onClick: (event) => {
               if (event && event.detail > 1) return;
               submitGeneration();
             }, children: [
@@ -89647,10 +94382,10 @@ function linkOps(picture, target) {
 }
 var unlinkOps = (sound2) => ({ ops: [{ op: "unlink_sound", clip: sound2.id }], label: `Unlink ${sound2.label}` });
 function placeOps(model, source, track, frame) {
-  const at = Math.max(0, Math.round(frame));
+  const at2 = Math.max(0, Math.round(frame));
   return {
-    ops: [{ op: "place_audio", clip: { source: { kind: source.kind === "media" ? "media" : "take", ref: source.ref }, label: String(source.label || "").slice(0, 200) }, at_frame: at, track: track.id }],
-    label: `Place ${source.label || "sound"} on ${track.id} at ${formatTimecode(model.startTc + at, model.rate)}`
+    ops: [{ op: "place_audio", clip: { source: { kind: source.kind === "media" ? "media" : "take", ref: source.ref }, label: String(source.label || "").slice(0, 200) }, at_frame: at2, track: track.id }],
+    label: `Place ${source.label || "sound"} on ${track.id} at ${formatTimecode(model.startTc + at2, model.rate)}`
   };
 }
 function linkedSound(model, pictureId) {
@@ -90011,9 +94746,10 @@ function SoundHead({ track, edit }) {
       track.soundRole === "music" && edit && edit.commit ? jsx89(DuckControl, { track, edit }, "duck") : null
     ] }, "t"),
     jsxs75("span", { className: "tlv-togs", children: [
+      // w39-p2-icons3 item 1: one tooltip form with Audio's stems ("Mute <name>" / "Solo <name>"; aria-pressed carries the state).
       jsx89(MuteSoloPair, {
-        mute: side("mute", track.mute, track.mute ? `${track.id} is muted: click to hear it` : `Mute ${track.id} in the preview and the film`, `Mute ${track.id}`),
-        solo: side("solo", track.solo, track.solo ? `${track.id} is solo: click to hear every track` : `Solo ${track.id} (only solo tracks sound)`, `Solo ${track.id}`)
+        mute: side("mute", track.mute, `Mute ${track.id}`, `Mute ${track.id}`),
+        solo: side("solo", track.solo, `Solo ${track.id}`, `Solo ${track.id}`)
       }, "ms"),
       jsx89("button", {
         type: "button",
@@ -90191,10 +94927,10 @@ function SoundAdd({ model, edit, project, playhead }) {
     ] }, "m") : null
   ] });
 }
-async function addSoundFiles(project, { paths, role, track, at, expectedRevision }) {
+async function addSoundFiles(project, { paths, role, track, at: at2, expectedRevision }) {
   const projectRef = musicProjectRef(project);
   if (!projectRef) throw new Error("No project open");
-  const place2 = { expected_revision: expectedRevision, at_frame: Math.max(0, Math.round(at || 0)), by: "artist", ...track ? { track } : { role: role || "dialogue" } };
+  const place2 = { expected_revision: expectedRevision, at_frame: Math.max(0, Math.round(at2 || 0)), by: "artist", ...track ? { track } : { role: role || "dialogue" } };
   const out = await rest("/projects/timeline/audio/add", { method: "POST", body: { project_ref: projectRef, paths, place: place2 }, timeoutMs: 3e5 });
   if (!out || out.error) {
     const e = new Error(out && out.error && out.error.message || "The sound could not be added.");
@@ -90833,7 +95569,7 @@ function AudioModeSeg({ mode, onMode }) {
 }
 
 // desktop/film-suite/src/media/column/media-counts.js
-var IMPORT_TARGET_ID = "filmsuite-import-v1";
+var IMPORT_TARGET_ID2 = "filmsuite-import-v1";
 var COUNT_BINS = ["all", "kept", "cut", "uncut", "imported", "running", "failed", "rejected"];
 var COUNT_TYPES = ["image", "video", "audio"];
 var JOB_COUNT_BINS = ["running", "failed"];
@@ -90844,7 +95580,7 @@ function inCountBin(item, bin, inCut, showRejected = false) {
   if (bin === "kept") return Boolean(item.kept);
   if (bin === "cut") return Boolean(inCut(item));
   if (bin === "uncut") return !inCut(item);
-  if (bin === "imported") return item.targetId === IMPORT_TARGET_ID;
+  if (bin === "imported") return item.targetId === IMPORT_TARGET_ID2;
   return false;
 }
 function mediaCounts({ items = [], inCut = () => false, jobs = [], server = null, complete = true, showRejected = false, bin = "all", types: types2 = COUNT_TYPES } = {}) {
@@ -90867,11 +95603,11 @@ function mediaCounts({ items = [], inCut = () => false, jobs = [], server = null
   bins.failed = flight.filter((job) => job.state === "failed").length;
   if (server && Number.isInteger(server.running)) bins.running = server.running;
   if (server && Number.isInteger(server.failed)) bins.failed = server.failed;
-  const at = COUNT_BINS.includes(bin) ? bin : "all";
-  const inThis = JOB_COUNT_BINS.includes(at) ? flight.filter((job) => at === "running" ? job.state !== "failed" : job.state === "failed") : list.filter((item) => inCountBin(item, at, cutOf, showRejected));
+  const at2 = COUNT_BINS.includes(bin) ? bin : "all";
+  const inThis = JOB_COUNT_BINS.includes(at2) ? flight.filter((job) => at2 === "running" ? job.state !== "failed" : job.state === "failed") : list.filter((item) => inCountBin(item, at2, cutOf, showRejected));
   const typeCounts = Object.fromEntries(COUNT_TYPES.map((kind) => [kind, inThis.filter((entry2) => entry2.kind === kind).length]));
   const chosen = COUNT_TYPES.filter((kind) => (Array.isArray(types2) && types2.length ? types2 : COUNT_TYPES).includes(kind));
-  const total = bins[at];
+  const total = bins[at2];
   const localTotal = inThis.length;
   const shown = localTotal === total ? chosen.reduce((sum2, kind) => sum2 + typeCounts[kind], 0) : chosen.length === COUNT_TYPES.length ? total : chosen.reduce((sum2, kind) => sum2 + typeCounts[kind], 0);
   return { bins, types: typeCounts, total, shown };
@@ -90976,13 +95712,13 @@ function useMediaLibrary(ownerScope, view, { visible = true } = {}) {
   const more = Boolean(last2 && last2.more && last2.next);
   const loadMore = async () => {
     if (!more || older.loading) return;
-    const at = key;
-    setOlder({ key: at, pages, loading: true, issue: "" });
+    const at2 = key;
+    setOlder({ key: at2, pages, loading: true, issue: "" });
     try {
       const page = await readPage(ownerScope, view, last2.next);
-      if (keyRef.current === at) setOlder({ key: at, pages: [...pages, page], loading: false, issue: "" });
+      if (keyRef.current === at2) setOlder({ key: at2, pages: [...pages, page], loading: false, issue: "" });
     } catch (error) {
-      if (keyRef.current === at) setOlder({ key: at, pages, loading: false, issue: "More results could not be read" });
+      if (keyRef.current === at2) setOlder({ key: at2, pages, loading: false, issue: "More results could not be read" });
     }
   };
   const seen = /* @__PURE__ */ new Set();
@@ -91230,7 +95966,7 @@ function useMediaColumn({ ownerScope, feed, page, project, jobs = [], narrow, on
     }
     return out;
   }, [feed.items, rejected, rejectedOn, marks2, refs, folderSounds, sounds, page]);
-  const inBin = (item, bin2) => bin2 === "kept" ? item.kept : bin2 === "cut" ? item.inCut : bin2 === "uncut" ? !item.inCut : bin2 === "imported" ? item.targetId === IMPORT_TARGET_ID : bin2 === "rejected" ? item.rejected : JOB_BINS.includes(bin2) ? false : !item.rejected || view.showRejected;
+  const inBin = (item, bin2) => bin2 === "kept" ? item.kept : bin2 === "cut" ? item.inCut : bin2 === "uncut" ? !item.inCut : bin2 === "imported" ? item.targetId === IMPORT_TARGET_ID2 : bin2 === "rejected" ? item.rejected : JOB_BINS.includes(bin2) ? false : !item.rejected || view.showRejected;
   const jobList = (Array.isArray(jobs) ? jobs : []).filter((job) => job && !base2.some((item) => item.id === job.jobId));
   const activeJobs = jobList.filter((job) => (job.state === "running" || job.state === "queued") && !job.resentBy);
   const failedJobs = jobList.filter((job) => job.state === "failed" && !job.resentBy && !job.interrupted);
@@ -92254,8 +96990,8 @@ function ShotMargin({ editor, data, items, ownerScope, tick: tick2, onFrame, pla
     const cs = getComputedStyle(view.contentDOM), textRight = c.right - parseFloat(cs.paddingRight || "0") - m.left;
     const left = compact ? Math.max(textRight + 2, m.width - width - 4) : c.right - m.left + 12;
     const topOf2 = (s) => {
-      const at = view.coordsAtPos(view.state.doc.line(s.line).from);
-      return at ? at.top : view.documentTop + s.top;
+      const at2 = view.coordsAtPos(view.state.doc.line(s.line).from);
+      return at2 ? at2.top : view.documentTop + s.top;
     };
     const rows2 = editor.shots().map((s) => ({ ...s, y: Math.round(topOf2(s) - m.top), number: numberOf(s) })).filter((s) => s.id);
     setBox({ rows: rows2, left: Math.round(left), width: Math.round(width), compact, height: m.height });
@@ -92663,14 +97399,14 @@ async function renameShotLine({ shot, text: text2, editorRef, query, ownRest, pr
   const fresh = (await query.refetch()).data;
   const scene = fresh && fresh.state && fresh.state.scenes[shot.scene];
   const mine = (fresh && fresh.derived && fresh.derived.shots || []).filter((s) => s.scene === shot.scene);
-  const at = mine.findIndex((s) => s.id === shot.id);
-  if (!scene || at < 0) return refuse("script_shot_unknown", "No such shot in the script.");
-  const same3 = mine.slice(0, at).filter((s) => s.text === mine[at].text).length;
+  const at2 = mine.findIndex((s) => s.id === shot.id);
+  if (!scene || at2 < 0) return refuse("script_shot_unknown", "No such shot in the script.");
+  const same3 = mine.slice(0, at2).filter((s) => s.text === mine[at2].text).length;
   const lines = scene.text.split("\n");
   let seen = -1;
-  const index = lines.findIndex((l) => l.trim() === mine[at].text && ++seen === same3);
+  const index = lines.findIndex((l) => l.trim() === mine[at2].text && ++seen === same3);
   if (index < 0) return refuse("script_shot_unknown", "The shot line was not found in its scene.");
-  lines[index] = lines[index].replace(mine[at].text, next);
+  lines[index] = lines[index].replace(mine[at2].text, next);
   const out = await ownRest("/projects/script/scene/write", { method: "POST", body: { project_ref: projectRef, expected_revision: fresh.revision, by: "artist", scene: shot.scene, text: lines.join("\n") }, timeoutMs: 2e4 }).catch((e) => ({ error: { message: String(e && e.message || e) } }));
   if (!out || out.error) return refuse("script_conflict", "The scene changed meanwhile.");
   await query.refetch();
@@ -92683,8 +97419,8 @@ async function renameShotLine({ shot, text: text2, editorRef, query, ownRest, pr
 
 // desktop/film-suite/src/planning/planning-css.js
 var scoped = (re, scope) => FW_CSS.split("\n").filter((line) => re.test(line)).map((line) => {
-  const at = line.indexOf("{");
-  return line.slice(0, at).split(",").map((x) => scope + x.trim()).join(",") + line.slice(at);
+  const at2 = line.indexOf("{");
+  return line.slice(0, at2).split(",").map((x) => scope + x.trim()).join(",") + line.slice(at2);
 }).join("\n");
 var PLANNING_BLOCKS_CSS = scoped(/^\.fw-seg\b[^{]*\{[^}]*\}$/, ".fss2-top ") + "\n" + scoped(/^\.fw-(prow|pctl|lbl|select|num)\b[^{]*\{[^}]*\}$/, ".fss2-insp ");
 var PLANNING_CSS = PLANNING_BLOCKS_CSS + `
@@ -92905,6 +97641,7 @@ function PrevizView({ data, plan, scene, pv, active, onActive, playT, setPlayT, 
   }, []);
   const [figs, setFigs] = useState([]);
   const [lightId, setLightId] = useState("");
+  const [kit, setKit] = useState("");
   const [horizon, setHorizon] = useState(null);
   const [face, setFace] = useState(null);
   const proposal = (pv.doc && pv.doc.proposals || []).filter((p) => p.state === "open").slice(-1)[0] || null;
@@ -92912,7 +97649,7 @@ function PrevizView({ data, plan, scene, pv, active, onActive, playT, setPlayT, 
   const total = shots.reduce((s, x) => s + x.dur, 0) || 1;
   const sig = JSON.stringify([set, shot && shot.camera, shot && shot.id]);
   const sceneNumber = (data.derived && data.derived.numbers || {})[scene] || "";
-  const shownTags = rect ? figs.filter((f2) => f2.front && f2.head.x1 >= rect.x && f2.head.x0 <= rect.x + rect.w && f2.head.y1 >= rect.y && f2.head.y0 <= rect.y + rect.h && !hidden2(f2, figs)) : [];
+  const shownTags = rect ? figs.filter((f2) => f2.front && !f2.covered && f2.head.x1 >= rect.x && f2.head.x0 <= rect.x + rect.w && f2.head.y1 >= rect.y && f2.head.y0 <= rect.y + rect.h && !hidden2(f2, figs)) : [];
   const tagPlaces = rect ? placeTags(shownTags, rect) : /* @__PURE__ */ new Map();
   return jsxs84("div", { className: cn37("fpv", line && "has-line"), tabIndex: -1, onKeyDown: (e) => keepKey(e, () => {
     if (shot && onKeep) void onKeep(shot.id);
@@ -92928,6 +97665,7 @@ function PrevizView({ data, plan, scene, pv, active, onActive, playT, setPlayT, 
         deps: [sig, size.w, size.h, playT],
         draw: (R3, c) => R3.viewInto(c, set, { id: shot.id, camera: shot.camera }, playT),
         onReady: (out) => {
+          setKit(out && out.kit || "");
           setRect(out && out.rect);
           setHorizon(out && out.horizon || null);
           setFace(out && out.face || null);
@@ -92937,7 +97675,7 @@ function PrevizView({ data, plan, scene, pv, active, onActive, playT, setPlayT, 
       }, "c") : null,
       // w23-pvlook (b) (Blender passepartout, Unreal Constrain Aspect Ratio): an opaque matte outside the gate, its
       // opacity the set's Matte (the artist's, default 0.92)
-      rect ? jsxs84("div", { className: "fpv-frame", "data-testid": "previz-frame", "data-light": lightId || void 0, "data-horizon": horizon ? JSON.stringify(horizon) : void 0, "data-face": face ? JSON.stringify(face) : void 0, "data-matte": String(matteOf(set)), "data-figures": JSON.stringify(figs.map((f2) => ({ id: f2.id, name: f2.name, front: f2.front, head: f2.head, feet: f2.feet, shadow: f2.shadow, floor: f2.floor, cast: f2.cast, litFloor: f2.litFloor, lit: f2.lit, shade: f2.shade, edge: f2.edge, band: f2.band, ring: f2.ring, wallCast: f2.wallCast, wallLit: f2.wallLit, body: f2.body, parts: f2.parts, depth: f2.depth }))), style: { left: rect.x, top: rect.y, width: rect.w, height: rect.h, "--fpv-matte": `${Math.round(matteOf(set) * 100)}%` }, children: [
+      rect ? jsxs84("div", { className: "fpv-frame", "data-testid": "previz-frame", "data-light": lightId || void 0, "data-kit": kit || void 0, "data-horizon": horizon ? JSON.stringify(horizon) : void 0, "data-face": face ? JSON.stringify(face) : void 0, "data-matte": String(matteOf(set)), "data-figures": JSON.stringify(figs.map((f2) => ({ id: f2.id, name: f2.name, front: f2.front, head: f2.head, feet: f2.feet, shadow: f2.shadow, floor: f2.floor, cast: f2.cast, litFloor: f2.litFloor, lit: f2.lit, shade: f2.shade, edge: f2.edge, band: f2.band, ring: f2.ring, wallCast: f2.wallCast, wallLit: f2.wallLit, body: f2.body, parts: f2.parts, depth: f2.depth }))), style: { left: rect.x, top: rect.y, width: rect.w, height: rect.h, "--fpv-matte": `${Math.round(matteOf(set) * 100)}%` }, children: [
         jsx101("span", { className: "fpv-third fpv-v1" }, "a"),
         jsx101("span", { className: "fpv-third fpv-v2" }, "b"),
         jsx101("span", { className: "fpv-third fpv-h1" }, "c"),
@@ -92947,8 +97685,8 @@ function PrevizView({ data, plan, scene, pv, active, onActive, playT, setPlayT, 
       // never sits on the frame line): above the head inside the frame when it fits, else beside the head, else in the
       // matte just outside the frame's top edge.
       ...shownTags.map((f2) => {
-        const at = tagPlaces.get(f2.id);
-        return jsx101("span", { className: "fpv-tag", "data-testid": "previz-tag", "data-id": f2.id, "data-place": at.place, "data-user-text": "1", style: { left: at.x, top: at.y }, children: f2.name }, "tag" + f2.id);
+        const at2 = tagPlaces.get(f2.id);
+        return jsx101("span", { className: "fpv-tag", "data-testid": "previz-tag", "data-id": f2.id, "data-place": at2.place, "data-user-text": "1", style: { left: at2.x, top: at2.y }, children: f2.name }, "tag" + f2.id);
       }),
       !shots.length ? jsx101("div", { className: "fpv-empty", "data-testid": "previz-empty", children: `Scene ${sceneNumber} · no shots` }, "e") : null
     ] }, "stage"),
@@ -93021,12 +97759,12 @@ function TopView({ set, shot, shots = [], keyName: keyName2, onCamera, onFigure,
   const mk = (kind, id, x, z, label2) => {
     const m = map.current;
     if (!m) return null;
-    const [px, py] = m.toPx(x, z);
+    const [px2, py2] = m.toPx(x, z);
     return jsx101("span", {
       className: cn37("fpv-mk", "is-" + kind),
       "data-testid": `previz-top-${kind}`,
       "data-id": id,
-      style: { left: `${px / 256 * 100}%`, top: `${py / 176 * 100}%` },
+      style: { left: `${px2 / 256 * 100}%`, top: `${py2 / 176 * 100}%` },
       title: label2,
       onPointerDown: (e) => {
         e.preventDefault();
@@ -93063,30 +97801,30 @@ function TopView({ set, shot, shots = [], keyName: keyName2, onCamera, onFigure,
       // (the active one bright), each figure as its initial with a facing tick.
       ...frame.boxes.map((b) => {
         const [x, z] = live2("box", b.id, b.pos[0], b.pos[2]);
-        const [px, py] = map.current.toPx(x, z), sc = map.current.scale;
-        return jsx101("rect", { className: cn37("fpv-p-box", /wall/i.test(b.name) && "is-wall"), "data-testid": "previz-plan-box", x: px - b.size[0] * sc / 2, y: py - b.size[2] * sc / 2, width: Math.max(1.5, b.size[0] * sc), height: Math.max(1.5, b.size[2] * sc), transform: `rotate(${-(b.yaw || 0)} ${px} ${py})` }, "b" + b.id);
+        const [px2, py2] = map.current.toPx(x, z), sc = map.current.scale;
+        return jsx101("rect", { className: cn37("fpv-p-box", /wall/i.test(b.name) && "is-wall"), "data-testid": "previz-plan-box", x: px2 - b.size[0] * sc / 2, y: py2 - b.size[2] * sc / 2, width: Math.max(1.5, b.size[0] * sc), height: Math.max(1.5, b.size[2] * sc), transform: `rotate(${-(b.yaw || 0)} ${px2} ${py2})` }, "b" + b.id);
       }),
       ...shots.filter((o) => o.camera).map((o) => {
         const on = o.id === (shot && shot.id), ok4 = on ? k : o.camera.start;
         const [x0, z0] = on ? [cx, cz] : [ok4.pos[0], ok4.pos[2]], [x1, z1] = on ? [tx2, tz] : [ok4.at[0], ok4.at[2]];
-        const [px, py] = map.current.toPx(x0, z0), [ax, ay] = map.current.toPx(x1, z1);
-        const ang = Math.atan2(ay - py, ax - px), half = Math.atan(18 / (Number(o.camera.lens_mm) || 35)), L = Math.max(12, Math.min(on ? 34 : 22, Math.hypot(ax - px, ay - py) - 10));
-        const pts = [[px, py], [px + Math.cos(ang - half) * L, py + Math.sin(ang - half) * L], [px + Math.cos(ang + half) * L, py + Math.sin(ang + half) * L]];
+        const [px2, py2] = map.current.toPx(x0, z0), [ax, ay] = map.current.toPx(x1, z1);
+        const ang = Math.atan2(ay - py2, ax - px2), half = Math.atan(18 / (Number(o.camera.lens_mm) || 35)), L = Math.max(12, Math.min(on ? 34 : 22, Math.hypot(ax - px2, ay - py2) - 10));
+        const pts = [[px2, py2], [px2 + Math.cos(ang - half) * L, py2 + Math.sin(ang - half) * L], [px2 + Math.cos(ang + half) * L, py2 + Math.sin(ang + half) * L]];
         return jsxs84("g", { className: cn37("fpv-p-cam", on && "is-on"), "data-testid": "previz-plan-camera", "data-shot": o.id, "data-number": o.number, children: [
           jsx101("polygon", { className: "fpv-p-fr", points: pts.map((p) => p.join(",")).join(" ") }, "f"),
-          on ? null : jsx101("rect", { className: "fpv-p-body", x: px - 3.5, y: py - 3.5, width: 7, height: 7 }, "b"),
+          on ? null : jsx101("rect", { className: "fpv-p-body", x: px2 - 3.5, y: py2 - 3.5, width: 7, height: 7 }, "b"),
           // pv3d.js: every camera has its body
-          jsx101("text", { className: "fpv-p-num", x: px - Math.cos(ang) * 13, y: py - Math.sin(ang) * 13, children: o.number }, "n")
+          jsx101("text", { className: "fpv-p-num", x: px2 - Math.cos(ang) * 13, y: py2 - Math.sin(ang) * 13, children: o.number }, "n")
         ] }, "c" + o.id);
       }),
       ...frame.figures.map((f2, fi) => {
         const [x, z] = live2("figure", f2.id, f2.pos[0], f2.pos[1]);
-        const [px, py] = map.current.toPx(x, z), a = (f2.yaw || 0) * Math.PI / 180;
-        const tone = "#" + figureTone(fi).toString(16).padStart(6, "0");
+        const [px2, py2] = map.current.toPx(x, z), a = (f2.yaw || 0) * Math.PI / 180;
+        const tone = "#" + figureTones(frame.figures)[fi].toString(16).padStart(6, "0");
         return jsxs84("g", { className: "fpv-p-fig", "data-testid": "previz-plan-figure", "data-id": f2.id, "data-tone": tone, children: [
-          jsx101("line", { className: "fpv-p-face", x1: px + Math.sin(a) * 7, y1: py + Math.cos(a) * 7, x2: px + Math.sin(a) * 17, y2: py + Math.cos(a) * 17 }, "l"),
-          jsx101("circle", { className: "fpv-p-dot", cx: px, cy: py, r: 7, style: { stroke: tone, strokeWidth: 2 } }, "c"),
-          jsx101("text", { className: "fpv-p-ini", x: px, y: py, children: String(f2.name || "F").trim().charAt(0).toUpperCase() }, "t")
+          jsx101("line", { className: "fpv-p-face", x1: px2 + Math.sin(a) * 7, y1: py2 + Math.cos(a) * 7, x2: px2 + Math.sin(a) * 17, y2: py2 + Math.cos(a) * 17 }, "l"),
+          jsx101("circle", { className: "fpv-p-dot", cx: px2, cy: py2, r: 7, style: { stroke: tone, strokeWidth: 2 } }, "c"),
+          jsx101("text", { className: "fpv-p-ini", x: px2, y: py2, children: String(f2.name || "F").trim().charAt(0).toUpperCase() }, "t")
         ] }, "f" + f2.id);
       }),
       cam && cam.end ? jsx101("line", { x1: map.current.toPx(cam.start.pos[0], cam.start.pos[2])[0], y1: map.current.toPx(cam.start.pos[0], cam.start.pos[2])[1], x2: map.current.toPx(cam.end.pos[0], cam.end.pos[2])[0], y2: map.current.toPx(cam.end.pos[0], cam.end.pos[2])[1], className: "fpv-path" }, "p") : null
@@ -93350,8 +98088,8 @@ function tagAt(f2, rect, name2) {
   return { x: clampX(above.x), y: rect.y - 6 - h, place: "off" };
 }
 function placeTags(list, rect) {
-  const h = 20, gap = 4, m = 8, done = [], out = /* @__PURE__ */ new Map();
-  const W2 = (name2) => String(name2 || "").length * 7.6 + 14;
+  const h = 16, gap = 4, m = 8, done = [], out = /* @__PURE__ */ new Map();
+  const W2 = (name2) => String(name2 || "").length * 7 + 10;
   const box = (c, w) => ({ x0: c.x, x1: c.x + w, y0: c.y, y1: c.y + h });
   const hit2 = (a, b) => a.x0 < b.x1 + gap && b.x0 < a.x1 + gap && a.y0 < b.y1 + gap && b.y0 < a.y1 + gap;
   const inside = (b) => b.x0 >= rect.x + m && b.x1 <= rect.x + rect.w - m && b.y0 >= rect.y + m && b.y1 <= rect.y + rect.h - m;
@@ -93361,7 +98099,14 @@ function placeTags(list, rect) {
     const heads = list.filter((o) => o !== f2).map((o) => ({ x0: o.head.x0, x1: o.head.x1, y0: o.head.y0 - (o.head.y1 - o.head.y0) * 0.06, y1: o.head.y1 }));
     const clampX = (x) => Math.max(rect.x + m, Math.min(rect.x + rect.w - m - w, x));
     const hy = (f2.head.y0 + f2.head.y1) / 2;
-    const cands = [
+    const small = f2.head.y1 - f2.head.y0 < rect.h * 0.04;
+    const sides = [{ x: f2.head.x1 + 6, y: hy - h / 2, place: "beside" }, { x: f2.head.x0 - 6 - w, y: hy - h / 2, place: "beside" }];
+    const cands = small ? [
+      base2,
+      ...sides,
+      ...[1].map((k) => ({ ...base2, y: base2.y - k * (h + gap) })),
+      ...[0, 1, 2, 3].map((k) => ({ x: clampX(base2.x), y: rect.y - 6 - h - k * (h + gap), place: "off" }))
+    ] : [
       base2,
       ...[1, 2].map((k) => ({ ...base2, y: base2.y - k * (h + gap) })),
       { x: f2.head.x1 + 12, y: hy - h / 2, place: "beside" },
@@ -93391,7 +98136,7 @@ var PREVIZ_CSS = `
 .fpv-third{position:absolute}
 .fpv-v1,.fpv-v2{top:0;bottom:0;width:0;border-left:1px solid color-mix(in srgb,var(--fw-pic-hi) 14%,transparent)}.fpv-v1{left:calc(100% / 3)}.fpv-v2{left:calc(200% / 3)}
 .fpv-h1,.fpv-h2{left:0;right:0;height:0;border-top:1px solid color-mix(in srgb,var(--fw-pic-hi) 14%,transparent)}.fpv-h1{top:calc(100% / 3)}.fpv-h2{top:calc(200% / 3)}
-.fpv-tag{position:absolute;padding:2px 6px;border-radius:var(--fw-r1);background:var(--fw-scrim);color:var(--fw-on-scrim);font-size:.75rem;line-height:1rem;font-weight:600;letter-spacing:.02em;white-space:nowrap;pointer-events:none} /* w23-pvlook (e): 12 px, placed by tagAt (never on the frame line) */
+.fpv-tag{position:absolute;padding:0 4px;border-radius:var(--fw-r1);background:var(--fw-scrim);color:var(--fw-on-scrim);font-size:.6875rem;line-height:.9375rem;font-weight:500;letter-spacing:.02em;white-space:nowrap;pointer-events:none;opacity:.7} /* w39-p2-previz2: 11 px, a quieter scrim; was 12 px */ /* w23-pvlook (e): 12 px, placed by tagAt (never on the frame line) */
 .fw-prow .fw-pctl > .fw-num.fpv-unit-after{width:112px}.fpv-unit-after .fw-num-pre{position:static;order:2;padding:0 4px 0 2px;display:flex;align-items:center}.fpv-unit-after input{order:1}.fpv-unit-after.has-pre input{padding-left:6px;padding-right:0}.fpv-unit-after button{order:3}
 .fpv-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--ui-text-secondary)}
 .fpv-strip{display:flex;gap:8px;padding:8px 12px 12px;overflow-x:auto;border-top:1px solid var(--fw-line);min-width:0}
@@ -93505,8 +98250,8 @@ function usePrevizWire({ data, plan, live: live2, view, shotSel, setShotSel, car
 // desktop/film-suite/src/script/page/script-hermes-did.js
 import { jsx as jsx103, jsxs as jsxs85 } from "react/jsx-runtime";
 var hhmm3 = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-var timeOf = (at) => {
-  const d = at ? new Date(at) : null;
+var timeOf = (at2) => {
+  const d = at2 ? new Date(at2) : null;
   return d && !Number.isNaN(d.getTime()) ? d : /* @__PURE__ */ new Date();
 };
 var SCENE_ID = /^s-[0-9a-f]{8}$/;
@@ -93748,11 +98493,11 @@ function ChangeActions({ editor, entry: entry2, busy: busy2, onUndo, onAccept, t
       setPos(null);
       return;
     }
-    const at = ed.actions.changeBox(entry2.change.id);
+    const at2 = ed.actions.changeBox(entry2.change.id);
     const host7 = box.parentElement.getBoundingClientRect();
     const content2 = ed.view.contentDOM.getBoundingClientRect();
     const scroller = ed.view.scrollDOM.getBoundingClientRect();
-    if (!at || at.bottom < scroller.top || at.top > scroller.bottom) {
+    if (!at2 || at2.bottom < scroller.top || at2.top > scroller.bottom) {
       setPos(null);
       return;
     }
@@ -93761,7 +98506,7 @@ function ChangeActions({ editor, entry: entry2, busy: busy2, onUndo, onAccept, t
     const cs = getComputedStyle(ed.view.contentDOM);
     const textRight = content2.right - (parseFloat(cs.paddingRight) || 0);
     const textLeft = content2.left + (parseFloat(cs.paddingLeft) || 0);
-    const mid = (at.top + at.bottom) / 2, lh = Math.max(1, at.bottom - at.top);
+    const mid = (at2.top + at2.bottom) / 2, lh = Math.max(1, at2.bottom - at2.top);
     const glyphs = [];
     const range = document.createRange();
     for (const line of ed.view.contentDOM.querySelectorAll(".cm-line")) {
@@ -93779,13 +98524,13 @@ function ChangeActions({ editor, entry: entry2, busy: busy2, onUndo, onAccept, t
       const L = host7.left + l, R3 = L + w, T = cy - h / 2, B = cy + h / 2;
       return L >= host7.left && R3 <= host7.right && T >= scroller.top && B <= scroller.bottom && !rects.some((r) => r.right > L && r.left < R3 && r.bottom > T && r.top < B);
     };
-    const rowEnd = glyphs.filter((r) => Math.abs((r.top + r.bottom) / 2 - mid) < lh / 2).reduce((m, r) => Math.max(m, r.right), at.right || content2.left);
+    const rowEnd = glyphs.filter((r) => Math.abs((r.top + r.bottom) / 2 - mid) < lh / 2).reduce((m, r) => Math.max(m, r.right), at2.right || content2.left);
     const candidates = [
       [content2.right - host7.left + gap, mid],
       [Math.min(rowEnd + gap, textRight - w) - host7.left, mid],
       [textLeft - gap - w - host7.left, mid],
-      [(at.right || textLeft) - host7.left - w / 2, at.top - h / 2 - 1],
-      [(at.right || textLeft) - host7.left - w / 2, at.bottom + h / 2 + 1]
+      [(at2.right || textLeft) - host7.left - w / 2, at2.top - h / 2 - 1],
+      [(at2.right || textLeft) - host7.left - w / 2, at2.bottom + h / 2 + 1]
     ];
     const outsideFits = content2.right - host7.left + gap + w <= host7.width - 4;
     const pick = (outsideFits ? candidates : candidates.slice(1)).find(([l, cy]) => free(l, cy)) || candidates[outsideFits ? 0 : 1];
@@ -93836,14 +98581,15 @@ var HERMES_DID_CSS = `
 import { jsx as jsx104 } from "react/jsx-runtime";
 function labelForms(label2, phrases = null) {
   const text2 = String(label2 || "");
-  const m = /^(.*?)(?: \+(\d+))?$/.exec(text2);
+  const m = /^(.*?)(?: \+(\d+)(?: edits?)?)?$/.exec(text2);
   const parts = m[1] ? m[1].split(", ") : [];
   if (parts.length > 1 && phrases && parts.every((p) => phrases.has(p))) {
     const more = Number(m[2] || 0);
+    const count3 = (n) => n ? ` +${n} edit${n === 1 ? "" : "s"}` : "";
     return parts.map((_, i2) => {
       const k = parts.length - i2;
       const rest2 = more + parts.length - k;
-      return parts.slice(0, k).join(", ") + (rest2 ? ` +${rest2}` : "");
+      return parts.slice(0, k).join(", ") + count3(rest2);
     });
   }
   const words2 = text2.split(" ");
@@ -93853,7 +98599,7 @@ function labelForms(label2, phrases = null) {
 }
 function lineForms(head2, label2, segments = [], phrases = null) {
   const segs = segments.filter(Boolean), n = segs.length, out = [];
-  for (let k = n; k >= 1; k -= 1) out.push(`${head2}${label2}: ${segs.slice(0, k).join(" · ")}${k < n ? ` · +${n - k} more` : ""}`);
+  for (let k = n; k >= 1; k -= 1) out.push(`${head2}${label2}: ${segs.slice(0, k).join(" · ")}${k < n ? ` · +${n - k} more change${n - k === 1 ? "" : "s"}` : ""}`);
   for (const form of labelForms(label2, phrases)) out.push(head2 + form);
   if (head2) out.push(head2.replace(/\s*·\s*$/, ""));
   return out;
@@ -93965,8 +98711,8 @@ function useBarPopovers() {
 // desktop/film-suite/src/script/page/script-write.js
 var loadEditor = () => Promise.resolve().then(() => (init_editor(), editor_exports));
 var INSPECTOR_BLOCKS_CSS = FW_CSS.split("\n").filter((line) => /^\.fw-(ins|insp-b|sec|dtabs|tabs?|grow|btn|ic)\b[^{]*\{[^}]*\}$/.test(line)).map((line) => {
-  const at = line.indexOf("{");
-  return line.slice(0, at).split(",").map((x) => ".fss2-insp " + x.trim()).join(",") + line.slice(at);
+  const at2 = line.indexOf("{");
+  return line.slice(0, at2).split(",").map((x) => ".fss2-insp " + x.trim()).join(",") + line.slice(at2);
 }).join("\n");
 var SCRIPT_WRITE_CSS2 = SCRIPT_WRITE_CSS + HERMES_DID_CSS + HISTORY_ROW_CSS + WHOLE_TEXT_CSS + SCRIPT_PANES_CSS + INSPECTOR_BLOCKS_CSS + INSPECTOR_SCRIPT_CSS + PLANNING_CSS + ELEMENTS_CSS + PREVIZ_CSS;
 var TYPEWRITER_KEY = "filmSuite.script.typewriter";
@@ -94405,7 +99151,7 @@ function SceneTab({ data, sid, ownerScope, items, onSynopsis, onJumpShot, onName
       testid: "script-insp-lines-head",
       value: lines.length ? String(lines.length) : "none",
       children: lines.length ? jsx105("ul", { className: "fw-ins-list fss2-ilines", "aria-label": "Lines", "data-testid": "script-insp-lines", children: lines.map((line) => {
-        const tip = `${line.character}${line.direction ? " " + line.direction : ""} · ${line.id}`;
+        const tip = `${line.character}${line.direction ? " " + line.direction : ""}`;
         return jsxs86("li", { className: "fw-ins-li fss2-iline", "data-testid": "script-insp-line", "data-line": line.id, title: tip, children: [
           jsx105("span", { className: "fw-ins-li-n fss2-line-who", "data-user-text": "1", title: tip, children: line.character }, "w"),
           jsx105(TwoLines, { className: "fw-ins-li-t fss2-line-text", text: line.text }, "t")
@@ -94414,13 +99160,22 @@ function SceneTab({ data, sid, ownerScope, items, onSynopsis, onJumpShot, onName
     }, "lines")
   ]);
 }
+var SCRIPT_FORMATS = { fountain: "Fountain", fdx: "Final Draft" };
+function scriptRowWords(label2) {
+  const m = /^import (fountain|fdx)\b\s*(.*)$/.exec(label2);
+  if (m) {
+    const file = m[2].trim();
+    return `Imported ${SCRIPT_FORMATS[m[1]]}${file && file !== "sample" ? " · " + file : ""}`;
+  }
+  return /^[a-z]/.test(label2) ? label2[0].toUpperCase() + label2.slice(1) : label2;
+}
 function HistoryTab({ rows, current: current2, onRestore, busy: busy2, review: review2 = null }) {
   if (rows === null) return jsx105("div", { className: "fw-insp-b fw-ins-b fss2-insp-pane", role: "tabpanel", "aria-busy": "true" });
   return jsx105("div", { className: "fw-insp-b fw-ins-b fss2-insp-pane", role: "tabpanel", children: jsx105("ul", { className: "fw-hist fss2-hist", "data-testid": "script-history", children: rows.slice(0, 100).map((r, k) => {
     const newest = r.revision === current2;
     const before = rows[k + 1];
     const act = newest ? before ? { word: "Undo", to: before.revision, tip: `Undo: back to version ${before.revision}` } : null : { word: "Restore", to: r.revision, tip: "Bring this version back (Undo in this list takes it back)" };
-    const label2 = String(r.label || "Edit").replace(/^Hermes:\s*/, "");
+    const label2 = scriptRowWords(String(r.label || "Edit").replace(/^Hermes:\s*/, ""));
     const open = Boolean(review2 && review2.revision === r.revision && r.by === "hermes");
     return jsx105(HistoryRow, {
       by: r.by === "hermes" ? "hermes" : "artist",
@@ -94458,9 +99213,9 @@ function framePrompt(scene, shot) {
 }
 function previousFrame(data, shot, items, order) {
   const shots = ((order && order.length ? order : data.derived && data.derived.shots) || []).filter((s) => s.id && s.scene === shot.scene);
-  const at = shots.findIndex((s) => s.id === shot.id);
-  if (at <= 0) return null;
-  const pic = shotPicture(items, shots[at - 1].id);
+  const at2 = shots.findIndex((s) => s.id === shot.id);
+  if (at2 <= 0) return null;
+  const pic = shotPicture(items, shots[at2 - 1].id);
   return pic && pic.kept ? pic : null;
 }
 function startFrame({ data, shot, existing = [], order = null }) {
@@ -94794,10 +99549,10 @@ function ScriptWrite({ project, projectRef, query, title, titleSource = "", visi
     if (!ed) return;
     if (name2 ? ed.actions.goToCue(sid, name2) : ed.actions.goToScene(sid)) ed.view.focus();
   };
-  const move2 = async (sids, at) => {
+  const move2 = async (sids, at2) => {
     if (editorRef.current) await editorRef.current.flush();
     const before = Math.max(data.revision, editorRef.current ? editorRef.current.sync().revision : 0);
-    const out = await ownRest("/projects/script/move", { method: "POST", body: { project_ref: projectRef, expected_revision: before, by: "artist", items: Array.isArray(sids) ? sids : [sids], at }, timeoutMs: 2e4 }).catch((e) => ({ error: { message: String(e && e.message || e) } }));
+    const out = await ownRest("/projects/script/move", { method: "POST", body: { project_ref: projectRef, expected_revision: before, by: "artist", items: Array.isArray(sids) ? sids : [sids], at: at2 }, timeoutMs: 2e4 }).catch((e) => ({ error: { message: String(e && e.message || e) } }));
     if (!out || out.error) {
       onError("The scene could not be moved; the script changed meanwhile.");
       return;
@@ -94975,7 +99730,7 @@ function ScriptWrite({ project, projectRef, query, title, titleSource = "", visi
       ] }, "more"),
       jsx105("button", { type: "button", className: "fw-btn fw-btn-ghost fw-btn-icon fss2-narrow fss2-insp-btn", "aria-pressed": inspShown, onClick: () => setInspector(!inspShown), "data-testid": "script-show-scene", "aria-label": "Scene inspector", title: "Scene inspector: Scene · History (Ctrl+[)", children: jsx105(FwIcon, { name: "panel-r" }) }, "ss")
     ] }, "top"),
-    jsx105(SceneList, { rows, current: caret.scene, onJump: jump, onMove: (sid, at) => void move2(sid, at), review: hermes.reviewScenes }, "list"),
+    jsx105(SceneList, { rows, current: caret.scene, onJump: jump, onMove: (sid, at2) => void move2(sid, at2), review: hermes.reviewScenes }, "list"),
     jsx105("div", { className: "fss2-desk", ref: deskRef, hidden: view !== "write", "data-element": caret.element || "" }, "desk"),
     pvw.centre(Boolean(hermes.entry || pvw.hasLine)),
     pvw.line,
@@ -94994,7 +99749,7 @@ function ScriptWrite({ project, projectRef, query, title, titleSource = "", visi
     }, "board") : null,
     hermes.entry && !pvw.hasLine ? jsx105(HermesDidLine, { entry: hermes.entry, busy: hermes.busy, error: hermes.error, onUndoAll: hermes.undoAll, onAcceptAll: hermes.acceptAll, onGo: hermes.go }, "hermes") : null,
     hermes.entry && view === "write" ? jsx105(ChangeActions, { editor: editorOn, entry: hermes.entry, busy: hermes.busy, onUndo: () => hermes.undoOne(), onAccept: () => hermes.accept(), tick: layoutTick }, "rev") : null,
-    focus ? null : jsx105(SceneStrip, { rows, current: caret.scene, onMove: (sids, at) => void move2(sids, at), shots: data.derived && data.derived.shots || [], items: shotFeed.items || [], plan: shotPlan.plan, ownerScope, onJump: jump }, "strip"),
+    focus ? null : jsx105(SceneStrip, { rows, current: caret.scene, onMove: (sids, at2) => void move2(sids, at2), shots: data.derived && data.derived.shots || [], items: shotFeed.items || [], plan: shotPlan.plan, ownerScope, onJump: jump }, "strip"),
     shotsOn && !focus && view === "write" ? jsx105(ShotMargin, { editor: editorOn, data, items: shotFeed.items || [], ownerScope, tick: layoutTick, onFrame: (row2) => void frame(row2), plan: shotPlan.plan, fallback: shotPicture }, "shots") : null,
     jsx105(Inspector, { data, previz: pvw.on ? pvw.inspector : null, sid: view === "board" && !shotSel ? null : caret.scene, ownerScope, items: shotFeed.items || [], tab: tab2, onTab: setTab, history: history2, review: hermes.review, onRestore: (target) => void restoreTo(target), restoring, onSynopsis: (sid, text2) => void synopsis(sid, text2), onJumpShot: jumpShot, onName: jumpName, onHide: () => setInspector(false), shot: (data.derived && data.derived.shots || []).find((s) => s.id === shotSel) || null, plan: shotPlan.plan, onPlanWrite: (changes) => void shotPlan.write(changes), els, onRename: (shot, text2) => renameShotLine({ shot, text: text2, editorRef, query, ownRest, projectRef, own: own2 }) }, "insp"),
     ...sidePanes.splitters
@@ -95121,7 +99876,7 @@ function ScriptPage({ project, query, onOpenProject = null, visible = true }) {
     const [path] = await pickPaths({ title: "Import script", filters: [{ name: "Screenplay", extensions: ["fountain", "fdx", "spmd", "txt"] }] });
     if (!path) return;
     const format = /\.fdx$/i.test(path) ? "fdx" : "fountain";
-    const name2 = String(path).split(/[\\/]/).pop().replace(/\.[^.]+$/, "").slice(0, 120);
+    const name2 = String(path).split(/[\\/]/).pop().slice(0, 120);
     await run("import", async () => {
       const text2 = await readTextFile(path);
       return rest("/projects/script/import", { method: "POST", timeoutMs: 6e4, body: { project_ref: ref, expected_revision: revision, by: "artist", format, text: text2, name: name2 } });
@@ -95369,7 +100124,7 @@ function suggestionsFor(text2, references, characters2) {
   return out.slice(0, 8);
 }
 var scriptCharacters = (data) => (data && data.derived && data.derived.characters || []).map((c) => c && c.name).filter((n) => typeof n === "string" && n);
-function ReferenceNamer({ at, item, project, script, onClose, onNamed }) {
+function ReferenceNamer({ at: at2, item, project, script, onClose, onNamed }) {
   const refs = useValue23($references);
   const [text2, setText] = useState("");
   const [active, setActive] = useState(-1);
@@ -95422,7 +100177,7 @@ function ReferenceNamer({ at, item, project, script, onClose, onNamed }) {
     }
   };
   const listId = "fmc-ref-list";
-  return jsxs89("div", { ref: box, className: "fmc-menu fmc-refbox", role: "dialog", "aria-label": "Use as reference", "data-testid": "media-ref-namer", style: { left: at.x, top: at.y }, children: [
+  return jsxs89("div", { ref: box, className: "fmc-menu fmc-refbox", role: "dialog", "aria-label": "Use as reference", "data-testid": "media-ref-namer", style: { left: at2.x, top: at2.y }, children: [
     jsx108("input", {
       ref: input,
       type: "text",
@@ -95751,7 +100506,7 @@ function mediaActionButton(icons8, { key, icon, className, children, title, ...r
   return jsxs91("button", { type: "button", className: "fw-btn fw-btn-ghost fw-btn-icon fsp-lb-act", title, "aria-label": rest2["aria-label"] || children, ...rest2, children: [jsx110(FwIcon, { name: icon }, "i"), jsx110("span", { className: "fw-sr", children }, "t")] }, key);
 }
 function MediaFileActions({ file, onAction, onOpenLarge, prefix = "media-file", icons: icons8 = false }) {
-  const canReveal = Boolean(bridge() && bridge().revealPath);
+  const canReveal = canRevealPath();
   const toReferences = useValue24($shootTakesReferences);
   const cont = mediaFileContinuation(file);
   const tooLong = file.kind === "video" && cont.state === "no";
@@ -95766,8 +100521,8 @@ function MediaFileActions({ file, onAction, onOpenLarge, prefix = "media-file", 
       file.kind === "video" && cont.state === "yes" && notThisModel ? mediaActionButton(icons8, { key: "co", icon: "cont", className: "fsp-m-btn is-primary fw-b", "data-testid": prefix + "-continue", "data-why": "model", disabled: true, title: notThisModel, "aria-label": `Continue from this video (${notThisModel})`, children: "Continue from this video" }) : null,
       file.kind === "video" && cont.state === "yes" && !notThisModel ? mediaActionButton(icons8, { key: "co", icon: "cont", className: "fsp-m-btn is-primary fw-b", "data-testid": prefix + "-continue", title: "Continue this video on the Video page (prompt kept)", onClick: () => onAction("continuation", file), children: "Continue from this video" }) : null,
       file.kind === "video" && (cont.state === "checking" || cont.state === "unknown") ? mediaActionButton(icons8, { key: "co", icon: "cont", className: "fsp-m-btn is-primary fw-b", "data-testid": prefix + "-continue", "data-wait": cont.state, disabled: true, title: waitTitle, "aria-label": `Continue from this video (${cont.state === "checking" ? "checking the video length" : "length unknown"})`, children: "Continue from this video" }) : null,
-      onOpenLarge ? mediaActionButton(icons8, { key: "ol", icon: "fit", className: "fsp-m-btn fw-b", "data-testid": prefix + "-large", title: "Large view (← → files)", onClick: onOpenLarge, children: "Open large" }) : null,
-      canReveal ? mediaActionButton(icons8, { key: "rv", icon: "folder", className: "fsp-m-btn fw-b", "data-testid": prefix + "-reveal", title: "Show this file in its folder", onClick: () => onAction("reveal", file), children: "Show in folder" }) : null
+      onOpenLarge ? mediaActionButton(icons8, { key: "ol", icon: "expand", className: "fsp-m-btn fw-b", "data-testid": prefix + "-large", title: "Large view (← → files)", onClick: onOpenLarge, children: "Open large" }) : null,
+      canReveal ? mediaActionButton(icons8, { key: "rv", icon: "reveal", className: "fsp-m-btn fw-b", "data-testid": prefix + "-reveal", title: "Show this file in its folder", onClick: () => onAction("reveal", file), children: "Show in folder" }) : null
     ] }, "a"),
     notThisModel ? jsx110("p", { className: "fsp-m-hint", "data-testid": prefix + "-continue-why", children: `${notThisModel}.` }, "cw") : null,
     tooLong ? jsx110("p", { className: "fsp-m-hint", "data-testid": prefix + "-nocontinue", children: `Continue takes videos up to ${CONTINUATION_MAX_SECONDS} s and ${formatBytes(MAX_CONTINUATION_BYTES)}; this one is ${why.join(" and ")}.` }, "n") : null,
@@ -95800,16 +100555,16 @@ function MediaFolderBar({ folders, now, confirmRoot, onAskRemove, onRemove, onCa
   const [allShown, setAllShown] = useState(false);
   const shownRoots = allShown || roots.length <= MEDIA_FOLDER_PILLS ? roots : roots.slice(0, MEDIA_FOLDER_PILLS);
   const hidden3 = roots.length - shownRoots.length;
-  const when = (at) => {
-    const ms = Date.parse(at);
+  const when = (at2) => {
+    const ms = Date.parse(at2);
     return Number.isFinite(ms) ? relativeTime4(ms, Math.max(now, ms)) : "time not recorded";
   };
   return jsxs91("section", { className: "fsp-m-folders", "data-testid": "media-folders", "aria-label": "Your folders", children: [
     jsxs91("ul", { className: "fsp-m-fl", children: [
       ...shownRoots.map((root) => {
-        const at = addedAt[root];
+        const at2 = addedAt[root];
         const song = typeof music2[root] === "string" ? music2[root] : "";
-        const origin = song ? `Added for Music: ${song}` : at ? `Added ${formatMediaAuditTime(at)}` : "Added before changes were recorded";
+        const origin = song ? `Added for Music: ${song}` : at2 ? `Added ${formatMediaAuditTime(at2)}` : "Added before changes were recorded";
         const gone2 = isOffline(offline, root);
         return jsxs91("li", { className: cn39("fsp-m-fold", song && "is-music"), "data-testid": "media-folder", "data-root": root, "data-origin": song ? "music" : "artist", "data-state": gone2 ? "offline" : "online", title: gone2 ? `Offline · ${root}` : `${root}
 ${origin}`, children: [
@@ -95978,20 +100733,20 @@ function filePosterOf(cut2, files) {
   if (!p || p.kind !== "media" || !files) return null;
   return files.get(p.ref) || null;
 }
-function useKeepInside(ref, at) {
-  const [pos2, setPos] = useState(at);
+function useKeepInside(ref, at2) {
+  const [pos2, setPos] = useState(at2);
   useLayoutEffect(() => {
     const el = ref.current, col = el && el.closest('[data-testid="media-column"]');
     if (!el) return;
     const box = col ? col.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
     const r = el.getBoundingClientRect();
-    setPos({ x: Math.max(box.left + 4, Math.min(at.x, box.right - r.width - 4)), y: Math.max(box.top + 4, Math.min(at.y, box.bottom - r.height - 4)) });
-  }, [at.x, at.y]);
+    setPos({ x: Math.max(box.left + 4, Math.min(at2.x, box.right - r.width - 4)), y: Math.max(box.top + 4, Math.min(at2.y, box.bottom - r.height - 4)) });
+  }, [at2.x, at2.y]);
   return pos2;
 }
-function CutMenu({ at, cut: cut2, cuts, onRun, onClose }) {
+function CutMenu({ at: at2, cut: cut2, cuts, onRun, onClose }) {
   const ref = useRef(null);
-  const pos2 = useKeepInside(ref, at);
+  const pos2 = useKeepInside(ref, at2);
   useEffect(() => {
     const first = ref.current && ref.current.querySelector('[role="menuitem"]:not([aria-disabled="true"])');
     if (first) first.focus();
@@ -96035,9 +100790,9 @@ function CutMenu({ at, cut: cut2, cuts, onRun, onClose }) {
     row2("delete", "Delete…", "Delete this cut", why)
   ] });
 }
-function ConfirmDelete({ at, cut: cut2, onYes, onClose }) {
+function ConfirmDelete({ at: at2, cut: cut2, onYes, onClose }) {
   const ref = useRef(null);
-  const pos2 = useKeepInside(ref, at);
+  const pos2 = useKeepInside(ref, at2);
   useEffect(() => {
     const no = ref.current && ref.current.querySelector('[data-testid="media-cut-delete-no"]');
     if (no) no.focus();
@@ -96213,12 +100968,12 @@ function CutsGroup({ project, ownerScope, on, query = "", showNames = true, file
     if (what === "delete") void apply([{ op: "delete_timeline", id: cut2.id }], `Delete ${cut2.name}`.slice(0, 120));
   };
   const openMenu = (cut2, where, only) => {
-    const at = where && typeof where.getBoundingClientRect === "function" ? ((r) => ({ x: r.left + 12, y: r.top + 12 }))(where.getBoundingClientRect()) : where;
+    const at2 = where && typeof where.getBoundingClientRect === "function" ? ((r) => ({ x: r.left + 12, y: r.top + 12 }))(where.getBoundingClientRect()) : where;
     if (only === "delete") {
-      if (data.cuts.length > 1 && !cut2.nested_in.length) setConfirm({ cut: cut2, at });
+      if (data.cuts.length > 1 && !cut2.nested_in.length) setConfirm({ cut: cut2, at: at2 });
       return;
     }
-    setMenu({ cut: cut2, at });
+    setMenu({ cut: cut2, at: at2 });
   };
   return jsxs92("section", { className: "fmc-day fmc-cuts", "data-testid": "media-cuts", "data-revision": String(data.revision), children: [
     jsxs92("div", { className: "fmc-cutsh", children: [
@@ -96621,12 +101376,12 @@ function MediaColumn({ col, ownerScope, jobs, wake, onImported, script = null, a
     if (!(event.key in moves)) return;
     const grid = gridRef.current;
     const buttons = grid ? [...grid.querySelectorAll('[data-testid="media-col-item"] .fmc-tile')] : [];
-    const at = buttons.indexOf(event.currentTarget);
-    if (at < 0) return;
+    const at2 = buttons.indexOf(event.currentTarget);
+    if (at2 < 0) return;
     const cell = event.currentTarget.closest("ul");
     const cols = cell ? Math.max(1, getComputedStyle(cell).gridTemplateColumns.split(" ").filter(Boolean).length) : 1;
     const m = moves[event.key];
-    const next = m === "home" ? 0 : m === "end" ? buttons.length - 1 : m === "up" ? at - cols : m === "down" ? at + cols : at + m;
+    const next = m === "home" ? 0 : m === "end" ? buttons.length - 1 : m === "up" ? at2 - cols : m === "down" ? at2 + cols : at2 + m;
     event.preventDefault();
     event.stopPropagation();
     if (next < 0 || next >= buttons.length) return;
@@ -96713,11 +101468,12 @@ function MediaColumn({ col, ownerScope, jobs, wake, onImported, script = null, a
         jsxs93("header", { className: "fmc-head", children: [
           jsx112("h2", { className: "fmc-title", children: "Media" }, "t"),
           jsx112("span", { className: "fmc-grow" }, "g"),
-          // GEM-217 (approved 09.11.): the head is Media · Filter (search, show, type, rating, sort, view in ONE menu) · Open
-          // library · Hide. Import… lives in the library's sidebar and in the empty well; Ctrl+I still imports here.
+          // GEM-217 (approved 09.11.) as changed by the artist 11.11. (lane w39-p2-chrome, his marks 1 and 2: the hide button
+          // "wandert ganz nach unten", the library opened from two places): the head is Media · Filter (search, show, type,
+          // rating, sort, view in ONE menu). Show/hide is ONE toggle and the library ONE button, both in the bottom bar
+          // (frame-bar.js), never moving; G still opens the library. The drawer (the column OVER the page) keeps its Close (Esc).
           jsx112(IconButton, { icon: "filter", label: "Filter", title: "Filter: search, show, type, rating, view", pressed: pop.open === "filter" || filterActive(col) || Boolean(v.query), testid: "media-col-filter", onClick: () => pop.toggle("filter") }, "f"),
-          jsx112(IconButton, { icon: "enlarge", label: "Open library", title: "Open the Media library (G)", testid: "media-col-enlarge", onClick: () => col.enlarge() }, "e"),
-          drawer ? jsx112(IconButton, { icon: "close", label: "Close Media", title: "Close (Esc)", testid: "media-col-close", onClick: () => col.setVisible(false) }, "x") : jsx112(IconButton, { icon: "hide", label: "Hide Media", title: "Hide the Media column", testid: "media-col-hide", onClick: () => col.setVisible(false) }, "h")
+          drawer ? jsx112(IconButton, { icon: "close", label: "Close Media", title: "Close (Esc)", testid: "media-col-close", onClick: () => col.setVisible(false) }, "x") : null
         ] }, "head"),
         false ? jsx112("div", { className: "fmc-search", children: jsx112("input", {
           ref: searchRef,
@@ -96876,7 +101632,10 @@ var MEDIA_COLUMN_CSS = `${JOB_NAME_CSS}
 .fmc-fail{display:flex;align-items:center;justify-content:space-between;gap:4px;min-height:var(--fw-ctl-h-sm);font-size:var(--fw-fs-meta);color:color-mix(in srgb,var(--fw-err) 55%,var(--ui-text-primary))}
 .fmc-fail-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fmc-retry{min-height:var(--fw-ctl-h-sm);padding:0 6px}
-.fmc-foot{display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid var(--fw-line)}
+/* w39-p2-chrome (the artist's mark 3, "eine unschöne Kante"): the foot is as tall as the page's bottom status row (.fw-cap,
+   44 px), so its top line, its text and the row's line and text meet across the divider (content box = one control line,
+   --fw-ctl-h 28 px, the caption row's: 1 + 7 + 28 + 8 = 44; no raw height, design-ratchet); text on the head title's 10 px inset. */
+.fmc-foot{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:7px 8px 8px 10px;line-height:var(--fw-ctl-h);border-top:1px solid var(--fw-line)}
 .fmc-count{font-size:var(--fw-fs);color:var(--ui-text-secondary);font-variant-numeric:tabular-nums;white-space:nowrap}
 .fmc .fml-drop{position:absolute;inset:6px;z-index:80;display:flex;align-items:center;justify-content:center;border:2px dashed var(--ui-accent);background:color-mix(in srgb,var(--ui-bg-chrome) 90%,transparent);color:var(--ui-text-primary);font-size:var(--fw-fs);pointer-events:none;text-align:center;padding:12px}
 .fmc-dropnote{margin:4px 8px}
@@ -97086,6 +101845,13 @@ function FshPlayer({ src, poster, label: label2, fps, frames = null, onError }) 
     }
     if (result && typeof result.catch === "function") result.then(() => setNote("")).catch((error) => setNote(`Fullscreen was refused: ${error && error.message ? error.message : "unknown reason"}`));
   };
+  const seekTo2 = (s) => {
+    const v = video();
+    if (!v) return;
+    v.pause();
+    v.currentTime = s;
+    setT(s);
+  };
   const onKey = (event) => {
     const tag = event.target && event.target.tagName;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -97095,6 +101861,9 @@ function FshPlayer({ src, poster, label: label2, fps, frames = null, onError }) 
     } else if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && tag !== "INPUT") {
       event.preventDefault();
       step2(event.key === "ArrowLeft" ? -1 : 1);
+    } else if ((event.key === "Home" || event.key === "End") && tag !== "INPUT") {
+      event.preventDefault();
+      seekTo2(event.key === "Home" ? 0 : endAt);
     } else if (event.key === "l" || event.key === "L") {
       event.preventDefault();
       setLoop((value) => !value);
@@ -97103,7 +101872,8 @@ function FshPlayer({ src, poster, label: label2, fps, frames = null, onError }) 
       fullscreen();
     }
   };
-  const btn = (testid, text2, title, onClick, extra = {}) => jsx113("button", { type: "button", className: "fsh-pbtn fw-b", "data-testid": testid, title, "aria-label": title, onClick, ...extra, children: text2 }, testid);
+  const btn = (testid, icon, title, onClick, extra = {}) => jsx113(FwButton, { variant: "ghost", icon, className: "fsh-tbtn", "data-testid": testid, title, "aria-label": title, onClick, ...extra }, testid);
+  const frameCount = lastIndex + 1;
   return jsxs94("div", {
     ref: wrapRef,
     className: "fsh-player",
@@ -97139,10 +101909,18 @@ function FshPlayer({ src, poster, label: label2, fps, frames = null, onError }) 
         onSeeked: (event) => setT(event.currentTarget.currentTime)
       }) }, "box"),
       jsxs94("div", { className: "fsh-bar", "data-testid": "fsh-bar", children: [
-        btn("fsh-play", fshGlyph(playing ? "pause" : "play"), playing ? "Pause (Space)" : "Play (Space)", toggle, { "aria-pressed": playing }),
-        btn("fsh-step-back", fshGlyph("chev-l"), `Back ${stepTitle} (←)`, () => step2(-1)),
-        btn("fsh-step-fwd", fshGlyph("chev-r"), `Forward ${stepTitle} (→)`, () => step2(1)),
-        jsx113("span", { className: "fsh-tc", "data-testid": "fsh-timecode", title: `Current / total, hours:minutes:seconds:frames at ${rate} fps`, children: `${fshSmpte(Math.min(t2, endAt), rate)} / ${fshSmpte(endAt, rate)}` }, "tc"),
+        jsxs94("span", { className: "fsh-tc", "data-testid": "fsh-timecode", title: `Position (hours:minutes:seconds:frames at ${rate} fps) / length, ${frameCount} frames`, children: [
+          jsx113("span", { className: "fsh-tc-now", children: fshSmpte(Math.min(t2, endAt), rate) }, "n"),
+          " / ",
+          jsx113("span", { className: "fsh-tc-len", "data-testid": "fsh-tc-len", "data-frames": frameCount, children: durationText(frameCount, { num: rate, den: 1 }) }, "l")
+        ] }, "tc"),
+        jsxs94("div", { className: "fsh-tgrp", role: "group", "aria-label": "Transport", children: [
+          btn("fsh-to-start", "stepb", "Go to start (Home)", () => seekTo2(0)),
+          btn("fsh-step-back", "chev-l", `Back ${stepTitle} (←)`, () => step2(-1)),
+          btn("fsh-play", playing ? "pause" : "play", playing ? "Pause (Space)" : "Play (Space)", toggle, { "aria-pressed": playing }),
+          btn("fsh-step-fwd", "chev-r", `Forward ${stepTitle} (→)`, () => step2(1)),
+          btn("fsh-to-end", "stepf", "Go to end (End)", () => seekTo2(endAt))
+        ] }, "grp"),
         jsx113("input", {
           type: "range",
           className: "fsh-scrub",
@@ -97162,9 +101940,9 @@ function FshPlayer({ src, poster, label: label2, fps, frames = null, onError }) 
             }
           }
         }, "scrub"),
-        btn("fsh-loop", fshGlyph("loop"), loop ? "Loop is on (L)" : "Loop is off (L)", () => setLoop(!loop), { "aria-pressed": loop }),
-        btn("fsh-mute", fshGlyph("vol"), muted ? "Sound off — unmute" : "Sound on — mute", () => setMuted(!muted), { "aria-pressed": muted }),
-        btn("fsh-fullscreen", fshGlyph("fit"), "Fullscreen (F)", fullscreen)
+        btn("fsh-loop", "loop", loop ? "Loop is on (L)" : "Loop is off (L)", () => setLoop(!loop), { "aria-pressed": loop }),
+        btn("fsh-mute", "vol", muted ? "Sound off — unmute" : "Sound on — mute", () => setMuted(!muted), { "aria-pressed": muted }),
+        btn("fsh-fullscreen", "fit", "Fullscreen (F)", fullscreen)
       ] }, "bar"),
       note ? jsx113("p", { className: "fsh-pnote", role: "status", "data-testid": "fsh-player-note", children: note }, "note") : null
     ]
@@ -97220,7 +101998,9 @@ function sourceTime(frame, rate) {
   const two = (n) => String(n).padStart(2, "0");
   return `${two(Math.floor(s / 3600))}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}:${two(ff)}`;
 }
-function SourceMonitor({ source, clip: clip3, src = "", at = 0, fps, rate: exact2 = null, frames: knownFrames, poster, place: place2, onAdd, keyRef, onError }) {
+function SourceMonitor({ source, clip: clip3, src = "", at: at2 = 0, fps, rate: exact2 = null, frames: knownFrames, poster, still = false, place: place2, onAdd, keyRef, onError }) {
+  const picture = Boolean(still) || source && source.kind === "image" || /\.(png|jpe?g|webp|gif|bmp|tiff?)(\?|$)/i.test(String(clip3 || ""));
+  const stillUrl = picture ? poster || src || (clip3 ? mediaStreamUrl(clip3) : "") : "";
   const rate = exact2 && Number.isInteger(exact2.num) && Number.isInteger(exact2.den) && exact2.num > 0 && exact2.den > 0 ? { num: exact2.num, den: exact2.den } : rateOfFps(fps);
   const videoRef = useRef(null);
   const [frame, setFrameState] = useState(0);
@@ -97235,10 +102015,10 @@ function SourceMonitor({ source, clip: clip3, src = "", at = 0, fps, rate: exact
   const [where, setWhere] = useState(place2 && place2.where === "playhead" ? "playhead" : "end");
   const raf = useRef(0), revAt = useRef(null);
   useEffect(() => {
-    setFrame(Math.max(0, at));
+    setFrame(Math.max(0, at2));
     setMarks({ in: null, out: null });
     setSpeed2(0);
-  }, [clip3, src, at]);
+  }, [clip3, src, at2]);
   const last2 = Math.max(0, total - 1);
   const toFrame = (t2) => Math.max(0, Math.min(last2, Math.floor(t2 * fpsOf2(rate) + 1e-6)));
   const seek = (f2) => {
@@ -97363,7 +102143,7 @@ function SourceMonitor({ source, clip: clip3, src = "", at = 0, fps, rate: exact
     return { start: a / rfps, end: b === null ? null : b / rfps };
   };
   return jsxs95("div", { className: "fsp-srcmon", "data-testid": "src-monitor", "data-frame": String(frame), "data-in": marks2.in === null ? "" : String(marks2.in), "data-out": marks2.out === null ? "" : String(marks2.out), "data-frames": String(total), children: [
-    clip3 || src ? jsx114("video", {
+    picture && stillUrl ? jsx114("div", { className: "fsp-srcmon-v fsp-srcmon-none", "data-testid": "src-monitor-still", children: jsx114("img", { src: stillUrl, alt: source && source.label ? source.label : "", draggable: false }) }, "v") : clip3 || src ? jsx114("video", {
       ref: videoRef,
       className: "fsp-srcmon-v",
       "data-testid": "fsh-video",
@@ -97382,7 +102162,7 @@ function SourceMonitor({ source, clip: clip3, src = "", at = 0, fps, rate: exact
         if (onError) onError();
       }
     }, "v") : jsx114("div", { className: "fsp-srcmon-v fsp-srcmon-none", "data-testid": "src-monitor-none", children: poster ? jsx114("img", { src: poster, alt: "", draggable: false }) : "Not playable here: the whole clip goes in" }, "v"),
-    clip3 || src ? jsxs95("div", { className: "fsp-srcmon-bar", "data-testid": "src-monitor-bar", children: [
+    (clip3 || src) && !picture ? jsxs95("div", { className: "fsp-srcmon-bar", "data-testid": "src-monitor-bar", children: [
       jsx114("div", {
         className: "fsp-srcmon-scrub",
         "data-testid": "src-monitor-scrub",
@@ -97518,8 +102298,8 @@ function FilmSuiteLightbox({ ownerScope, feed, request, onClose, onUseSettings, 
   const ids = fileList ? fileList.map((entry2) => entry2.id) : request.ids && request.ids.length ? request.ids : feed.items.map((entry2) => entry2.id);
   const list = fileList || ids.map((id2) => feed.items.find((entry2) => entry2.id === id2) || libraryItem(id2)).filter(Boolean);
   const [id, setId] = useState(request.id);
-  const at = list.findIndex((entry2) => entry2.id === id);
-  const raw = at >= 0 ? list[at] : null;
+  const at2 = list.findIndex((entry2) => entry2.id === id);
+  const raw = at2 >= 0 ? list[at2] : null;
   const keeper = useMediaKeep(ownerScope);
   const marks2 = useMediaMarks(ownerScope);
   const onMark = marks2.state === "ok" ? (changes) => void writeMediaMarks(ownerScope, changes) : null;
@@ -97581,7 +102361,7 @@ function FilmSuiteLightbox({ ownerScope, feed, request, onClose, onUseSettings, 
   const probedFile = useProbedFile(isFile ? item : null);
   if (!item) return null;
   const go = (step2) => {
-    const next = list[at + step2];
+    const next = list[at2 + step2];
     if (next) setId(next.id);
   };
   const cutSource = cutPick ? isFile ? fileCutSource(item) : cutSourceOf(item, shootTakeOf(takeLabels, item.id) || item.label) : null;
@@ -97705,20 +102485,20 @@ function FilmSuiteLightbox({ ownerScope, feed, request, onClose, onUseSettings, 
       jsx115("style", { children: MEDIA_MARKS_CSS + LIGHTBOX_NAV_CSS + (cutPick ? ADD_CUT_CSS + SOURCE_MONITOR_CSS : "") }, "css"),
       ...itemMenu.nodes,
       jsxs96("div", { className: "fsp-lb-top", children: [
-        jsx115("span", { className: "fsp-lb-count", "data-testid": "lb-count", children: `${at + 1} / ${list.length}` }, "c"),
+        jsx115("span", { className: "fsp-lb-count", "data-testid": "lb-count", children: `${at2 + 1} / ${list.length}` }, "c"),
         isFile ? jsx115("span", { className: "fsp-lb-title", "data-testid": "lb-file-title", title: item.path, children: item.label }, "t") : jsx115("span", { className: "fsp-lb-title", "data-job-id": item.id, "data-take": shootTakeOf(takeLabels, item.id) || void 0, "data-surface": "lightbox", title: kept ? item.keptName : item.label, children: kept ? item.keptName : shootTakeOf(takeLabels, item.id) || item.label }, "t"),
         // w15-shell MED-051 (Lightroom Loupe toolbar, the Image bar's ghost icons): icon buttons, tooltip = action + key.
-        item.kind === "image" ? mediaActionButton(true, { key: "z", icon: actual ? "fit" : "zoom", "data-testid": "lb-zoom", "aria-pressed": actual, "aria-label": actual ? "Fit" : "1:1", title: actual ? "Fit to screen" : "Show at 1:1", onClick: () => setActual(!actual), children: actual ? "Fit" : "1:1" }) : null,
+        item.kind === "image" ? mediaActionButton(true, { key: "z", icon: actual ? "fit" : "zoom-in", "data-testid": "lb-zoom", "aria-pressed": actual, "aria-label": actual ? "Fit" : "1:1", title: actual ? "Fit to screen" : "Show at 1:1", onClick: () => setActual(!actual), children: actual ? "Fit" : "1:1" }) : null,
         mediaActionButton(true, { key: "x", icon: "x", "data-testid": "lb-close", "aria-label": "Close large view", title: "Close (Esc)", onClick: onClose, children: "Close" })
       ] }, "top"),
       jsxs96("div", { className: "fsp-lb-body", children: [
         jsxs96("div", { className: "fsp-lb-stagewrap", children: [
-          jsx115("button", { type: "button", className: "fw-btn fw-btn-ghost fw-btn-icon fsp-lb-nav is-prev", "data-testid": "lb-prev", "aria-label": "Previous result", title: at <= 0 ? "Previous (←) · This is the first result" : "Previous (←)", "aria-disabled": at <= 0 ? "true" : void 0, onClick: () => {
-            if (at > 0) go(-1);
+          jsx115("button", { type: "button", className: "fw-btn fw-btn-ghost fw-btn-icon fsp-lb-nav is-prev", "data-testid": "lb-prev", "aria-label": "Previous result", title: at2 <= 0 ? "Previous (←) · This is the first result" : "Previous (←)", "aria-disabled": at2 <= 0 ? "true" : void 0, onClick: () => {
+            if (at2 > 0) go(-1);
           }, children: jsx115(FwIcon, { name: "chev-l" }) }, "p"),
           jsx115("div", { className: cn44("fsp-lb-stage", actual && "is-actual"), "data-testid": "lb-stage", children: stage }, "s"),
-          jsx115("button", { type: "button", className: "fw-btn fw-btn-ghost fw-btn-icon fsp-lb-nav is-next", "data-testid": "lb-next", "aria-label": "Next result", title: at >= list.length - 1 ? "Next (→) · This is the last result" : "Next (→)", "aria-disabled": at >= list.length - 1 ? "true" : void 0, onClick: () => {
-            if (at < list.length - 1) go(1);
+          jsx115("button", { type: "button", className: "fw-btn fw-btn-ghost fw-btn-icon fsp-lb-nav is-next", "data-testid": "lb-next", "aria-label": "Next result", title: at2 >= list.length - 1 ? "Next (→) · This is the last result" : "Next (→)", "aria-disabled": at2 >= list.length - 1 ? "true" : void 0, onClick: () => {
+            if (at2 < list.length - 1) go(1);
           }, children: jsx115(FwIcon, { name: "chev-r" }) }, "n")
         ] }, "sw"),
         jsxs96("aside", { className: "fsp-lb-info", "aria-label": "Details", "data-testid": "lb-info", children: isFile ? [
@@ -97744,7 +102524,7 @@ function FilmSuiteLightbox({ ownerScope, feed, request, onClose, onUseSettings, 
               onClose();
               onUseSettings(item);
             }, children: "Use these settings" }) : null,
-            jsx115(MediaKeep, { item, busy: keeper.busy, onKeep: () => keeper.keep([item]), onClipKeep: item.kind === "video" && onMark ? (next) => onMark([{ item_id: item.id, kept: next }]) : null, testid: "lb-keep", icons: true }, "k"),
+            jsx115(MediaKeep, { item, busy: keeper.busy, onKeep: () => keeper.keep([item]), onClipKeep: (item.kind === "video" || item.kind === "audio") && onMark ? (next) => onMark([{ item_id: item.id, kept: next }]) : null, testid: "lb-keep", icons: true }, "k"),
             item.kind === "video" ? mediaActionButton(true, { key: "o", icon: "video", "data-testid": "lb-open-shoot", title: "Show this take in Video", onClick: () => {
               onClose();
               onOpenShoot(item);
@@ -97775,8 +102555,8 @@ import { jsx as jsx116, jsxs as jsxs97 } from "react/jsx-runtime";
 var LIBRARY_VIEW_KEY = "filmSuite.media.libraryView";
 var LIBRARY_VIEWS = [
   { id: "grid", label: "Grid", icon: "grid", title: "Grid" },
-  { id: "list", label: "List", icon: "lanes", title: "List: name, type, length, marks, made" },
-  { id: "loupe", label: "Loupe", icon: "player", title: "Loupe: the selected item large, the others in a strip" },
+  { id: "list", label: "List", icon: "list", title: "List: name, type, length, marks, made" },
+  { id: "loupe", label: "Loupe", icon: "loupe", title: "Loupe: the selected item large, the others in a strip" },
   { id: "compare", label: "Side by side", icon: "ab", title: "Side by side: two pictures, A | B" }
 ];
 var TYPE_LABEL2 = { image: "Pictures", video: "Videos", audio: "Sound" };
@@ -98048,8 +102828,8 @@ function nameKey(name2, names) {
 function MediaName({ name: name2, className = "fsp-m-name", testid, title, names = null }) {
   const [head2, tail2] = nameSplit(name2);
   const key = names ? nameKey(name2, names) : "";
-  const at = key ? head2.indexOf(key) : -1;
-  const parts = at > -1 ? [["head", head2.slice(0, at)], ["key", key], ["mid", head2.slice(at + key.length)], ["tail", tail2]] : [["head", head2], ["tail", tail2]];
+  const at2 = key ? head2.indexOf(key) : -1;
+  const parts = at2 > -1 ? [["head", head2.slice(0, at2)], ["key", key], ["mid", head2.slice(at2 + key.length)], ["tail", tail2]] : [["head", head2], ["tail", tail2]];
   return jsx117("span", { className: className + " fml-name", "data-testid": testid, "data-user-text": "1", title: title || name2, children: parts.map(([part, text2]) => part === "head" || part === "mid" ? jsx117("span", { className: part === "head" ? "fml-name-a" : "fml-name-m", "data-part": part, children: text2 }, part) : jsx117("span", { className: part === "key" ? "fml-name-k" : "fml-name-b", "data-part": part, dir: "rtl", children: jsx117("bdi", { dir: "ltr", children: text2 }) }, part)) });
 }
 var MEDIA_NAME_CSS = `
@@ -98965,9 +103745,9 @@ function FilmSuiteMedia({ col, ownerScope, feed, jobs = [], focus, backLabel, sc
     if (!grid) return;
     const cols = Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length);
     const ids = visible.map((item) => item.id);
-    const at = Math.max(0, ids.indexOf(rovingId));
+    const at2 = Math.max(0, ids.indexOf(rovingId));
     const move2 = moves[event.key];
-    const next = move2 === "home" ? 0 : move2 === "end" ? ids.length - 1 : move2 === "up" ? at - cols : move2 === "down" ? at + cols : at + move2;
+    const next = move2 === "home" ? 0 : move2 === "end" ? ids.length - 1 : move2 === "up" ? at2 - cols : move2 === "down" ? at2 + cols : at2 + move2;
     if (next < 0 || next >= ids.length) return;
     event.preventDefault();
     const id = ids[next];
@@ -99299,8 +104079,8 @@ modified ${humanWhen(Number(file.modified) * 1e3, now)}${sound2 ? "\n" + (file.p
   const comparePair = () => {
     if (pickedImages.length === 2) return pickedImages.map((item) => item.id);
     const a = selected && selected.kind === "image" ? selected.id : shownPictures[0] ? shownPictures[0].id : null;
-    const at = shownPictures.findIndex((item) => item.id === a);
-    const b = (shownPictures[at + 1] || shownPictures[at - 1] || {}).id || null;
+    const at2 = shownPictures.findIndex((item) => item.id === a);
+    const b = (shownPictures[at2 + 1] || shownPictures[at2 - 1] || {}).id || null;
     return a && b ? [a, b] : null;
   };
   const openCompare = () => {
@@ -99325,8 +104105,8 @@ modified ${humanWhen(Number(file.modified) * 1e3, now)}${sound2 ? "\n" + (file.p
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     const tag = event.target && event.target.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "VIDEO" || !loupeItem) return;
-    const at = visible.findIndex((item) => item.id === loupeItem.id);
-    const next = visible[at + (event.key === "ArrowLeft" ? -1 : 1)];
+    const at2 = visible.findIndex((item) => item.id === loupeItem.id);
+    const next = visible[at2 + (event.key === "ArrowLeft" ? -1 : 1)];
     if (next) {
       event.preventDefault();
       setSelectedId(next.id);
@@ -99417,11 +104197,12 @@ modified ${humanWhen(Number(file.modified) * 1e3, now)}${sound2 ? "\n" + (file.p
       openingFrame,
       onHide: hide2,
       marks: onMark ? jsx123(MediaMarksBar, { item: selectedShown, onMark }, "marks") : null,
-      onClipKeep: selectedShown.kind === "video" && onMark ? (next) => onMark([{ item_id: selectedShown.id, kept: next }]) : null,
+      onClipKeep: (selectedShown.kind === "video" || selectedShown.kind === "audio") && onMark ? (next) => onMark([{ item_id: selectedShown.id, kept: next }]) : null,
+      // w39-p2-open: sounds too
       onOpenLarge: onOpenLarge ? () => onOpenLarge(selectedShown.id, shownIds(), document.activeElement) : null,
       extra: !cutPick ? jsx123(ControlPanel, { ownerScope, item: selectedShown }, "ctl") : null
     }, "insp");
-    if (selectedFile && selectedFile.kind === "audio") return jsx123(InspectorShell, { onHide: hide2, children: jsx123(SoundFileDetail, { file: selectedFile, now, marks: marks2, onMark, cutTitle: cutPick ? cutPick.place.title : "Add to cut on that sound track at the playhead", onAddToCut: cutPick ? cutPick.onAdd : onAddToCut, onReveal: bridge() && bridge().revealPath ? (f2) => onFileAction("reveal", f2) : null }) }, "insp");
+    if (selectedFile && selectedFile.kind === "audio") return jsx123(InspectorShell, { onHide: hide2, children: jsx123(SoundFileDetail, { file: selectedFile, now, marks: marks2, onMark, cutTitle: cutPick ? cutPick.place.title : "Add to cut on that sound track at the playhead", onAddToCut: cutPick ? cutPick.onAdd : onAddToCut, onReveal: canRevealPath() ? (f2) => onFileAction("reveal", f2) : null }) }, "insp");
     if (selectedFile) return jsx123(FileInspector, { file: selectedFile, now, onAction: onFileAction, onOpenLarge: onOpenFile ? () => openFileLarge(selectedFile) : null, onHide: hide2, extra: !cutPick ? jsx123(ControlPanel, { ownerScope, item: { ...selectedFile, approvedRoots: roots } }, "ctl") : null }, "insp");
     return null;
   })();
@@ -99439,7 +104220,7 @@ modified ${humanWhen(Number(file.modified) * 1e3, now)}${sound2 ? "\n" + (file.p
     loupeFile ? jsx123("div", { className: "fml-stage", "data-testid": "media-loupe-stage", "data-id": loupeFile.id, style: { flex: "0 0 55%" }, children: jsx123(MediaFilePreview, { file: loupeFile }) }, "floupe") : null,
     shownFiles.length ? gridOf([...shownFiles.map(fileTile), keptFiles.length > shownFiles.length ? jsx123("li", { className: "fsp-m-cell fsp-m-morecell", children: jsx123(FwButton, { "data-testid": "media-files-more", onClick: () => setFileLimit((limit) => limit + MEDIA_FILE_PAGE), children: `Show ${Math.min(MEDIA_FILE_PAGE, keptFiles.length - shownFiles.length)} more` }) }, "more") : null], "files") : listing || !listedRoots ? jsx123("div", { className: "fsp-m-grid is-empty", "data-testid": "media-grid", "data-source": "files" }, "fgrid") : emptyGrid()
   ] }, "fcol") : viewNow === "loupe" ? jsx123("div", { className: "fml-loupewrap", tabIndex: -1, onKeyDown: loupeKey, style: { display: "flex", flex: "1 1 auto", minWidth: 0, minHeight: 0 }, children: jsx123(LibraryLoupe, { ownerScope, item: loupeItem, list: visible, selectedId: loupeItem && loupeItem.id, onPick: (id) => setSelectedId(id), label: itemLabel, marks: loupeItem && onMark ? jsx123(MediaMarksBar, { item: loupeItem, onMark, testid: "media-loupe-marks" }, "mk") : null }) }, "loupe") : !feed.query.data && !feed.query.isError ? asList ? listOf(LibrarySkeleton({ n: 10, list: true })) : gridOf(LibrarySkeleton({ n: 12 })) : cells.length || shownJobs.length ? asList ? listOf([...cells.map((cell) => cell.node())]) : gridOf([...shownJobs.map(jobTile), ...cells.map((cell) => cell.node()), moreCell]) : emptyGrid();
-  const back = jsxs103("button", { type: "button", className: "fsp-m-back fw-b", "data-testid": "media-back", "aria-label": backLabel, title: `${backLabel} (Esc)`, onClick: onBack, children: [jsx123("span", { "aria-hidden": "true", children: "‹" }, "a"), ` ${backLabel}`] }, "back");
+  const back = jsxs103("button", { type: "button", className: "fsp-m-back fw-b", "data-testid": "media-back", "aria-label": backLabel, title: `${backLabel} (Esc)`, onClick: onBack, children: [jsx123(FwIcon, { name: "chev-l" }, "a"), ` ${backLabel}`] }, "back");
   const selectBtn = filesMode || cutPick ? null : jsx123(FwButton, { variant: "ghost", "aria-pressed": selecting, "data-testid": "media-select", title: "Pick several items (Ctrl+click works too)", onClick: () => selecting ? stopSelecting() : setSelecting(true), children: selecting ? "Done" : "Select" }, "sel");
   const layers = cutPick ? null : jsx123(ControlFilter, { value: layerFilter, onChange: setLayerFilter, bare: true }, "layers");
   const placeSelect = jsx123(LibraryPlaceSelect, { col, counts, place: place2, onPlace, roots, folderCounts, reading: !listedRoots, onAddFolder: hideAdd ? null : addFolder, onImport: cutPick ? null : importOne }, "place");
@@ -99657,7 +104438,7 @@ import { jsx as jsx124, jsxs as jsxs104 } from "react/jsx-runtime";
 var UNDO_KEY = IS_MAC ? "⌘Z" : "Ctrl+Z";
 var REDO_KEY = IS_MAC ? "⇧⌘Z" : "Ctrl+Shift+Z";
 function UndoRedoPair({ undo: undo2 = {}, redo: redo2 = {}, className = "", testid }) {
-  const tip = (word, side, key) => side.can ? `${word}${side.what ? " " + side.what : ""} (${key})` : `${word} (${key}) · nothing to ${word.toLowerCase()}`;
+  const tip = (word, side, key) => side.can ? `${word}${side.what ? " " + side.what : ""} (${key})` : `${word} (${key}) · Nothing to ${word.toLowerCase()}`;
   return jsxs104("span", { className: "fw-undoredo" + (className ? " " + className : ""), role: "group", "aria-label": "History", "data-testid": testid, children: [
     jsx124(FwButton, { variant: "ghost", icon: "undo", className: "fw-btn-icon", "aria-label": "Undo", "data-testid": undo2.testid || "fw-undo", title: undo2.title || tip("Undo", undo2, UNDO_KEY), "aria-disabled": undo2.can ? void 0 : "true", onClick: () => {
       if (undo2.can && undo2.run) undo2.run();
@@ -100233,8 +105014,8 @@ function linkMark(ctx, x, y, color) {
   ctx.restore();
 }
 function drawSoundClip(ctx, clip3, x0, rowY, w, h, role, o) {
-  const C3 = o.C;
-  const fill = clip3.offline ? C3.offline : C3[ROLE_FILL[role]] || C3.media;
+  const C4 = o.C;
+  const fill = clip3.offline ? C4.offline : C4[ROLE_FILL[role]] || C4.media;
   ctx.save();
   ctx.globalAlpha = clip3.enabled && !o.muted ? 1 : 0.45;
   ctx.fillStyle = fill;
@@ -100247,9 +105028,9 @@ function drawSoundClip(ctx, clip3, x0, rowY, w, h, role, o) {
   const keys = keysOf2(clip3, o.model.fps);
   const spans = duckedSpans(clip3, o.model.fps);
   if (spans.length) {
-    ctx.fillStyle = C3.marks || C3.scrim;
+    ctx.fillStyle = C4.marks || C4.scrim;
     for (const [a, b] of spans) ctx.fillRect((a - o.view.start) * o.view.ppf, body2.top, (b - a) * o.view.ppf, body2.h);
-    ctx.fillStyle = C3.marksLine || C3.text2;
+    ctx.fillStyle = C4.marksLine || C4.text2;
     for (const [a, b] of spans) {
       ctx.fillRect(Math.round((a - o.view.start) * o.view.ppf), body2.top + body2.h - 2, Math.max(1, Math.round((b - a) * o.view.ppf)), 2);
     }
@@ -100260,9 +105041,9 @@ function drawSoundClip(ctx, clip3, x0, rowY, w, h, role, o) {
     const lin = Math.pow(10, clip3.gainDb / 20);
     const mid = body2.top + body2.h / 2, half = body2.h / 2 - 1;
     const a = Math.max(0, Math.floor(x0)), b = Math.min(o.width, Math.ceil(x0 + w));
-    ctx.fillStyle = C3.wave;
-    for (let px = a; px < b; px += 1) {
-      const f0 = o.view.start + px / o.view.ppf, f1 = o.view.start + (px + 1) / o.view.ppf;
+    ctx.fillStyle = C4.wave;
+    for (let px2 = a; px2 < b; px2 += 1) {
+      const f0 = o.view.start + px2 / o.view.ppf, f1 = o.view.start + (px2 + 1) / o.view.ppf;
       const s0 = clip3.sourceIn / srcFps + (f0 - clip3.start) / fps, s1 = clip3.sourceIn / srcFps + (f1 - clip3.start) / fps;
       const k0 = Math.max(0, Math.floor(s0 * lane.bucketsPerSecond)), k1 = Math.min(lane.peaks.length - 1, Math.max(k0, Math.ceil(s1 * lane.bucketsPerSecond) - 1));
       if (k0 >= lane.peaks.length) break;
@@ -100279,12 +105060,12 @@ function drawSoundClip(ctx, clip3, x0, rowY, w, h, role, o) {
       if (keys.length) env *= Math.pow(10, keyDbAt(keys, f0) / 20);
       const top2 = Math.min(1, hi * lin * env), bot = Math.max(-1, lo * lin * env);
       const y0 = Math.round(mid - top2 * half), y1 = Math.round(mid - bot * half);
-      ctx.fillRect(px, y0, 1, Math.max(1, y1 - y0));
+      ctx.fillRect(px2, y0, 1, Math.max(1, y1 - y0));
       drawnWave += 1;
     }
   }
   const f2 = fadeX(clip3, x0, w, o.view.ppf);
-  ctx.fillStyle = C3.scrim;
+  ctx.fillStyle = C4.scrim;
   if (clip3.fadeIn) {
     ctx.beginPath();
     ctx.moveTo(x0, rowY + 1);
@@ -100305,7 +105086,7 @@ function drawSoundClip(ctx, clip3, x0, rowY, w, h, role, o) {
     ctx.fill();
     ctx.globalAlpha = 1;
   }
-  ctx.strokeStyle = C3.text2;
+  ctx.strokeStyle = C4.text2;
   ctx.lineWidth = 1;
   if (clip3.fadeIn) {
     ctx.beginPath();
@@ -100322,14 +105103,14 @@ function drawSoundClip(ctx, clip3, x0, rowY, w, h, role, o) {
   const gy = gainY(clip3, rowY, h);
   const vline = [];
   if (keys.length) {
-    ctx.strokeStyle = o.gainDrag ? C3.snap : C3.text;
+    ctx.strokeStyle = o.gainDrag ? C4.snap : C4.text;
     ctx.lineWidth = o.gainDrag ? 2 : 1.5;
     ctx.beginPath();
     const a = Math.max(Math.floor(x0) + 1, 0), b = Math.min(Math.ceil(x0 + w) - 1, o.width);
-    for (let px = a; px <= b; px += 2) {
-      const yy = levelY(clip3.gainDb + keyDbAt(keys, o.view.start + px / o.view.ppf), rowY, h) + 0.5;
-      if (px === a) ctx.moveTo(px, yy);
-      else ctx.lineTo(px, yy);
+    for (let px2 = a; px2 <= b; px2 += 2) {
+      const yy = levelY(clip3.gainDb + keyDbAt(keys, o.view.start + px2 / o.view.ppf), rowY, h) + 0.5;
+      if (px2 === a) ctx.moveTo(px2, yy);
+      else ctx.lineTo(px2, yy);
     }
     ctx.stroke();
     for (const k of keys) {
@@ -100337,19 +105118,19 @@ function drawSoundClip(ctx, clip3, x0, rowY, w, h, role, o) {
       if (kx < x0 - 1 || kx > x0 + w + 1) continue;
       ctx.beginPath();
       ctx.arc(kx, ky + 0.5, KEY_R, 0, Math.PI * 2);
-      ctx.fillStyle = k.auto ? C3.scrim : C3.text;
+      ctx.fillStyle = k.auto ? C4.scrim : C4.text;
       ctx.fill();
-      ctx.strokeStyle = o.keyDrag === k.source ? C3.snap : C3.text;
+      ctx.strokeStyle = o.keyDrag === k.source ? C4.snap : C4.text;
       ctx.lineWidth = 1.5;
       ctx.stroke();
       vline.push({ x: Math.round(kx), y: ky, db: k.db, auto: k.auto, source: k.source });
     }
   } else if (!(o.songLane && clip3.gainDb === 0 && !o.gainDrag)) {
-    ctx.fillStyle = o.gainDrag ? C3.snap : C3.text;
+    ctx.fillStyle = o.gainDrag ? C4.snap : C4.text;
     ctx.fillRect(x0 + 1, gy, w - 2, o.gainDrag ? 2 : 1);
   }
   const gainLine = keys.length > 0 || !(o.songLane && clip3.gainDb === 0 && !o.gainDrag);
-  ctx.fillStyle = C3.scrim;
+  ctx.fillStyle = C4.scrim;
   ctx.fillRect(x0 + 1, rowY + 2, w - 2, STRIP);
   ctx.font = '600 12px "Segoe UI", system-ui, sans-serif';
   ctx.textBaseline = "top";
@@ -100359,20 +105140,20 @@ function drawSoundClip(ctx, clip3, x0, rowY, w, h, role, o) {
   const showGain = w - 10 - linkW - gw - 8 >= 24;
   const room2 = w - 10 - linkW - (showGain ? gw + 8 : 0) - (FADE_HANDLE + 2);
   const name2 = fit2(ctx, clip3.label, room2);
-  ctx.fillStyle = C3.text;
+  ctx.fillStyle = C4.text;
   if (name2) ctx.fillText(name2, x0 + 5 + linkW + FADE_HANDLE + 2, rowY + 4);
-  if (clip3.link && w >= 30) linkMark(ctx, x0 + FADE_HANDLE + 5, rowY + 6, C3.text);
+  if (clip3.link && w >= 30) linkMark(ctx, x0 + FADE_HANDLE + 5, rowY + 6, C4.text);
   if (showGain) {
-    ctx.fillStyle = C3.text2;
+    ctx.fillStyle = C4.text2;
     ctx.fillText(gain2, x0 + w - gw - FADE_HANDLE - 6, rowY + 4);
   }
-  ctx.fillStyle = C3.sel;
+  ctx.fillStyle = C4.sel;
   if (w >= 16) {
     ctx.fillRect(Math.round(f2.in), rowY + 1, FADE_HANDLE, FADE_HANDLE);
     ctx.fillRect(Math.round(f2.out) - FADE_HANDLE, rowY + 1, FADE_HANDLE, FADE_HANDLE);
   }
   ctx.restore();
-  ctx.strokeStyle = o.selected ? C3.sel : C3.edge;
+  ctx.strokeStyle = o.selected ? C4.sel : C4.edge;
   ctx.lineWidth = o.selected ? 2 : 1;
   ctx.strokeRect(x0 + 0.5, rowY + 1.5, Math.max(0, w - 1), h - 3);
   if (o.stats && o.stats.sounds) o.stats.sounds.push({ id: clip3.id, x: Math.round(x0), y: Math.round(rowY), h: Math.round(h), w: Math.round(w * 10) / 10, gainY: gy, fadeIn: Math.round(f2.in), fadeOut: Math.round(f2.out), name: name2, gain: showGain ? gain2 : "", link: Boolean(clip3.link), wave: drawnWave, waveTop: body2.top - rowY, waveH: body2.h, gainLine, keys: vline, ducked: spans.map(([a, b]) => [Math.round((a - o.view.start) * o.view.ppf), Math.round((b - o.view.start) * o.view.ppf)]) });
@@ -100559,10 +105340,10 @@ function fitLines(ctx, text2, max, lines) {
   return out.filter(Boolean);
 }
 var shownCue = (cue, preview2) => preview2 && preview2.id === cue.id ? { ...cue, start: preview2.start, end: preview2.end } : cue;
-function drawSubtitleRow(ctx, row2, { C: C3, view, width, selected = null, preview: preview2 = null, stats = null }) {
+function drawSubtitleRow(ctx, row2, { C: C4, view, width, selected = null, preview: preview2 = null, stats = null }) {
   const x = (f2) => (f2 - view.start) * view.ppf;
   const endFrame = view.start + width / view.ppf;
-  ctx.fillStyle = C3.laneAlt;
+  ctx.fillStyle = C4.laneAlt;
   ctx.fillRect(0, row2.y, width, row2.h);
   const off = row2.subs.track && row2.subs.track.enabled === false;
   ctx.font = '11px "Segoe UI", system-ui, sans-serif';
@@ -100573,18 +105354,18 @@ function drawSubtitleRow(ctx, row2, { C: C3, view, width, selected = null, previ
     const x0 = x(cue.start), w = Math.max(1, (cue.end - cue.start) * view.ppf);
     const sel = selected === cue.id;
     ctx.globalAlpha = off ? 0.45 : 1;
-    ctx.fillStyle = C3.subtitle || C3.section;
+    ctx.fillStyle = C4.subtitle || C4.section;
     ctx.fillRect(x0, row2.y + 3, w, row2.h - 6);
     if (cue.qc.length) {
-      ctx.fillStyle = C3.limit;
+      ctx.fillStyle = C4.limit;
       ctx.fillRect(x0, row2.y + 3, w, 3);
       ctx.fillRect(x0, row2.y + row2.h - 6, w, 3);
     }
-    ctx.strokeStyle = cue.qc.length && !sel ? C3.limit : sel ? C3.sel : C3.edge;
+    ctx.strokeStyle = cue.qc.length && !sel ? C4.limit : sel ? C4.sel : C4.edge;
     ctx.lineWidth = sel || cue.qc.length ? 2 : 1;
     ctx.strokeRect(x0 + 0.5, row2.y + 3.5, Math.max(0, w - 1), row2.h - 7);
     if (cue.qc.length && w >= 14) {
-      ctx.fillStyle = C3.limit;
+      ctx.fillStyle = C4.limit;
       ctx.beginPath();
       ctx.moveTo(x0 + w - 9, row2.y + 3);
       ctx.lineTo(x0 + w, row2.y + 3);
@@ -100594,19 +105375,19 @@ function drawSubtitleRow(ctx, row2, { C: C3, view, width, selected = null, previ
     }
     if (cue.by === "hermes") {
       ctx.save();
-      ctx.strokeStyle = C3.hermes;
+      ctx.strokeStyle = C4.hermes;
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 4]);
       ctx.strokeRect(x0 + 2, row2.y + 5, Math.max(0, w - 4), row2.h - 10);
       ctx.restore();
     }
     ctx.globalAlpha = 1;
-    ctx.fillStyle = off ? C3.text3 : C3.text;
+    ctx.fillStyle = off ? C4.text3 : C4.text;
     const drawn = fitLines(ctx, cue.lines.join(" "), w - 8, 2);
     drawn.forEach((t2, k) => ctx.fillText(t2, x0 + 4, row2.y + row2.h / 2 + 1 + (drawn.length === 2 ? k ? 6.5 : -6.5 : 0)));
     if (stats) stats.push({ id: cue.id, x: Math.round(x0), w: Math.round(w * 10) / 10, start: cue.start, end: cue.end, text: cue.lines.join(" "), drawn: drawn.join(" "), sel, qc: cue.qc, by: cue.by });
   }
-  ctx.fillStyle = C3.line;
+  ctx.fillStyle = C4.line;
   ctx.fillRect(0, row2.y + row2.h - 1, width, 1);
 }
 function subHit(data, view, x) {
@@ -100717,11 +105498,11 @@ function subKeyPlan(event, { data, id, playhead }) {
   return null;
 }
 function addPlan(data, model, playhead) {
-  const at = Math.max(0, Math.min(playhead, Math.max(0, model.total - 1)));
-  if (data && data.cues.some((c) => c.start <= at && at < c.end)) return null;
-  const next = data ? data.cues.find((c) => c.start > at) : null;
-  const end2 = Math.min(at + Math.round(SUB_ADD_SECONDS * model.fps), next ? next.start : Infinity, Math.max(at + 1, model.total));
-  return end2 > at ? { start: at, end: end2 } : null;
+  const at2 = Math.max(0, Math.min(playhead, Math.max(0, model.total - 1)));
+  if (data && data.cues.some((c) => c.start <= at2 && at2 < c.end)) return null;
+  const next = data ? data.cues.find((c) => c.start > at2) : null;
+  const end2 = Math.min(at2 + Math.round(SUB_ADD_SECONDS * model.fps), next ? next.start : Infinity, Math.max(at2 + 1, model.total));
+  return end2 > at2 ? { start: at2, end: end2 } : null;
 }
 function SubsHead({ data, subs, onSelect }) {
   const on = data.track.enabled !== false;
@@ -100905,8 +105686,8 @@ function SubtitleOverlay({ subs, frame, project }) {
     void subtitleFrame(project, null, revision, st.cue, st.active).then((r) => {
       if (live2) setImg(r ? { ...r, cue: st.cue, active: st.active, revision } : null);
     });
-    const at = data.states.indexOf(st);
-    for (const next of data.states.slice(at + 1, at + 3)) void subtitleFrame(project, null, revision, next.cue, next.active);
+    const at2 = data.states.indexOf(st);
+    for (const next of data.states.slice(at2 + 1, at2 + 3)) void subtitleFrame(project, null, revision, next.cue, next.active);
     return () => {
       live2 = false;
     };
@@ -100930,6 +105711,45 @@ var SUBS_CSS = `
 `;
 
 // desktop/film-suite/src/timeline/view/timeline-draw.js
+var HERMES_MARK_PX = 14;
+var markImages = {};
+var markListeners = /* @__PURE__ */ new Set();
+function hermesMarkImage(variant2) {
+  if (typeof Image !== "function" || !HERMES_MARK_SRC[variant2]) return null;
+  let m = markImages[variant2];
+  if (!m) {
+    const img = new Image();
+    m = markImages[variant2] = { img, ready: false };
+    const done = () => {
+      if (m.ready || !img.naturalWidth) return;
+      m.ready = true;
+      for (const fn of [...markListeners]) fn();
+    };
+    img.onload = () => {
+      if (typeof img.decode === "function") img.decode().then(done, done);
+      else done();
+    };
+    img.src = HERMES_MARK_SRC[variant2];
+  }
+  return m.ready ? m.img : null;
+}
+function onHermesMarkReady(fn) {
+  markListeners.add(fn);
+  return () => markListeners.delete(fn);
+}
+function canvasMarkVariant() {
+  return hermesMarkVariantOf(C3.sel) || hermesMarkVariant();
+}
+function drawHermesMark(ctx, x, y) {
+  const mark = hermesMarkImage(canvasMarkVariant());
+  if (!mark) return false;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(mark, Math.round(x), Math.round(y), HERMES_MARK_PX, HERMES_MARK_PX);
+  ctx.restore();
+  return true;
+}
 var TL_ROWS = { ruler: 28, markers: 22, overlay: 44, storyline: 58, clipsound: 32, sound: 80, music: 72 };
 var TL_ROWS_COMPACT = { storyline: 96, music: 88 };
 var TL_COLORS = {
@@ -100965,7 +105785,7 @@ var TL_COLORS = {
   musicBg: "#11181a",
   subtitle: "#3b3324"
 };
-var C2 = TL_COLORS;
+var C3 = TL_COLORS;
 var RULER_LABEL_DX = 12;
 var RULER_EDGE = 8;
 var FIT_PAD = RULER_LABEL_DX + RULER_EDGE;
@@ -100989,14 +105809,14 @@ function drawClipWave(ctx, clip3, x, top2, w, bandH, lane, o) {
   ctx.beginPath();
   ctx.rect(x + 1, top2, Math.max(0, w - 2), CLIP_WAVE_H);
   ctx.clip();
-  ctx.fillStyle = C2.scrim;
+  ctx.fillStyle = C3.scrim;
   ctx.fillRect(x + 1, top2, w - 2, CLIP_WAVE_H);
   ctx.globalAlpha = clip3.audio === "on" ? 1 : 0.5;
-  ctx.fillStyle = C2.wave;
+  ctx.fillStyle = C3.wave;
   const a = Math.max(0, Math.floor(x + 1)), b = Math.min(o.width, Math.ceil(x + w - 1));
   let cols = 0;
-  for (let px = a; px < b; px += 1) {
-    const f0 = o.view.start + px / o.view.ppf, f1 = o.view.start + (px + 1) / o.view.ppf;
+  for (let px2 = a; px2 < b; px2 += 1) {
+    const f0 = o.view.start + px2 / o.view.ppf, f1 = o.view.start + (px2 + 1) / o.view.ppf;
     const s0 = clip3.sourceIn / srcFps + (f0 - clip3.start) / fps, s1 = clip3.sourceIn / srcFps + (f1 - clip3.start) / fps;
     const k0 = Math.max(0, Math.floor(s0 * lane.bucketsPerSecond)), k1 = Math.min(lane.peaks.length - 1, Math.max(k0, Math.ceil(s1 * lane.bucketsPerSecond) - 1));
     if (k0 >= lane.peaks.length) break;
@@ -101007,7 +105827,7 @@ function drawClipWave(ctx, clip3, x, top2, w, bandH, lane, o) {
       if (p[1] > hi) hi = p[1];
     }
     const y0 = Math.round(mid - Math.min(1, hi) * half), y1 = Math.round(mid - Math.max(-1, lo) * half);
-    ctx.fillRect(px, y0, 1, Math.max(1, y1 - y0));
+    ctx.fillRect(px2, y0, 1, Math.max(1, y1 - y0));
     cols += 1;
   }
   ctx.globalAlpha = 1;
@@ -101021,12 +105841,12 @@ function drawRateBadge(ctx, clip3, x, y, w, rate) {
   ctx.textBaseline = "middle";
   const tw = Math.ceil(ctx.measureText(text2).width), bw = tw + 8, bh = 16;
   const bx = Math.round(x + w - bw - 4), by = Math.round(y + NAME_STRIP_H + 4);
-  ctx.fillStyle = C2.scrim;
+  ctx.fillStyle = C3.scrim;
   ctx.fillRect(bx, by, bw, bh);
-  ctx.strokeStyle = C2.snap;
+  ctx.strokeStyle = C3.snap;
   ctx.lineWidth = 1;
   ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
-  ctx.fillStyle = C2.text;
+  ctx.fillStyle = C3.text;
   ctx.fillText(text2, bx + 4, by + bh / 2 + 0.5);
   ctx.restore();
   void rate;
@@ -101036,7 +105856,7 @@ function drawBracket(ctx, x, y, w, h, edge) {
   const tick2 = Math.max(BRACKET_W, Math.min(BRACKET_TICK, Math.floor(w / 3)));
   const bx = edge === "in" ? Math.round(x) : Math.round(x + w) - BRACKET_W;
   const tx2 = edge === "in" ? bx : Math.round(x + w) - tick2;
-  ctx.fillStyle = C2.trim;
+  ctx.fillStyle = C3.trim;
   ctx.fillRect(bx, y + 1, BRACKET_W, h - 2);
   ctx.fillRect(tx2, y + 1, tick2, BRACKET_W);
   ctx.fillRect(tx2, y + h - 1 - BRACKET_W, tick2, BRACKET_W);
@@ -101084,15 +105904,15 @@ function fitText(ctx, text2, max) {
   }
   return lo ? text2.slice(0, lo) + "…" : "";
 }
-function drawPictureSeparator(ctx, x, py, ph) {
-  ctx.fillStyle = C2.text;
-  ctx.fillRect(Math.round(x + 1), py, 1, ph);
-  ctx.fillStyle = C2.bg;
-  ctx.fillRect(Math.round(x + 2), py, 1, ph);
+function drawPictureSeparator(ctx, x, py2, ph) {
+  ctx.fillStyle = C3.text;
+  ctx.fillRect(Math.round(x + 1), py2, 1, ph);
+  ctx.fillStyle = C3.bg;
+  ctx.fillRect(Math.round(x + 2), py2, 1, ph);
 }
 function drawClip(ctx, clip3, x, y, w, h, opts) {
   const { posters, selected, hermes } = opts;
-  const fill = clip3.offline ? C2.offline : C2[clip3.kind] || C2.media;
+  const fill = clip3.offline ? C3.offline : C3[clip3.kind] || C3.media;
   ctx.globalAlpha = clip3.enabled ? 1 : 0.45;
   ctx.fillStyle = fill;
   ctx.fillRect(x, y + 1, w, h - 2);
@@ -101134,7 +105954,7 @@ function drawClip(ctx, clip3, x, y, w, h, opts) {
     textX = x + w;
   }
   if (clip3.offline) {
-    ctx.strokeStyle = C2.offlineLine;
+    ctx.strokeStyle = C3.offlineLine;
     ctx.lineWidth = 1;
     ctx.save();
     ctx.beginPath();
@@ -101148,7 +105968,7 @@ function drawClip(ctx, clip3, x, y, w, h, opts) {
     }
     ctx.restore();
   }
-  ctx.strokeStyle = selected ? C2.sel : C2.edge;
+  ctx.strokeStyle = selected ? C3.sel : C3.edge;
   ctx.lineWidth = selected ? 2 : 1;
   ctx.strokeRect(x + 0.5, y + 1.5, Math.max(0, w - 1), h - 3);
   ctx.globalAlpha = 1;
@@ -101156,9 +105976,9 @@ function drawClip(ctx, clip3, x, y, w, h, opts) {
   const shared = !strip2 || w - 10 - badge >= 24;
   const badgeY = shared ? y + 3 : y + 3 + NAME_STRIP_H;
   if (strip2) {
-    ctx.fillStyle = C2.scrim;
+    ctx.fillStyle = C3.scrim;
     ctx.fillRect(x + 1, y + 2, w - 2, NAME_STRIP_H);
-    ctx.fillStyle = C2.text;
+    ctx.fillStyle = C3.text;
     ctx.font = '600 12px "Segoe UI", system-ui, sans-serif';
     ctx.textBaseline = "top";
     drawn = fitText(ctx, clip3.label, w - 10 - (shared ? badge : 0));
@@ -101166,7 +105986,7 @@ function drawClip(ctx, clip3, x, y, w, h, opts) {
     const room2 = x + w - textX - 4 - badge;
     if (room2 >= LABEL_MIN_PX && h >= 44) {
       ctx.font = '12px "Segoe UI", system-ui, sans-serif';
-      ctx.fillStyle = clip3.offline ? C2.text : C2.text3;
+      ctx.fillStyle = clip3.offline ? C3.text : C3.text3;
       const sub = clip3.offline ? "Offline" : clip3.still ? `Still · ${clip3.duration} f` : `${clip3.duration} f${clip3.retime ? " · " + speedText(clip3.retime) : ""}`;
       const s = fitText(ctx, sub, room2);
       if (s) ctx.fillText(s, textX, y + NAME_STRIP_H + 6);
@@ -101180,29 +106000,33 @@ function drawClip(ctx, clip3, x, y, w, h, opts) {
   if (opts.tiles) opts.tiles.push({ id: clip3.id, x: Math.round(x), y: Math.round(y), w: Math.round(w * 10) / 10, h: Math.round(h), text: drawn, strip: strip2, filmstrip, stripH, poster: pw0 ? "drawn" : "tile", fit: fitOne ? "contain" : pw0 ? "strip" : "" });
   if (hermes) {
     ctx.save();
-    ctx.strokeStyle = C2.hermes;
+    ctx.strokeStyle = C3.hermes;
     ctx.lineWidth = HERMES_DASH_W;
     ctx.setLineDash(HERMES_DASH);
     ctx.strokeRect(x + 1 + HERMES_DASH_W / 2, y + 2 + HERMES_DASH_W / 2, Math.max(0, w - 2 - HERMES_DASH_W), h - 4 - HERMES_DASH_W);
     ctx.restore();
-    if (opts.hermesDrawn) opts.hermesDrawn.push({ id: clip3.id, x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h), badge: w >= 18 });
-  }
-  if (hermes && w >= 18) {
-    ctx.fillStyle = C2.hermes;
-    ctx.fillRect(x + w - 17, badgeY, 14, 14);
-    ctx.fillStyle = C2.bg;
-    ctx.font = '700 12px "Segoe UI", system-ui, sans-serif';
-    ctx.textBaseline = "middle";
-    ctx.fillText("H", x + w - 14, badgeY + 7.5);
+    let badgeAt = w >= 18 ? "pending" : false, bx = 0, by = 0;
+    const mark = w >= 18 ? hermesMarkImage(canvasMarkVariant()) : null;
+    if (mark) {
+      bx = Math.round(x + w - 17);
+      by = Math.round(badgeY);
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(mark, bx, by, HERMES_MARK_PX, HERMES_MARK_PX);
+      ctx.restore();
+      badgeAt = "mark";
+    }
+    if (opts.hermesDrawn) opts.hermesDrawn.push({ id: clip3.id, x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h), badge: badgeAt, ...mark ? { bx, by, variant: canvasMarkVariant() } : {} });
   }
 }
 function drawTimeline(ctx, { model, view, rows, music: music2, posters, selectedClip, selectedSet, selectedCut, selectedEdge, hermesIds, marks: marks2, drag, stats, palette = null, soundPeaks: soundPeaks2 = null, subtitles = null, compact = false }) {
-  C2 = palette || TL_COLORS;
+  C3 = palette || TL_COLORS;
   const soloAny = Boolean(model && model.tracks.some((t2) => t2.role === "sound" && t2.solo));
   const linkedIds = new Set(model ? model.tracks.filter((t2) => t2.role === "sound").flatMap((t2) => t2.items.filter((i2) => i2.link).map((i2) => i2.link)) : []);
   const { width } = view;
   const height = rows.height;
-  ctx.fillStyle = C2.bg;
+  ctx.fillStyle = C3.bg;
   ctx.fillRect(0, 0, width, height);
   if (!model) return 0;
   const x = (f2) => (f2 - view.start) * view.ppf;
@@ -101210,60 +106034,67 @@ function drawTimeline(ctx, { model, view, rows, music: music2, posters, selected
   let painted = 0;
   for (const row2 of rows.rows) {
     if (row2.key === "ruler") {
-      ctx.fillStyle = C2.lane;
+      ctx.fillStyle = C3.lane;
       ctx.fillRect(0, row2.y, width, row2.h);
       if (marks2 && (marks2.in !== null || marks2.out !== null)) {
         const a = marks2.in !== null ? marks2.in : 0, b = marks2.out !== null ? marks2.out + 1 : model.total;
-        ctx.fillStyle = C2.marks;
+        ctx.fillStyle = C3.marks;
         ctx.fillRect(x(a), row2.y + row2.h - 8, (b - a) * view.ppf, 8);
-        ctx.fillStyle = C2.marksLine;
+        ctx.fillStyle = C3.marksLine;
         if (marks2.in !== null) ctx.fillRect(Math.round(x(a)), row2.y + row2.h - 8, 2, 8);
         if (marks2.out !== null) ctx.fillRect(Math.round(x(b)) - 2, row2.y + row2.h - 8, 2, 8);
       }
       const ticks = rulerTicks(view.start, endFrame, view.ppf, model.fps);
-      ctx.fillStyle = C2.line2;
+      ctx.fillStyle = C3.line2;
       for (const f2 of ticks.minor) ctx.fillRect(Math.round(x(f2)), row2.y + row2.h - 6, 1, 6);
       ctx.font = '12px "Segoe UI", system-ui, sans-serif';
       ctx.textBaseline = "top";
       for (const f2 of ticks.major) {
-        const px = Math.round(x(f2));
-        ctx.fillStyle = C2.line2;
-        ctx.fillRect(px, row2.y + 8, 1, row2.h - 8);
+        const px2 = Math.round(x(f2));
+        ctx.fillStyle = C3.line2;
+        ctx.fillRect(px2, row2.y + 8, 1, row2.h - 8);
         const label2 = formatTimecode(model.startTc + f2, model.rate);
         const lw = ctx.measureText(label2).width;
-        if (px + RULER_LABEL_DX >= 0 && px + RULER_LABEL_DX + lw <= width - RULER_EDGE) {
-          ctx.fillStyle = C2.text2;
-          ctx.fillText(label2, px + RULER_LABEL_DX, row2.y + 6);
-          if (stats && stats.ruler) stats.ruler.push({ x: px + RULER_LABEL_DX, w: Math.round(lw * 100) / 100, text: label2 });
+        if (px2 + RULER_LABEL_DX >= 0 && px2 + RULER_LABEL_DX + lw <= width - RULER_EDGE) {
+          ctx.fillStyle = C3.text2;
+          ctx.fillText(label2, px2 + RULER_LABEL_DX, row2.y + 6);
+          if (stats && stats.ruler) stats.ruler.push({ x: px2 + RULER_LABEL_DX, w: Math.round(lw * 100) / 100, text: label2 });
         }
       }
-      ctx.fillStyle = C2.line;
+      ctx.fillStyle = C3.line;
       ctx.fillRect(0, row2.y + row2.h - 1, width, 1);
       continue;
     }
     if (row2.key === "subs") {
-      drawSubtitleRow(ctx, row2, { C: C2, view, width, selected: subtitles ? subtitles.selected : null, preview: subtitles ? subtitles.preview : null, stats: stats && stats.subs });
+      drawSubtitleRow(ctx, row2, { C: C3, view, width, selected: subtitles ? subtitles.selected : null, preview: subtitles ? subtitles.preview : null, stats: stats && stats.subs });
       continue;
     }
     if (row2.key === "markers") {
-      ctx.fillStyle = C2.laneAlt;
+      ctx.fillStyle = C3.laneAlt;
       ctx.fillRect(0, row2.y, width, row2.h);
       ctx.font = '12px "Segoe UI", system-ui, sans-serif';
       ctx.textBaseline = "middle";
       for (const m of model.markers) {
-        const px = x(m.frame);
-        if (px < -200 || px > width + 8) continue;
-        ctx.fillStyle = m.by === "hermes" ? C2.hermes : m.color || C2.marker;
-        if (m.duration) ctx.fillRect(px, row2.y + row2.h - 5, m.duration * view.ppf, 3);
+        const px2 = x(m.frame);
+        if (px2 < -200 || px2 > width + 8) continue;
+        ctx.fillStyle = m.by === "hermes" ? C3.hermes : m.color || C3.marker;
+        if (m.duration) ctx.fillRect(px2, row2.y + row2.h - 5, m.duration * view.ppf, 3);
         ctx.beginPath();
-        ctx.moveTo(px - 5, row2.y + 3);
-        ctx.lineTo(px + 5, row2.y + 3);
-        ctx.lineTo(px, row2.y + 13);
+        ctx.moveTo(px2 - 5, row2.y + 3);
+        ctx.lineTo(px2 + 5, row2.y + 3);
+        ctx.lineTo(px2, row2.y + 13);
         ctx.closePath();
         ctx.fill();
+        let nameX = px2 + 8;
+        if (m.by === "hermes") {
+          const mx = Math.round(px2 + 8), my = Math.round(row2.y + (row2.h - HERMES_MARK_PX) / 2);
+          const ok4 = drawHermesMark(ctx, mx, my);
+          if (stats && stats.hermesMarkers) stats.hermesMarkers.push({ id: m.id, badge: ok4 ? "mark" : "pending", ...ok4 ? { bx: mx, by: my, variant: canvasMarkVariant() } : {} });
+          nameX = px2 + 8 + HERMES_MARK_PX + 4;
+        }
         if (m.name) {
-          ctx.fillStyle = C2.text2;
-          ctx.fillText(fitText(ctx, m.name, 180), px + 8, row2.y + row2.h / 2);
+          ctx.fillStyle = C3.text2;
+          ctx.fillText(fitText(ctx, m.name, 180), nameX, row2.y + row2.h / 2);
         }
       }
       continue;
@@ -101271,14 +106102,14 @@ function drawTimeline(ctx, { model, view, rows, music: music2, posters, selected
     if (row2.track) {
       const cutAt = drag && drag.cut !== null && drag.cut !== void 0 ? drag.cut : selectedCut;
       const storyCut = cutAt !== null && cutAt !== void 0 && row2.track.role === "storyline" ? cutAt : null;
-      ctx.fillStyle = row2.track.role === "storyline" ? C2.lane : C2.laneAlt;
+      ctx.fillStyle = row2.track.role === "storyline" ? C3.lane : C3.laneAlt;
       ctx.fillRect(0, row2.y, width, row2.h);
       if (row2.sound) {
         const silent = row2.track.mute || soloAny && !row2.track.solo;
         for (const item of row2.track.items) {
           if (item.end < view.start || item.start > endFrame) continue;
           const x0 = x(item.start), w = Math.max(1, item.duration * view.ppf);
-          drawSoundClip(ctx, item, x0, row2.y, w, row2.h, row2.track.soundRole, { C: C2, view, model, width, peaks: soundPeaks2, muted: silent, songLane: Boolean(row2.musicLane), selected: selectedClip === item.id || selectedSet && selectedSet.has(item.id), gainDrag: drag && drag.gain === item.id, keyDrag: drag && drag.key && drag.key.clip === item.id ? drag.key.source : null, stats });
+          drawSoundClip(ctx, item, x0, row2.y, w, row2.h, row2.track.soundRole, { C: C3, view, model, width, peaks: soundPeaks2, muted: silent, songLane: Boolean(row2.musicLane), selected: selectedClip === item.id || selectedSet && selectedSet.has(item.id), gainDrag: drag && drag.gain === item.id, keyDrag: drag && drag.key && drag.key.clip === item.id ? drag.key.source : null, stats });
           const edge = selectedEdge && selectedEdge.id === item.id ? selectedEdge.edge : null;
           if (edge) {
             drawBracket(ctx, x0, row2.y, w, row2.h, edge);
@@ -101287,7 +106118,7 @@ function drawTimeline(ctx, { model, view, rows, music: music2, posters, selected
           painted += 1;
         }
         if (row2.musicLane && music2 && model.music) drawSongMarks(ctx, model.music, row2, music2, model, view, x, width, endFrame, false);
-        ctx.fillStyle = C2.line;
+        ctx.fillStyle = C3.line;
         ctx.fillRect(0, row2.y + row2.h - 1, width, 1);
         continue;
       }
@@ -101295,14 +106126,14 @@ function drawTimeline(ctx, { model, view, rows, music: music2, posters, selected
         if (item.end < view.start || item.start > endFrame) continue;
         const x0 = x(item.start), w = item.duration * view.ppf;
         if (item.type === "gap") {
-          ctx.fillStyle = C2.gap;
+          ctx.fillStyle = C3.gap;
           ctx.fillRect(x0, row2.y + 1, w, row2.h - 2);
           continue;
         }
         drawClip(ctx, item, x0, row2.y, Math.max(1, w), row2.h, { posters, compact, selected: selectedClip === item.id || selectedSet && selectedSet.has(item.id), hermes: hermesIds && hermesIds.has(item.id), labelled: stats && stats.labelled, tiles: stats && stats.tiles, hermesDrawn: stats && stats.hermes, peaks: soundPeaks2, model, view, width, waves: stats && stats.clipWaves, rates: stats && stats.rates });
         if (linkedIds && linkedIds.has(item.id) && w >= 30) {
           ctx.save();
-          ctx.strokeStyle = C2.text;
+          ctx.strokeStyle = C3.text;
           ctx.lineWidth = 1.5;
           for (const dx of [4, 9]) {
             ctx.beginPath();
@@ -101325,7 +106156,7 @@ function drawTimeline(ctx, { model, view, rows, music: music2, posters, selected
         const top2 = row2.y + 3, bot = row2.y + row2.h - 3;
         ctx.save();
         ctx.globalAlpha = 0.85;
-        ctx.fillStyle = t2.kind === "dip_white" ? "#e8e8ea" : t2.kind === "dip_black" ? "#050506" : C2.scrim;
+        ctx.fillStyle = t2.kind === "dip_white" ? "#e8e8ea" : t2.kind === "dip_black" ? "#050506" : C3.scrim;
         ctx.beginPath();
         ctx.moveTo(a, top2);
         ctx.lineTo(b, bot);
@@ -101334,7 +106165,7 @@ function drawTimeline(ctx, { model, view, rows, music: music2, posters, selected
         ctx.closePath();
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.strokeStyle = C2.sel;
+        ctx.strokeStyle = C3.sel;
         ctx.lineWidth = 1;
         ctx.strokeRect(a + 0.5, top2 + 0.5, Math.max(1, b - a - 1), bot - top2 - 1);
         ctx.beginPath();
@@ -101344,20 +106175,20 @@ function drawTimeline(ctx, { model, view, rows, music: music2, posters, selected
         ctx.restore();
         if (stats && stats.transitions) stats.transitions.push({ id: t2.id, kind: t2.kind, x0: Math.round(a), x1: Math.round(b) });
       }
-      ctx.fillStyle = C2.line;
+      ctx.fillStyle = C3.line;
       ctx.fillRect(0, row2.y + row2.h - 1, width, 1);
       continue;
     }
     if (row2.key === "clipsound") {
-      ctx.fillStyle = C2.laneAlt;
+      ctx.fillStyle = C3.laneAlt;
       ctx.fillRect(0, row2.y, width, row2.h);
       for (const item of row2.story.items) {
         if (item.type !== "clip" || !item.hasAudio || item.still || item.end < view.start || item.start > endFrame) continue;
         const x0 = x(item.start), w = Math.max(1, item.duration * view.ppf);
         ctx.globalAlpha = item.enabled ? 1 : 0.45;
-        ctx.fillStyle = C2.scrim;
+        ctx.fillStyle = C3.scrim;
         ctx.fillRect(x0, row2.y + 2, w, row2.h - 4);
-        ctx.strokeStyle = C2.edge;
+        ctx.strokeStyle = C3.edge;
         ctx.lineWidth = 1;
         ctx.strokeRect(x0 + 0.5, row2.y + 2.5, Math.max(0, w - 1), row2.h - 5);
         ctx.globalAlpha = 1;
@@ -101367,42 +106198,42 @@ function drawTimeline(ctx, { model, view, rows, music: music2, posters, selected
           if (stats && stats.clipWaves) stats.clipWaves.push({ id: item.id, x: Math.round(x0), y: Math.round(top2), w: Math.round(w), h: bandH, cols, audio: item.audio, word: "" });
         }
       }
-      ctx.fillStyle = C2.line;
+      ctx.fillStyle = C3.line;
       ctx.fillRect(0, row2.y + row2.h - 1, width, 1);
       continue;
     }
     if (row2.key === "music") {
-      ctx.fillStyle = C2.lane;
+      ctx.fillStyle = C3.lane;
       ctx.fillRect(0, row2.y, width, row2.h);
       const lane = model.music;
       if (!lane || lane.empty) continue;
       drawSongMarks(ctx, lane, row2, music2, model, view, x, width, endFrame, true);
-      ctx.fillStyle = C2.line;
+      ctx.fillStyle = C3.line;
       ctx.fillRect(0, row2.y + row2.h - 1, width, 1);
     }
   }
   if (drag) {
     const top2 = rows.rows[0].h;
     if (drag.drop !== null && drag.drop !== void 0) {
-      ctx.fillStyle = C2.marks;
+      ctx.fillStyle = C3.marks;
       ctx.fillRect(0, drag.drop.y, width, drag.drop.h);
-      ctx.fillStyle = C2.marksLine;
+      ctx.fillStyle = C3.marksLine;
       ctx.fillRect(Math.round(x(drag.drop.frame)) - 1, drag.drop.y, 3, drag.drop.h);
     }
     if (drag.limit !== null && drag.limit !== void 0) {
-      ctx.fillStyle = C2.limit;
+      ctx.fillStyle = C3.limit;
       ctx.fillRect(Math.round(x(drag.limit)) - 2, top2, 4, height - top2);
     }
     if (drag.snap !== null && drag.snap !== void 0) {
-      ctx.fillStyle = C2.snap;
+      ctx.fillStyle = C3.snap;
       ctx.fillRect(Math.round(x(drag.snap)) - 1, 0, 2, height);
     }
     if (drag.insert !== null && drag.insert !== void 0) {
-      ctx.fillStyle = C2.sel;
+      ctx.fillStyle = C3.sel;
       ctx.fillRect(Math.round(x(drag.insert)) - 1, top2, 3, height - top2);
     }
     if (drag.box) {
-      ctx.strokeStyle = C2.sel;
+      ctx.strokeStyle = C3.sel;
       ctx.lineWidth = 1;
       ctx.strokeRect(drag.box.x + 0.5, drag.box.y + 0.5, drag.box.w, drag.box.h);
     }
@@ -101410,7 +106241,7 @@ function drawTimeline(ctx, { model, view, rows, music: music2, posters, selected
   if (marks2 && (marks2.in !== null || marks2.out !== null)) {
     const a = marks2.in !== null ? marks2.in : 0, b = marks2.out !== null ? marks2.out + 1 : model.total;
     const top2 = rows.rows[0].h;
-    ctx.fillStyle = C2.marks;
+    ctx.fillStyle = C3.marks;
     ctx.fillRect(x(a), top2, (b - a) * view.ppf, height - top2);
   }
   return painted;
@@ -101423,7 +106254,7 @@ function drawSongMarks(ctx, lane, row2, music2, model, view, x, width, endFrame,
   ctx.rect(a, row2.y, b - a, row2.h);
   ctx.clip();
   if (wave) {
-    ctx.fillStyle = C2.musicBg;
+    ctx.fillStyle = C3.musicBg;
     ctx.fillRect(a, row2.y, b - a, row2.h);
   }
   const songAt = (f2) => (f2 - lane.start + lane.sourceIn) / model.fps;
@@ -101438,13 +106269,13 @@ function drawSongMarks(ctx, lane, row2, music2, model, view, x, width, endFrame,
       const next = sections[i2 + 1];
       const t1 = s && Number.isFinite(Number(s.end_seconds)) ? Number(s.end_seconds) : next ? eventSeconds(next) : (lane.end - lane.start + lane.sourceIn) / model.fps;
       const sx = x(lane.start + t0 * model.fps - lane.sourceIn), ex = x(lane.start + t1 * model.fps - lane.sourceIn);
-      ctx.fillStyle = C2.section;
+      ctx.fillStyle = C3.section;
       ctx.fillRect(sx, row2.y, ex - sx, barH);
-      ctx.fillStyle = C2.sectionLine;
+      ctx.fillStyle = C3.sectionLine;
       ctx.fillRect(Math.round(sx), row2.y, 1, barH);
       const name2 = typeof s.label === "string" ? s.label : typeof s.name === "string" ? s.name : "";
       if (name2) {
-        ctx.fillStyle = C2.text2;
+        ctx.fillStyle = C3.text2;
         ctx.fillText(fitText(ctx, name2, ex - sx - 8), sx + 5, row2.y + barH / 2);
       }
     });
@@ -101456,12 +106287,12 @@ function drawSongMarks(ctx, lane, row2, music2, model, view, x, width, endFrame,
       for (const e of list) {
         const t2 = eventSeconds(e);
         if (t2 === null) continue;
-        const px = x(lane.start + t2 * model.fps - lane.sourceIn);
-        if (px >= a - 1 && px <= b + 1) ctx.fillRect(Math.round(px), row2.y + top2, 1, row2.h - top2);
+        const px2 = x(lane.start + t2 * model.fps - lane.sourceIn);
+        if (px2 >= a - 1 && px2 <= b + 1) ctx.fillRect(Math.round(px2), row2.y + top2, 1, row2.h - top2);
       }
     };
-    tick2(Array.isArray(music2.beats) ? music2.beats : [], C2.beat, barH + Math.round((row2.h - barH) * 0.6), 5);
-    tick2(Array.isArray(music2.downbeats) ? music2.downbeats : [], C2.downbeat, barH, 3);
+    tick2(Array.isArray(music2.beats) ? music2.beats : [], C3.beat, barH + Math.round((row2.h - barH) * 0.6), 5);
+    tick2(Array.isArray(music2.downbeats) ? music2.downbeats : [], C3.downbeat, barH, 3);
   }
   ctx.restore();
 }
@@ -101469,7 +106300,7 @@ function drawLaneWave(ctx, music2, songStart, songEnd, width, y, h) {
   if (!music2.peaks || !music2.peaks.length || !music2.bucketsPerSecond) return;
   ctx.save();
   ctx.translate(0, y);
-  drawMusicEnvelope(ctx, { peaks: music2.peaks, bucketsPerSecond: music2.bucketsPerSecond, viewStart: songStart, viewEnd: songEnd, width, height: h, color: C2.wave });
+  drawMusicEnvelope(ctx, { peaks: music2.peaks, bucketsPerSecond: music2.bucketsPerSecond, viewStart: songStart, viewEnd: songEnd, width, height: h, color: C3.wave });
   ctx.restore();
 }
 
@@ -101641,22 +106472,22 @@ function hitAt(model, rows, view, x, y, { alt = false } = {}) {
   if (!row2) return { kind: "none" };
   if (!row2.track) return { kind: row2.key };
   const track = row2.track, ppf = view.ppf;
-  const px = (f2) => (f2 - view.start) * ppf;
+  const px2 = (f2) => (f2 - view.start) * ppf;
   const items = track.items;
   if (track.role === "storyline") {
     for (let i2 = 1; i2 < items.length; i2 += 1) {
       const left = items[i2 - 1], right = items[i2];
       const zone2 = Math.min(CUT_PX, Math.min(left.duration, right.duration) * ppf / 3);
       const roll = alt ? zone2 : Math.min(ROLL_PX, zone2);
-      if (Math.abs(x - px(right.start)) <= roll) return { kind: "cut", track, row: row2, left, right, frame: right.start };
+      if (Math.abs(x - px2(right.start)) <= roll) return { kind: "cut", track, row: row2, left, right, frame: right.start };
     }
   }
   const fx = view.start + x / ppf;
   const item = items.find((it) => fx >= it.start && fx < it.end) || items.find((it) => fx >= it.start && fx <= it.end + 1e-9);
   if (!item) return { kind: "empty", track, row: row2, frame: Math.floor(fx) };
   const zone = Math.min(EDGE_PX, item.duration * ppf / 3);
-  if (x - px(item.start) <= zone) return { kind: "edge", track, row: row2, item, edge: "in" };
-  if (px(item.end) - x <= zone) return { kind: "edge", track, row: row2, item, edge: "out" };
+  if (x - px2(item.start) <= zone) return { kind: "edge", track, row: row2, item, edge: "in" };
+  if (px2(item.end) - x <= zone) return { kind: "edge", track, row: row2, item, edge: "out" };
   return { kind: "body", track, row: row2, item };
 }
 function dragOrigin(hit2) {
@@ -101668,8 +106499,8 @@ function movingIds(model, hit2) {
   if (hit2.kind === "cut") return [hit2.left.id, hit2.right.id];
   if (!hit2.item) return [];
   if (hit2.track.role !== "storyline") return [hit2.item.id];
-  const at = hit2.track.items.indexOf(hit2.item);
-  return hit2.track.items.slice(Math.max(0, at)).map((i2) => i2.id);
+  const at2 = hit2.track.items.indexOf(hit2.item);
+  return hit2.track.items.slice(Math.max(0, at2)).map((i2) => i2.id);
 }
 function slipDelta(item, recordDelta, rate) {
   const sr = item.sourceRate || rate;
@@ -101842,8 +106673,11 @@ function opPhrase(op) {
 var PHRASES = new Set(Object.values(OP_WORDS));
 var LABEL_MAX = 120;
 var SHOWN = 3;
+var moreEdits = (n) => n > 0 ? ` +${n} edit${n === 1 ? "" : "s"}` : "";
 function wordedLabel(label2) {
   const text2 = String(label2 || "");
+  const counted = /^((?:Undo |Redo )?(?:Hermes: )?)(.+) \+(\d+)$/.exec(text2);
+  if (counted && counted[2].split(", ").every((p) => PHRASES.has(p))) return counted[1] + counted[2] + moreEdits(Number(counted[3]));
   const m = /^((?:Undo |Redo )?(?:Hermes: )?)([a-z][a-z0-9_]*(?:, [a-z][a-z0-9_]*)*)$/.exec(text2);
   if (!m) return text2;
   const names = m[2].split(", ");
@@ -101853,7 +106687,7 @@ function wordedLabel(label2) {
   if (!whole2.every(known)) return text2;
   const said = [...new Set(whole2.map(opPhrase))];
   const hidden3 = Math.max(0, said.length - SHOWN) + (cut2 ? 1 : 0);
-  return m[1] + said.slice(0, SHOWN).join(", ") + (hidden3 ? ` +${hidden3}` : "");
+  return m[1] + said.slice(0, SHOWN).join(", ") + moreEdits(hidden3);
 }
 
 // desktop/film-suite/src/timeline/view/timeline-readouts.js
@@ -102005,7 +106839,7 @@ function useHermesDid2(project, doc2, model, session) {
   return { entry: entry2, busy: busy2, error, undo: undo2, dismiss };
 }
 function HermesDidLine2({ entry: entry2, busy: busy2, error, onUndo, onDismiss, onShow = null }) {
-  const segs = [...entry2.lines.slice(0, 3), entry2.lines.length > 3 ? `+${entry2.lines.length - 3} more` : "", entry2.length].filter(Boolean);
+  const segs = [...entry2.lines.slice(0, 3), entry2.lines.length > 3 ? `+${entry2.lines.length - 3} more change${entry2.lines.length - 3 === 1 ? "" : "s"}` : "", entry2.length].filter(Boolean);
   const full = [`Hermes ${entry2.at} · ${entry2.label}`, ...entry2.lines, entry2.length].filter(Boolean).join("\n");
   return jsxs107("div", { className: "tlv-hermes", role: "status", "data-testid": "tl-hermes", "data-before": String(entry2.before), "data-after": String(entry2.after), children: [
     // p14-sam (HER-050): Hermes' own mark (the Nous Girl), the same on every surface.
@@ -102070,10 +106904,10 @@ function pasteOps(model, playhead) {
   if (!board || !board.length) return { refuse: "Nothing copied (Ctrl+C copies the selected clips)" };
   const story = storylineOf(model);
   const end2 = story && story.items.length ? story.items[story.items.length - 1].end : 0;
-  const at = Math.max(0, Math.min(playhead, end2));
+  const at2 = Math.max(0, Math.min(playhead, end2));
   const ops = [];
   const v1 = board.filter((p) => p.storyline);
-  for (const p of [...v1].reverse()) ops.push({ op: "insert", clip: JSON.parse(JSON.stringify(p.spec)), at_frame: at, track: story ? story.id : "V1" });
+  for (const p of [...v1].reverse()) ops.push({ op: "insert", clip: JSON.parse(JSON.stringify(p.spec)), at_frame: at2, track: story ? story.id : "V1" });
   for (const p of board.filter((x) => !x.storyline)) {
     const track = model.tracks.find((t2) => t2.id === p.track && t2.role === "overlay") || model.tracks.find((t2) => t2.role === "overlay");
     if (!track) continue;
@@ -102081,7 +106915,7 @@ function pasteOps(model, playhead) {
   }
   if (!ops.length) return { refuse: "No picture track to paste on" };
   const what = board.length === 1 ? board[0].spec.label || "clip" : `${board.length} clips`;
-  return { ops, label: `Paste ${what} at ${tc(model, v1.length ? at : playhead)}`.slice(0, 120) };
+  return { ops, label: `Paste ${what} at ${tc(model, v1.length ? at2 : playhead)}`.slice(0, 120) };
 }
 var clipboardCount = () => board ? board.length : 0;
 function matchFrame(model, playhead) {
@@ -102235,9 +107069,9 @@ function dropOps(model, take, { track, frame }) {
   const clip3 = { source: { kind, ref: take.ref }, label: take.label || "", ...take.still ? { duration_frames: still } : {} };
   if (track.role === "storyline") {
     const points = [0, ...storylineCuts(model).map((c) => c.frame), track.items.length ? track.items[track.items.length - 1].end : 0];
-    const at = points.reduce((best, p) => Math.abs(p - frame) < Math.abs(best - frame) ? p : best, points[0]);
-    const index = points.indexOf(at);
-    return { ops: [{ op: "insert", clip: clip3, at_frame: at, track: track.id }], label: `Insert ${take.label || "take"} at ${formatTimecode(model.startTc + at, model.rate)}`, index, at };
+    const at2 = points.reduce((best, p) => Math.abs(p - frame) < Math.abs(best - frame) ? p : best, points[0]);
+    const index = points.indexOf(at2);
+    return { ops: [{ op: "insert", clip: clip3, at_frame: at2, track: track.id }], label: `Insert ${take.label || "take"} at ${formatTimecode(model.startTc + at2, model.rate)}`, index, at: at2 };
   }
   return { ops: [{ op: "overwrite", clip: clip3, at_frame: Math.max(0, frame), track: track.id }], label: `Place ${take.label || "take"} on ${track.id} at ${formatTimecode(model.startTc + frame, model.rate)}`, at: frame };
 }
@@ -102354,12 +107188,12 @@ function songOf({ trackSha256, mapId, seconds: seconds2, name: name2 = "", selec
   const s = selection && Number(selection.end) > Number(selection.start) ? { start: Math.max(0, Number(selection.start)), end: Math.min(total, Number(selection.end)) } : null;
   return { song: { trackSha256, mapId, seconds: total, name: String(name2 || "").slice(0, 80), range: s && s.end > s.start ? s : null }, why: "" };
 }
-function songOps(model, song, { at = 0, whole: whole2 = false } = {}) {
+function songOps(model, song, { at: at2 = 0, whole: whole2 = false } = {}) {
   const fps = model.rate.num / model.rate.den;
   const range = !whole2 && song.range ? song.range : { start: 0, end: song.seconds };
   const sourceIn = Math.round(range.start * fps);
   const duration = Math.max(1, Math.floor(range.end * fps) - sourceIn);
-  const op = { op: "place_music", track_sha256: song.trackSha256, map_id: song.mapId, record_start_frame: Math.max(0, Math.round(at)), source_in_frame: sourceIn, duration_frames: duration };
+  const op = { op: "place_music", track_sha256: song.trackSha256, map_id: song.mapId, record_start_frame: Math.max(0, Math.round(at2)), source_in_frame: sourceIn, duration_frames: duration };
   const what = song.name || "the song";
   const span2 = !whole2 && song.range ? ` (${formatTimecode(sourceIn, model.rate).slice(3)}–${formatTimecode(sourceIn + duration, model.rate).slice(3)} of the song)` : "";
   return { ops: [op], label: `Place ${what}${span2} at ${formatTimecode(model.startTc + op.record_start_frame, model.rate)}`.slice(0, 120) };
@@ -102411,11 +107245,11 @@ function startMove(ctx, event, hit2, click) {
       const order = hit2.track.items.map((i2) => i2.id);
       const next = order.filter((id) => !ids.includes(id));
       next.splice(to, 0, ...ids);
-      const at = rest2.slice(0, to).reduce((n, i2) => n + i2.duration, 0);
-      last2 = next.join() === order.join() ? null : { op: { op: "move", clips: ids, to_index: to }, at };
+      const at2 = rest2.slice(0, to).reduce((n, i2) => n + i2.duration, 0);
+      last2 = next.join() === order.join() ? null : { op: { op: "move", clips: ids, to_index: to }, at: at2 };
       if (last2) edit.preview([last2.op]);
       else edit.clearPreview();
-      setDrag({ insert: last2 ? rest2.slice(0, to).reduce((n, i2) => n + i2.duration, 0) : null, text: last2 ? `Move ${what} to ${formatTimecode(model.startTc + at, model.rate)}` : "" });
+      setDrag({ insert: last2 ? rest2.slice(0, to).reduce((n, i2) => n + i2.duration, 0) : null, text: last2 ? `Move ${what} to ${formatTimecode(model.startTc + at2, model.rate)}` : "" });
       return;
     }
     const over = hit2.track.role === "sound" ? rowAt(ctx.rows, local(e).y) : null;
@@ -102524,38 +107358,38 @@ function songTarget(ctx, event) {
 function dragOver(ctx, event) {
   const types2 = [...event.dataTransfer.types || []];
   if (ctx.edit && ctx.edit.onSongDrop && types2.includes(SONG_DRAG)) {
-    const at2 = songTarget(ctx, event);
-    if (!at2) return;
+    const at3 = songTarget(ctx, event);
+    if (!at3) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
-    const text3 = `Song at ${formatTimecode(ctx.model.startTc + at2.frame, ctx.model.rate)}`;
-    ctx.setDrag((d) => d && d.drop && d.drop.frame === at2.frame && d.drop.y === at2.row.y ? d : { drop: { y: at2.row.y, h: at2.row.h, frame: at2.frame }, text: text3 });
+    const text3 = `Song at ${formatTimecode(ctx.model.startTc + at3.frame, ctx.model.rate)}`;
+    ctx.setDrag((d) => d && d.drop && d.drop.frame === at3.frame && d.drop.y === at3.row.y ? d : { drop: { y: at3.row.y, h: at3.row.h, frame: at3.frame }, text: text3 });
     return;
   }
   if (!ctx.edit || !ctx.edit.onDrop || !(types2.includes(TAKE_DRAG) || types2.includes(FOOTAGE_DRAG) || types2.includes(CUT_DRAG2))) return;
-  const at = dropTarget(ctx, event);
-  if (!at || types2.includes(CUT_DRAG2) && at.row.sound) return;
+  const at2 = dropTarget(ctx, event);
+  if (!at2 || types2.includes(CUT_DRAG2) && at2.row.sound) return;
   event.preventDefault();
   event.dataTransfer.dropEffect = "copy";
-  const text2 = `Drop: ${at.track.role === "storyline" ? "insert" : at.row.sound ? "sound on " + at.track.id : "place"} at ${formatTimecode(ctx.model.startTc + at.snapTo, ctx.model.rate)}`;
-  ctx.setDrag((d) => d && d.drop && d.drop.frame === at.snapTo && d.drop.y === at.row.y ? d : { drop: { y: at.row.y, h: at.row.h, frame: at.snapTo }, text: text2 });
+  const text2 = `Drop: ${at2.track.role === "storyline" ? "insert" : at2.row.sound ? "sound on " + at2.track.id : "place"} at ${formatTimecode(ctx.model.startTc + at2.snapTo, ctx.model.rate)}`;
+  ctx.setDrag((d) => d && d.drop && d.drop.frame === at2.snapTo && d.drop.y === at2.row.y ? d : { drop: { y: at2.row.y, h: at2.row.h, frame: at2.snapTo }, text: text2 });
 }
 function drop(ctx, event) {
   const song = readSongDrag(event.dataTransfer);
   if (song) {
-    const at2 = songTarget(ctx, event);
+    const at3 = songTarget(ctx, event);
     ctx.setDrag(null);
-    if (!at2 || !ctx.edit || !ctx.edit.onSongDrop) return;
+    if (!at3 || !ctx.edit || !ctx.edit.onSongDrop) return;
     event.preventDefault();
-    ctx.edit.onSongDrop(song, at2.frame);
+    ctx.edit.onSongDrop(song, at3.frame);
     return;
   }
   const take = readTakeDrag(event.dataTransfer);
-  const at = dropTarget(ctx, event);
+  const at2 = dropTarget(ctx, event);
   ctx.setDrag(null);
-  if (!take || !at || !ctx.edit || !ctx.edit.onDrop || take.kind === "cut" && at.row.sound) return;
+  if (!take || !at2 || !ctx.edit || !ctx.edit.onDrop || take.kind === "cut" && at2.row.sound) return;
   event.preventDefault();
-  ctx.edit.onDrop(take, at);
+  ctx.edit.onDrop(take, at2);
 }
 
 // desktop/film-suite/src/timeline/view/timeline-palette.js
@@ -102739,8 +107573,8 @@ function addKeyAt(ctx, event, hit2) {
   const fps = model.fps;
   const sf = sourceFrameAtX(clip3, x, view, fps);
   const keys = keysOf2(clip3, fps);
-  const at = clip3.start + (sf - clip3.sourceIn) / (clip3.sourceRate.num / clip3.sourceRate.den) * fps;
-  const onLine = keys.length ? keyDbAt(keys, at) : 0;
+  const at2 = clip3.start + (sf - clip3.sourceIn) / (clip3.sourceRate.num / clip3.sourceRate.den) * fps;
+  const onLine = keys.length ? keyDbAt(keys, at2) : 0;
   const row2 = rowOf(ctx, hit2);
   const db2 = event.shiftKey ? dbOfY(clip3, y, row2.y, row2.h) : Math.round(onLine * 10) / 10;
   onSelect({ kind: "clip", id: clip3.id });
@@ -103043,9 +107877,9 @@ function clip2(item, path, storyline2, rate) {
   if (!storyline2) {
     int(item.record_start_frame, path + ".record_start_frame");
     if (item.attach !== void 0 && item.attach !== null) {
-      const at = exact(item.attach, path + ".attach", ["clip", "offset_frames"]);
-      ident(at.clip, path + ".attach.clip");
-      int(at.offset_frames, path + ".attach.offset_frames", -MAX_FRAME2);
+      const at2 = exact(item.attach, path + ".attach", ["clip", "offset_frames"]);
+      ident(at2.clip, path + ".attach.clip");
+      int(at2.offset_frames, path + ".attach.offset_frames", -MAX_FRAME2);
     }
   }
 }
@@ -103055,7 +107889,7 @@ function gainTenths(value) {
   if (Number.isInteger(value)) return value * 10;
   const m = NUMBER_RE2.exec(String(value));
   if (!m) return null;
-  const [, sign, whole2, fraction2 = "", exponent = "0"] = m;
+  const [, sign2, whole2, fraction2 = "", exponent = "0"] = m;
   const digits = BigInt(whole2 + fraction2);
   const shift2 = Number(exponent) - fraction2.length + 1;
   let tenths;
@@ -103065,7 +107899,7 @@ function gainTenths(value) {
     if (digits % d !== 0n) return null;
     tenths = digits / d;
   }
-  return Number(sign ? -tenths : tenths);
+  return Number(sign2 ? -tenths : tenths);
 }
 var gainValue = (tenths) => tenths / 10;
 function gain(value, path) {
@@ -103618,6 +108452,8 @@ function TimelineTracks({ model, music: music2, posters, playhead, onSeek, selec
     read2();
     return watchTheme(read2);
   }, []);
+  const [, setMarkTick] = useState(0);
+  useEffect(() => onHermesMarkReady(() => setMarkTick((n) => n + 1)), []);
   const rows = trackRows(model, extra, { compact, clipSound, markers: !(readOnly2 && model && !model.markers.length), subs: subsRow(subs) });
   const [subPreview, setSubPreview] = useState(null);
   const total = model ? Math.max(model.total, fitRange ? fitRange[1] : 0) : 0;
@@ -103686,7 +108522,7 @@ function TimelineTracks({ model, music: music2, posters, playhead, onSeek, selec
     const ctx = canvas2.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const stats = { ruler: [], labelled: [], tiles: [], brackets: [], sounds: [], links: [], transitions: [], clipWaves: [], rates: [], hermes: [], subs: [] };
+    const stats = { ruler: [], labelled: [], tiles: [], brackets: [], sounds: [], links: [], transitions: [], clipWaves: [], rates: [], hermes: [], hermesMarkers: [], subs: [] };
     const t0 = performance.now();
     const painted = drawTimeline(ctx, {
       model,
@@ -103719,6 +108555,7 @@ function TimelineTracks({ model, music: music2, posters, playhead, onSeek, selec
     canvas2.dataset.clipWaves = JSON.stringify(stats.clipWaves);
     canvas2.dataset.rates = JSON.stringify(stats.rates);
     canvas2.dataset.hermes = JSON.stringify(stats.hermes);
+    canvas2.dataset.hermesMarkers = JSON.stringify(stats.hermesMarkers);
     canvas2.dataset.rows = JSON.stringify(rows.rows.map((r) => r.key));
     canvas2.dataset.ruler = JSON.stringify(stats.ruler);
     canvas2.dataset.subs = JSON.stringify(stats.subs);
@@ -103907,12 +108744,12 @@ function TimelineTracks({ model, music: music2, posters, playhead, onSeek, selec
     const isClip = hit2.item && hit2.item.type === "clip";
     const tool = edit && edit.tool ? edit.tool : "select";
     if (editable2 && isClip && !event.shiftKey && !ctrl && tool === "blade" && (hit2.kind === "body" || hit2.kind === "edge") && !hit2.track.locked) {
-      const at = Math.round(view.start + x / view.ppf);
-      if (at <= hit2.item.start || at >= hit2.item.end) {
+      const at2 = Math.round(view.start + x / view.ppf);
+      if (at2 <= hit2.item.start || at2 >= hit2.item.end) {
         selectHit(hit2);
         return;
       }
-      void edit.commit([{ op: "split", at_frame: at, tracks: [hit2.track.id] }], `Blade ${hit2.item.label} at ${formatTimecode(model.startTc + at, model.rate)}`);
+      void edit.commit([{ op: "split", at_frame: at2, tracks: [hit2.track.id] }], `Blade ${hit2.item.label} at ${formatTimecode(model.startTc + at2, model.rate)}`);
       return;
     }
     if (editable2 && isClip && !event.shiftKey && !ctrl && hit2.kind === "body" && !hit2.track.locked && !hit2.item.sound) {
@@ -104593,16 +109430,16 @@ function buildGraph(ctx, model, getBuffer, from, t0, { analysers = true } = {}) 
     const offset = s.sourceIn + (first - s.start) / fps;
     const length = (s.end - first) / fps;
     if (offset >= buffer.duration) continue;
-    const at = (f2) => t0 + (f2 - from) / fps;
+    const at2 = (f2) => t0 + (f2 - from) / fps;
     g.gain.setValueAtTime(clipGainAt(s, first), when);
     const fi = s.start + s.fadeIn, fo = s.end - s.fadeOut;
-    if (s.fadeIn && first < fi && !(s.keys && s.keys.length)) g.gain.linearRampToValueAtTime(clipGainAt(s, fi), at(fi));
+    if (s.fadeIn && first < fi && !(s.keys && s.keys.length)) g.gain.linearRampToValueAtTime(clipGainAt(s, fi), at2(fi));
     if (s.keys && s.keys.length) {
-      for (let f2 = Math.ceil(first / KEY_STEP2) * KEY_STEP2; f2 < s.end; f2 += KEY_STEP2) g.gain.linearRampToValueAtTime(clipGainAt(s, f2), at(f2));
-      g.gain.linearRampToValueAtTime(clipGainAt(s, s.end), at(s.end));
+      for (let f2 = Math.ceil(first / KEY_STEP2) * KEY_STEP2; f2 < s.end; f2 += KEY_STEP2) g.gain.linearRampToValueAtTime(clipGainAt(s, f2), at2(f2));
+      g.gain.linearRampToValueAtTime(clipGainAt(s, s.end), at2(s.end));
     } else if (s.fadeOut) {
-      if (first < fo) g.gain.setValueAtTime(clipGainAt(s, fo), at(fo));
-      g.gain.linearRampToValueAtTime(0, at(s.end));
+      if (first < fo) g.gain.setValueAtTime(clipGainAt(s, fo), at2(fo));
+      g.gain.linearRampToValueAtTime(0, at2(s.end));
     }
     node.connect(g);
     g.connect(trackNodes.get(s.track).gain);
@@ -104872,8 +109709,8 @@ function useTimelineTransport(model, { visible = true, markKey = "" } = {}) {
   const shuttle = (dir) => {
     const cur = engineRef.current ? engineRef.current.speed : 0;
     if (cur && Math.sign(cur) === dir) {
-      const at = SPEEDS3.indexOf(Math.abs(cur));
-      play(dir * SPEEDS3[Math.min(SPEEDS3.length - 1, at + 1)]);
+      const at2 = SPEEDS3.indexOf(Math.abs(cur));
+      play(dir * SPEEDS3[Math.min(SPEEDS3.length - 1, at2 + 1)]);
     } else play(dir);
   };
   const key = (event, { music: music2 } = {}) => {
@@ -105003,11 +109840,11 @@ function trackPieces(inner, role, first, last2) {
   const tr = (inner.tracks || []).find((t2) => t2.kind === "video" && t2.role === role);
   if (!tr || role === "overlay" && tr.enabled === false) return [];
   const out = [];
-  let at = 0;
+  let at2 = 0;
   for (const item of tr.items || []) {
-    const start = role === "storyline" ? at : item.record_start_frame;
+    const start = role === "storyline" ? at2 : item.record_start_frame;
     const end2 = start + item.duration_frames;
-    if (role === "storyline") at = end2;
+    if (role === "storyline") at2 = end2;
     const lo = Math.max(start, first), hi = Math.min(end2, last2);
     if (hi > lo) out.push([lo, hi, item.type === "clip" && item.enabled !== false ? { ...item, __start: start } : null]);
   }
@@ -105022,10 +109859,10 @@ function flattenTimeline(state, timeline, depth2 = 0) {
     if (track.kind !== "video") continue;
     const story = track.role === "storyline";
     const items = [];
-    let at = 0;
+    let at2 = 0;
     for (const item of track.items || []) {
-      const start = story ? at : item.record_start_frame || 0;
-      if (story) at += item.duration_frames;
+      const start = story ? at2 : item.record_start_frame || 0;
+      if (story) at2 += item.duration_frames;
       if (!isNest(item)) {
         items.push(item);
         continue;
@@ -105210,10 +110047,10 @@ function notLinked(item) {
 }
 function starts(track) {
   if (isFree(track)) return track.items.map((i2) => i2.record_start_frame);
-  let at = 0;
+  let at2 = 0;
   return track.items.map((i2) => {
-    const s = at;
-    at += i2.duration_frames;
+    const s = at2;
+    at2 += i2.duration_frames;
     return s;
   });
 }
@@ -105395,9 +110232,9 @@ function keySources(timeline, keyRole) {
   if (keyRole === "dialogue") {
     for (const track of videoTracks(timeline)) {
       if (!track.enabled) continue;
-      const at = starts(track);
+      const at2 = starts(track);
       track.items.forEach((item, index) => {
-        if (item.type === "clip" && item.enabled && item.audio === "on" && moving(item) && item.media_info.has_audio) out.push({ ref: item.source.ref, record_start: at[index], duration: item.duration_frames, source_in: item.source_in_frame, source_rate: item.source_rate });
+        if (item.type === "clip" && item.enabled && item.audio === "on" && moving(item) && item.media_info.has_audio) out.push({ ref: item.source.ref, record_start: at2[index], duration: item.duration_frames, source_in: item.source_in_frame, source_rate: item.source_rate });
       });
     }
   }
@@ -105639,15 +110476,15 @@ function opPlaceAudio(state, args) {
   checkArgs2(args, ["clip", "at_frame"], ["track", "role", "attach"]);
   const timeline = timelineOf2(state, args);
   if (has2(args, "track") && has2(args, "role")) bad("place_audio takes track or role, not both");
-  const at = int2(args.at_frame, "at_frame", 0);
+  const at2 = int2(args.at_frame, "at_frame", 0);
   const track = unlocked(targetTrack(timeline, args));
-  const item = makeSound(state, timeline, args.clip, at, /* @__PURE__ */ new Set());
+  const item = makeSound(state, timeline, args.clip, at2, /* @__PURE__ */ new Set());
   if (has2(args, "attach") && args.attach !== null) {
     const [targetTrackOf, targetIndex] = pictureOf(timeline, args.attach);
-    item.attach = { clip: args.attach, offset_frames: at - starts(targetTrackOf)[targetIndex] };
+    item.attach = { clip: args.attach, offset_frames: at2 - starts(targetTrackOf)[targetIndex] };
   }
-  const stop2 = Number.isInteger(item.duration_frames) ? at + item.duration_frames : at;
-  const hit2 = overlaps(track, at, stop2);
+  const stop2 = Number.isInteger(item.duration_frames) ? at2 + item.duration_frames : at2;
+  const hit2 = overlaps(track, at2, stop2);
   if (hit2 !== null) fail("overlap", `${item.id} would overlap ${hit2} on ${track.id}`);
   track.items.push(item);
   sortOverlay(track);
@@ -105807,9 +110644,9 @@ function makeClip(state, timeline, spec, overlay, start, reserved) {
   if (overlay) item.record_start_frame = start;
   return item;
 }
-function splitItem(state, timeline, track, index, at, reserved) {
+function splitItem(state, timeline, track, index, at2, reserved) {
   const item = track.items[index];
-  const offset = at - starts(track)[index];
+  const offset = at2 - starts(track)[index];
   const right = clone2(item);
   right.id = newId(state, item.type === "gap" ? "g" : track.kind === "audio" ? "a" : "c", reserved);
   reserved.add(right.id);
@@ -105828,7 +110665,7 @@ function splitItem(state, timeline, track, index, at, reserved) {
       right.fade_out_frames = Math.min(right.fade_out_frames, right.duration_frames);
     }
     if (isFree(track)) {
-      right.record_start_frame = at;
+      right.record_start_frame = at2;
       if (right.attach !== void 0 && right.attach !== null) right.attach.offset_frames += offset;
     }
   }
@@ -105842,23 +110679,23 @@ function place(state, args, append) {
   const timeline = timelineOf2(state, args);
   const track = unlocked(trackOf(timeline, has2(args, "track") ? args.track : storyline(timeline).id));
   if (track.kind !== "video") bad("clips go on a video track");
-  const at = append ? end(track) : int2(args.at_frame, "at_frame", 0);
+  const at2 = append ? end(track) : int2(args.at_frame, "at_frame", 0);
   const reserved = /* @__PURE__ */ new Set();
   const result = { op: args.op };
   let clip3;
   if (track.role === "storyline") {
     if (has2(args, "attach")) bad("attach is for overlay clips");
-    if (at > end(track)) fail("out_of_range", `at_frame ${at} is past the end (${end(track)})`);
+    if (at2 > end(track)) fail("out_of_range", `at_frame ${at2} is past the end (${end(track)})`);
     const s = starts(track);
     let index = track.items.length;
     for (let i2 = 0; i2 < s.length; i2++) {
       const stop2 = s[i2] + track.items[i2].duration_frames;
-      if (s[i2] === at) {
+      if (s[i2] === at2) {
         index = i2;
         break;
       }
-      if (s[i2] < at && at < stop2) {
-        result.split = splitItem(state, timeline, track, i2, at, reserved);
+      if (s[i2] < at2 && at2 < stop2) {
+        result.split = splitItem(state, timeline, track, i2, at2, reserved);
         index = i2 + 1;
         break;
       }
@@ -105866,15 +110703,15 @@ function place(state, args, append) {
     clip3 = makeClip(state, timeline, args.clip, false, 0, reserved);
     track.items.splice(index, 0, clip3);
   } else {
-    clip3 = makeClip(state, timeline, args.clip, true, at, reserved);
+    clip3 = makeClip(state, timeline, args.clip, true, at2, reserved);
     if (has2(args, "attach") && args.attach !== null) {
       const [targetTrack2, targetIndex] = pictureOf(timeline, args.attach);
       if (targetTrack2.role !== "storyline") bad("attach names a storyline clip");
-      clip3.attach = { clip: args.attach, offset_frames: at - starts(targetTrack2)[targetIndex] };
+      clip3.attach = { clip: args.attach, offset_frames: at2 - starts(targetTrack2)[targetIndex] };
     }
-    const stop2 = Number.isInteger(clip3.duration_frames) ? at + clip3.duration_frames : at;
+    const stop2 = Number.isInteger(clip3.duration_frames) ? at2 + clip3.duration_frames : at2;
     for (const item of track.items) {
-      if (item.record_start_frame < stop2 && at < item.record_start_frame + item.duration_frames) fail("overlap", `${clip3.id} would overlap ${item.id} on ${track.id}`);
+      if (item.record_start_frame < stop2 && at2 < item.record_start_frame + item.duration_frames) fail("overlap", `${clip3.id} would overlap ${item.id} on ${track.id}`);
     }
     track.items.push(clip3);
     sortOverlay(track);
@@ -105889,31 +110726,31 @@ function opOverwrite(state, args) {
   const timeline = timelineOf2(state, args);
   const track = unlocked(trackOf(timeline, has2(args, "track") ? args.track : "V2"));
   if (track.kind !== "video" || track.role !== "overlay") fail("not_on_storyline", "overwrite places on an overlay track; the storyline is always rippled");
-  const at = int2(args.at_frame, "at_frame", 0);
+  const at2 = int2(args.at_frame, "at_frame", 0);
   const reserved = /* @__PURE__ */ new Set();
-  const clip3 = makeClip(state, timeline, args.clip, true, at, reserved);
+  const clip3 = makeClip(state, timeline, args.clip, true, at2, reserved);
   reserved.add(clip3.id);
-  const stop2 = at + int2(clip3.duration_frames, "duration_frames", 1);
+  const stop2 = at2 + int2(clip3.duration_frames, "duration_frames", 1);
   const removed = [];
   let index = 0;
   while (index < track.items.length) {
     const item = track.items[index];
     const s = item.record_start_frame, e = s + item.duration_frames;
-    if (e <= at || s >= stop2) {
+    if (e <= at2 || s >= stop2) {
       index++;
       continue;
     }
-    if (s >= at && e <= stop2) {
+    if (s >= at2 && e <= stop2) {
       removed.push(item.id);
       track.items.splice(index, 1);
       continue;
     }
-    if (s < at && e > stop2) {
+    if (s < at2 && e > stop2) {
       splitItem(state, timeline, track, index, stop2, reserved);
       continue;
     }
-    if (s < at) {
-      shiftOut(item, at - s - item.duration_frames, timeline.rate);
+    if (s < at2) {
+      shiftOut(item, at2 - s - item.duration_frames, timeline.rate);
       item.anchors.out = null;
     } else {
       const cut2 = stop2 - s;
@@ -105931,7 +110768,7 @@ function opOverwrite(state, args) {
 function opSplit(state, args) {
   checkArgs2(args, ["at_frame"], ["tracks"]);
   const timeline = timelineOf2(state, args);
-  const at = int2(args.at_frame, "at_frame", 1);
+  const at2 = int2(args.at_frame, "at_frame", 1);
   const tracks = has2(args, "tracks") ? idList(args.tracks, "tracks").map((t2) => unlocked(trackOf(timeline, t2))) : itemTracks(timeline).filter((t2) => !t2.locked);
   const created = [];
   const reserved = /* @__PURE__ */ new Set();
@@ -105941,13 +110778,13 @@ function opSplit(state, args) {
     for (let index = 0; index < track.items.length; index++) {
       const item = track.items[index];
       if (item.link !== void 0 && item.link !== null) continue;
-      if (item.type === "clip" && s[index] < at && at < s[index] + item.duration_frames) {
-        created.push(splitItem(state, timeline, track, index, at, reserved));
+      if (item.type === "clip" && s[index] < at2 && at2 < s[index] + item.duration_frames) {
+        created.push(splitItem(state, timeline, track, index, at2, reserved));
         break;
       }
     }
   }
-  if (!created.length) fail("nothing_to_split", `no clip runs across frame ${at}`);
+  if (!created.length) fail("nothing_to_split", `no clip runs across frame ${at2}`);
   return { op: "split", created };
 }
 
@@ -106011,8 +110848,8 @@ function opPlaceWithParent(state, args) {
     track.items.splice(track.items.indexOf(second), 1);
     track.items.splice(track.items.indexOf(parent) + 1, 0, take, second);
   }
-  const s = starts(track), at = new Map(track.items.map((item, i2) => [item.id, s[i2]]));
-  const joins = relation === "prepends" ? [at.get(parent.id)] : relation === "extends" ? [at.get(take.id)] : [at.get(take.id), at.get(args.next)];
+  const s = starts(track), at2 = new Map(track.items.map((item, i2) => [item.id, s[i2]]));
+  const joins = relation === "prepends" ? [at2.get(parent.id)] : relation === "extends" ? [at2.get(take.id)] : [at2.get(take.id), at2.get(args.next)];
   return { op: "place_with_parent", created: [take.id], joins };
 }
 var CONTINUE_OPS = Object.freeze({ place_with_parent: opPlaceWithParent });
@@ -106337,8 +111174,8 @@ function opFreezeFrame(state, args) {
   const rate = timeline.rate;
   const duration = int2(args.duration_frames, "duration_frames", 1);
   const start = starts(track)[index];
-  const at = int2(args.at_frame, "at_frame", start, start + item.duration_frames - 1);
-  const offset = at - start;
+  const at2 = int2(args.at_frame, "at_frame", start, start + item.duration_frames - 1);
+  const offset = at2 - start;
   let frame;
   if (frozen(item)) frame = item.source_in_frame;
   else if (keysOf(item)) frame = sourceMap(item, rate, offset, 1)[0];
@@ -106352,7 +111189,7 @@ function opFreezeFrame(state, args) {
   let insertAt = index;
   const created = [];
   if (offset) {
-    created.push(splitItem(state, timeline, track, index, at, reserved));
+    created.push(splitItem(state, timeline, track, index, at2, reserved));
     insertAt = index + 1;
   }
   const hold = clone2(track.items[index]);
@@ -106706,13 +111543,13 @@ function chosenTracks(timeline, args) {
   }
   return itemTracks(timeline).filter((t2) => !t2.locked);
 }
-function blade(state, timeline, track, at, reserved) {
+function blade(state, timeline, track, at2, reserved) {
   const s = starts(track);
   for (let index = 0; index < track.items.length; index++) {
     const item = track.items[index];
     if (linked(item)) continue;
-    if (s[index] < at && at < s[index] + item.duration_frames) {
-      splitItem(state, timeline, track, index, at, reserved);
+    if (s[index] < at2 && at2 < s[index] + item.duration_frames) {
+      splitItem(state, timeline, track, index, at2, reserved);
       return;
     }
   }
@@ -107375,8 +112212,8 @@ function useTimelineEditSession(project, doc2, refetch) {
         },
         done: (written) => {
           const h = hist.current;
-          const at = based.revision;
-          if (!h.stack.length || !(h.own.has(at) || h.stack[h.stack.length - 1] === at)) h.stack = [at];
+          const at2 = based.revision;
+          if (!h.stack.length || !(h.own.has(at2) || h.stack[h.stack.length - 1] === at2)) h.stack = [at2];
           h.stack.push(written.revision);
           h.redo = [];
           h.labels.set(written.revision, { label: label2, by: "artist" });
@@ -107684,8 +112521,8 @@ function blackTail(model, range) {
 }
 var MID_TAIL = 22;
 function midCut(text2, first) {
-  const at = Math.max(0, text2.indexOf(first)), end2 = at + first.length;
-  const cut2 = Math.max(at, end2 - MID_TAIL);
+  const at2 = Math.max(0, text2.indexOf(first)), end2 = at2 + first.length;
+  const cut2 = Math.max(at2, end2 - MID_TAIL);
   return [
     jsx134("span", { className: "tld-mid-a", children: text2.slice(0, cut2) }, "a"),
     jsx134("span", { className: "tld-mid-b", children: text2.slice(cut2, end2) }, "b"),
@@ -107709,14 +112546,15 @@ function CheckList({ check, settings, model, onLocate, compact, range = null, on
   const f2 = FORMAT[settings.format];
   const [open, setOpen] = useState(false);
   if (!check || check.state === "running") return jsx134("div", { className: "tld-check", "data-testid": "tl-deliver-check", "data-state": "running", children: jsx134("span", { className: "tld-ci", children: "Checking…" }) });
-  if (check.state === "error") return jsx134("div", { className: "tld-check", "data-testid": "tl-deliver-check", "data-state": "error", children: jsxs114("span", { className: "tld-ci is-warn", title: check.message, children: [jsx134("b", { children: "!" }, "b"), `Not checked: ${check.message}`] }) });
+  if (check.state === "error") return jsx134("div", { className: "tld-check", "data-testid": "tl-deliver-check", "data-state": "error", children: jsxs114("span", { className: "tld-ci is-warn", title: check.message, children: [jsx134("span", { className: "tld-mark is-warn", "aria-hidden": "true", children: jsx134(FwIcon, { name: "alert" }) }, "b"), `Not checked: ${check.message}`] }) });
   const items = [];
   const blocks = check.items.filter((i2) => i2.severity === "block");
   if (!blocks.length && check.sources && !check.items.some((i2) => i2.code === "offline_outside")) items.push({ sev: "ok", text: `All ${check.sources} sources online`, key: "ok" });
   const labelOf2 = new Map((model.tracks || []).flatMap((t2) => (t2.items || []).map((i2) => [i2.id, i2.label])));
-  for (const it of check.items) {
+  for (const item of check.items) {
+    const it = Array.isArray(item.clips) ? item : { ...item, clips: [] };
     let text2 = it.message;
-    const names = (it.code === "offline" || it.code === "offline_outside") && Array.isArray(it.clips) ? it.clips.map((id) => labelOf2.get(id)).filter(Boolean) : [];
+    const names = it.code === "offline" || it.code === "offline_outside" ? it.clips.map((id) => labelOf2.get(id)).filter(Boolean) : [];
     const clipNames = names.length ? names.slice(0, 2).join(", ") + (names.length > 2 ? ` +${names.length - 2}` : "") : "";
     if (it.code === "rate_mismatch" && f2.kind !== "film") text2 = `${it.clips.length} ${it.clips.length === 1 ? "clip" : "clips"} at ${it.message.split(" at ")[1].split(" on ")[0]} ${it.clips.length === 1 ? "stays" : "stay"} native`;
     items.push({ sev: it.severity === "block" ? "block" : "warn", bi: it.severity === "block" ? items.filter((x) => x.sev === "block").length : -1, text: text2, title: it.hint || "", clipNames, locate: it.code === "offline" && it.fix === "locate" ? it : null, key: it.code + it.clips.join() });
@@ -107726,13 +112564,13 @@ function CheckList({ check, settings, model, onLocate, compact, range = null, on
   if (f2.kind === "film" && settings.format === "mp4" && settings.quality === "lossless") items.push({ sev: "warn", text: "Lossless does not decode in DaVinci Resolve (free)", key: "lossless" });
   const warns = items.filter((i2) => i2.sev === "warn").length;
   if (compact && !open && !blocks.length) {
-    return jsx134("div", { className: "tld-check", "data-testid": "tl-deliver-check", "data-state": check.ok ? "ok" : "blocked", "data-warnings": String(warns), children: jsx134("button", { type: "button", className: "tld-checkbtn", "data-testid": "tl-deliver-check-open", title: "Show the check", onClick: () => setOpen(true), children: [jsx134("span", { className: warns ? "tld-mark is-warn" : "tld-mark is-ok", children: warns ? "!" : jsx134(FwIcon, { name: "check" }) }, "m"), warns ? `${warns} ${warns === 1 ? "warning" : "warnings"}` : "All sources online", jsx134(FwIcon, { name: "chev-r" }, "i")] }) });
+    return jsx134("div", { className: "tld-check", "data-testid": "tl-deliver-check", "data-state": check.ok ? "ok" : "blocked", "data-warnings": String(warns), children: jsx134("button", { type: "button", className: "tld-checkbtn", "data-testid": "tl-deliver-check-open", title: "Show the check", onClick: () => setOpen(true), children: [jsx134("span", { className: warns ? "tld-mark is-warn" : "tld-mark is-ok", children: jsx134(FwIcon, { name: warns ? "alert" : "check" }) }, "m"), warns ? `${warns} ${warns === 1 ? "warning" : "warnings"}` : "All sources online", jsx134(FwIcon, { name: "chev-r" }, "i")] }) });
   }
   return jsx134("ul", { className: "tld-check", "data-testid": "tl-deliver-check", "data-state": check.ok ? "ok" : "blocked", "data-warnings": String(warns), "aria-label": "Check before render", children: items.map((i2) => jsxs114("li", { className: `tld-ci is-${i2.sev}${i2.tail && onPictureRange ? " has-act" : ""}`, "data-sev": i2.sev, title: i2.title || i2.text, children: [
-    jsx134("span", { className: `tld-mark is-${i2.sev}`, "aria-hidden": "true", children: i2.sev === "ok" ? jsx134(FwIcon, { name: "check" }) : i2.sev === "block" ? "×" : "!" }, "m"),
+    jsx134("span", { className: `tld-mark is-${i2.sev}`, "aria-hidden": "true", children: i2.sev === "ok" ? jsx134(FwIcon, { name: "check" }) : i2.sev === "block" ? "×" : jsx134(FwIcon, { name: "alert" }) }, "m"),
     i2.sub ? jsxs114("span", { className: "tld-cc", children: [jsx134("span", { className: "tld-ct", children: i2.text }, "t"), jsx134("span", { className: "tld-cs", "data-testid": "tl-deliver-black", children: i2.sub }, "s")] }, "c") : jsx134("span", { className: "tld-ct", ...i2.sev === "block" ? { id: "tld-blocked-" + i2.bi, "data-testid": "tl-deliver-blocked" } : {}, children: i2.clipNames ? [i2.text, jsx134("span", { className: "tld-cn", "data-testid": "tl-deliver-offline-clips", title: i2.clipNames, children: " · " + i2.clipNames }, "n")] : i2.text }, "t"),
     i2.locate ? jsx134(FwButton, { variant: "ghost", "data-testid": "tl-deliver-locate", title: "Locate the moved file", onClick: () => onLocate(i2.locate), children: "Locate…" }, "l") : null,
-    i2.tail && onPictureRange ? jsx134(FwButton, { variant: "ghost", icon: "fit", className: "tld-act", "data-testid": "tl-deliver-picture-range", title: "Set range to picture", onClick: () => onPictureRange(i2.tail.picture), children: "Range: picture" }, "r") : null
+    i2.tail && onPictureRange ? jsx134(FwButton, { variant: "ghost", icon: "range-picture", className: "tld-act", "data-testid": "tl-deliver-picture-range", title: "Set range to picture", onClick: () => onPictureRange(i2.tail.picture), children: "Range: picture" }, "r") : null
   ] }, i2.key)) });
 }
 var minuteOf = (ms) => Math.floor(ms / 6e4) * 6e4;
@@ -107907,13 +112745,13 @@ function jumpViewer(node, frame) {
 }
 var CODE_LABEL = { av_offset: "Sync", freeze: "Freeze", black: "Black", duration_mismatch: "Length", true_peak: "Peak", quiet: "Level", no_sound: "Sound" };
 function DeliverQc({ project, row: row2, rangeIn = 0, compact = false, tcOf: tcOf2 = null }) {
-  const at = (f2) => tcOf2 ? tcOf2(rangeIn + f2.frame) : f2.timecode;
+  const at2 = (f2) => tcOf2 ? tcOf2(rangeIn + f2.frame) : f2.timecode;
   const qc = useJobQc(project, row2);
   if (!qc) return null;
   if (compact) {
     const n2 = qc.state === "done" ? qc.qc.findings.filter((f2) => f2.severity !== "info").length : 0;
     const text2 = qc.state === "running" ? "Checking…" : qc.state === "error" ? "Not checked" : n2 ? `${n2} to check` : "Checked";
-    const tip = qc.state === "done" && n2 ? qc.qc.findings.map((f2) => `${at(f2)} ${f2.message}`).join("\n") : "File check of the written movie";
+    const tip = qc.state === "done" && n2 ? qc.qc.findings.map((f2) => `${at2(f2)} ${f2.message}`).join("\n") : "File check of the written movie";
     return jsx135("span", { className: `tldq-val tlqc-chip ${qc.state === "done" && !n2 ? "tlqc-ok" : qc.state === "running" ? "tlqc-run" : "tldq-warn"}`, "data-testid": "tl-deliver-qc", "data-state": qc.state === "done" ? n2 ? "findings" : "ok" : qc.state, title: tip, children: text2 });
   }
   if (qc.state === "running") return jsx135("span", { className: "tldq-val tlqc-run", "data-testid": "tl-deliver-qc", "data-state": "running", title: "Measuring the written movie", children: "Checking the file…" });
@@ -107935,10 +112773,10 @@ function DeliverQc({ project, row: row2, rangeIn = 0, compact = false, tcOf: tcO
     "data-frame": String(f2.frame),
     // Sync source (lane w6-scene): the scene engine's mouth measure when installed, else the streams' start times.
     ...f2.code === "av_offset" ? { "data-source": f2.source || "file_start" } : {},
-    title: `${f2.message}${f2.code === "av_offset" ? ` Measured by: ${f2.source === "scene_engine" ? "scene engine (mouth vs sound)" : "file start times"}.` : ""} Click to show ${at(f2)} in the viewer`,
+    title: `${f2.message}${f2.code === "av_offset" ? ` Measured by: ${f2.source === "scene_engine" ? "scene engine (mouth vs sound)" : "file start times"}.` : ""} Click to show ${at2(f2)} in the viewer`,
     onClick: (e) => jumpViewer(e.currentTarget, rangeIn + f2.frame),
     children: [
-      jsx135("span", { className: "tlqc-tc", children: at(f2) }, "tc"),
+      jsx135("span", { className: "tlqc-tc", children: at2(f2) }, "tc"),
       jsx135("span", { className: "tlqc-k", children: CODE_LABEL[f2.code] || f2.code }, "k"),
       jsx135("span", { className: "tlqc-m", children: f2.message }, "m")
     ]
@@ -107969,6 +112807,14 @@ function totalMs(elapsedMs, progress, typicalMs) {
   const left = leftMs(elapsedMs, progress);
   if (left !== null) return elapsedMs + left;
   return typicalMs || null;
+}
+function steadyLeft(prev, progress, elapsedMs) {
+  const p = Number(progress) || 0;
+  const moved = prev && p > prev.p;
+  const moves = prev ? moved ? prev.moves + 1 : prev.moves >= 2 ? prev.moves : 0 : 0;
+  const est = moves >= 2 ? leftMs(elapsedMs, p) : null;
+  const left = est === null ? prev && prev.left !== null && moves >= 2 ? prev.left : null : prev && prev.left !== null ? Math.min(prev.left, est) : est;
+  return { p, moves, left };
 }
 
 // desktop/film-suite/src/timeline/deliver/deliver-queue.js
@@ -108018,14 +112864,14 @@ function soundFiles(result) {
 function verifyText(result, kind = "film") {
   const v = result && result.verification;
   if (!v && kind !== "film") return result && result.total_frames ? `Written · ${result.total_frames} frames long` : "Done";
-  if (!v) return result && result.total_frames ? `${result.total_frames} frames rendered and counted` : "Done";
+  if (!v) return result && result.total_frames ? `${result.total_frames} frames, all counted` : "Done";
   return `${v.ok ? "Verified" : "Not verified"}: ${v.storyline_clips} V1 clips${v.music_clips ? ", song" : ""}${v.moving_media_checked !== null && v.moving_media_checked !== void 0 ? `, ${v.moving_media_checked} media files decoded` : ""}`;
 }
 function masterText(master) {
   if (!master || !master.codec) return "";
   return [`${master.codec} ${master.profile || ""}`.trim(), master.pix_fmt || "", master.frames ? `${master.frames} frames` : ""].filter(Boolean).join(" · ");
 }
-var Q2 = { ref: null, rows: [], error: "", busy: false, timer: null, viewers: 0, listeners: /* @__PURE__ */ new Set(), bodies: /* @__PURE__ */ new Map(), ranges: /* @__PURE__ */ new Map(), own: /* @__PURE__ */ new Map(), pushed: 0, stopping: /* @__PURE__ */ new Set() };
+var Q2 = { ref: null, rows: [], left: /* @__PURE__ */ new Map(), error: "", busy: false, timer: null, viewers: 0, listeners: /* @__PURE__ */ new Set(), bodies: /* @__PURE__ */ new Map(), ranges: /* @__PURE__ */ new Map(), own: /* @__PURE__ */ new Map(), pushed: 0, stopping: /* @__PURE__ */ new Set() };
 var emit2 = () => {
   for (const fn of Q2.listeners) fn({});
 };
@@ -108060,6 +112906,9 @@ async function qCall(action, jobId) {
     Q2.error = "";
     Q2.rows = out.jobs;
   }
+  const seen = /* @__PURE__ */ new Map();
+  for (const r of Q2.rows) if (r.state === "running") seen.set(r.job_id, steadyLeft(Q2.left.get(r.job_id) || null, r.progress, Number(r.elapsed_ms) || 0));
+  Q2.left = seen;
   for (const r of Q2.rows) reportExportJob(r, () => void qCancel(r.job_id));
   for (const id of [...Q2.stopping]) if (!Q2.rows.some((r) => r.job_id === id && (r.state === "running" || r.state === "waiting"))) Q2.stopping.delete(id);
   emit2();
@@ -108180,17 +113029,18 @@ function JobRow({ row: row2, queue, rows, compact, onLocate, mark, tcOf: tcOf2, 
   const body2 = queue.bodyOf(row2.job_id);
   const ahead = st === "waiting" ? rows.find((x) => x.state === "running") || rows.filter((x) => x.state === "waiting" && x.number < row2.number).pop() : null;
   const p = Number(row2.progress) || 0;
-  const rowLeft = st === "running" ? leftMs(Number(row2.elapsed_ms) || 0, p) : null;
-  const left = rowLeft !== null ? ` · about ${clock2(rowLeft)} left` : "";
+  const est = st === "running" ? Q2.left.get(row2.job_id) : null;
+  const rowLeft = est ? est.left : null;
+  const left = st !== "running" ? "" : rowLeft !== null ? rowLeft >= 1e3 ? ` · about ${clock2(rowLeft)} left` : "" : Number(row2.elapsed_ms) >= 1e3 ? ` · ${clock2(Number(row2.elapsed_ms))} elapsed` : "";
   const offline = failed2 && row2.error && row2.error.code === "source_offline";
   const stopping = st === "running" && Q2.stopping.has(row2.job_id);
-  const status = stopping ? `Stopping · ${pct2(p)}` : st === "running" ? `${STAGE[row2.stage] || "Rendering"} · ${pct2(p)}${left}` : st === "waiting" ? ahead ? `Waits for Job ${ahead.number}` : "" : missing ? "Files not found" : st === "done" ? verifyText(r, row2.kind) : st === "cancelled" ? "Nothing kept" : row2.error && row2.error.message || "The export failed";
+  const status = stopping ? `Stopping · ${pct2(p)}` : st === "running" ? `${row2.stage === "done" ? "Finishing" : STAGE[row2.stage] || "Rendering"} · ${pct2(p)}${left}` : st === "waiting" ? ahead ? `Waits for Job ${ahead.number}` : "" : missing ? "Files not found" : st === "done" ? verifyText(r, row2.kind) : st === "cancelled" ? "Nothing kept" : row2.error && row2.error.message || "The export failed";
   const sub = [queue.rangeOf(row2.job_id), String(row2.label || "").split(" · ")[0]].filter(Boolean)[0] || "";
   const actions = [];
   const lineActions = [];
   if (st === "running") actions.push(jsx136(FwButton, { variant: "ghost", icon: "stop", "data-testid": "tl-deliver-cancel", "aria-label": `Stop Job ${row2.number}`, title: stopping ? `Stop Job ${row2.number} · Stopping` : `Stop Job ${row2.number}; nothing is kept`, disabled: stopping, onClick: () => void queue.cancel(row2.job_id) }, "stop"));
   if (st === "waiting") actions.push(jsx136(FwButton, { variant: "ghost", icon: "x", "data-testid": "tl-deliver-remove", "aria-label": `Remove Job ${row2.number}`, title: `Remove Job ${row2.number} from the queue`, onClick: () => void queue.remove(row2.job_id) }, "rm"));
-  if (st === "done" && !missing) actions.push(jsx136(FwButton, { variant: "ghost", icon: "folder", "data-testid": "tl-deliver-reveal", "aria-label": "Show in folder", title: `Show Job ${row2.number}'s folder`, onClick: () => void queue.reveal(row2.job_id) }, "rv"));
+  if (st === "done" && !missing) actions.push(jsx136(FwButton, { variant: "ghost", icon: "reveal", "data-testid": "tl-deliver-reveal", "aria-label": "Show in folder", title: `Show Job ${row2.number}'s folder`, onClick: () => void queue.reveal(row2.job_id) }, "rv"));
   if (failed2 && offline) (compact ? actions : lineActions).push(jsx136(FwButton, { variant: "secondary", "data-testid": "tl-deliver-row-locate", title: "Locate the offline file in Check before render", onClick: onLocate, children: "Locate…" }, "loc"));
   const stored = !body2 && row2.settings;
   if (failed2 && !compact) lineActions.push(jsx136(FwButton, { variant: "secondary", "data-testid": "tl-deliver-again", disabled: !body2 && !stored, title: body2 || stored ? `Render Job ${row2.number}'s settings again` : "Added elsewhere: settings not recorded here", onClick: () => {
@@ -108409,6 +113259,7 @@ var DELIVER_PAGE_CSS = `
 .tldq:not(.is-compact) .tldq-top{align-items:flex-start}
 .tldq-sub,.tldq-val{color:var(--fw-t2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tldq-status{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fw-t1)}
+.tldq:not(.is-compact) .tldq-status.is-done{white-space:normal;overflow:visible;overflow-wrap:anywhere} /* w39-p2-detail: the finished row is read whole, never cut ("576 frames rendered and coun…") */
 .tldq-status.is-done,.tldq-state.is-done{color:color-mix(in srgb,var(--fw-ok) 70%,var(--fw-t1))} /* AA on light and dark (lane p5e-cut: 3.95 in light) */
 .tldq-status.is-failed{color:var(--fw-err)}
 .tldq-status.is-cancelled{color:var(--fw-t2)}
@@ -108436,8 +113287,9 @@ var DELIVER_PAGE_CSS = `
 .tldq-warn{color:var(--fw-warn)}
 .tldq-files{margin:0;padding:0;list-style:none;color:var(--fw-t2)}
 .tldq-state{flex:none;display:inline-flex;align-items:center;gap:6px;margin-left:auto;color:var(--fw-t1);font-variant-numeric:tabular-nums}
-.tldp .tld-bar{display:flex;height:var(--tld-meter);border-radius:var(--fw-r0,2px);background:var(--fw-s0);overflow:hidden}
-.tldp .tld-fill{height:100%;background:var(--fw-accent)}
+.tldp .tld-bar{display:flex;height:var(--tld-meter);border-radius:var(--fw-r0,2px);background:var(--fw-line);overflow:hidden}
+/* w39-p2-detail: the fill was invisible on the dark card (11 % read as no bar in the bench); a neutral strong tone, the accent stays on the one primary action. */
+.tldp .tld-fill{height:100%;background:var(--ui-text-secondary,var(--fw-t2))}
 .tldq-empty{padding:8px 12px;color:var(--fw-t2)}
 .tldq-err{padding:0 12px;color:var(--fw-err)}
 .tldq-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;min-height:var(--tld-bar-h);padding:0 8px 0 12px;border-top:1px solid var(--fw-line);margin-top:6px}
@@ -108881,18 +113733,18 @@ function continueOps(model, state, request) {
 function continueNote(model, request, results) {
   const last2 = Array.isArray(results) && results.length ? results[results.length - 1] : null;
   const joins = last2 && Array.isArray(last2.joins) ? last2.joins : [];
-  const at = joins.map((f2) => formatTimecode(model.startTc + f2, model.rate)).join(" and ");
-  return `Placed ${RELATION_WORD[request.relation]} its parent${at ? ` · joins at ${at}` : ""} · Ctrl+Z undoes`;
+  const at2 = joins.map((f2) => formatTimecode(model.startTc + f2, model.rate)).join(" and ");
+  return `Placed ${RELATION_WORD[request.relation]} its parent${at2 ? ` · joins at ${at2}` : ""} · Ctrl+Z undoes`;
 }
 
 // desktop/film-suite/src/timeline/view/timeline-toolrow.js
 import { jsx as jsx138, jsxs as jsxs118 } from "react/jsx-runtime";
 var TOOLS = [
-  { id: "select", label: "Select", key: "A", icon: "arrow", title: "Select" },
-  { id: "trim", label: "Trim", key: "T", icon: "level", title: "Trim" },
+  { id: "select", label: "Select", key: "A", icon: "pointer", title: "Select" },
+  { id: "trim", label: "Trim", key: "T", icon: "trim", title: "Trim" },
   { id: "blade", label: "Blade", key: "B", icon: "blade", title: "Blade" },
-  { id: "slip", label: "Slip", key: "Y", icon: "swap", title: "Slip" },
-  { id: "slide", label: "Slide", key: "U", icon: "move", title: "Slide" }
+  { id: "slip", label: "Slip", key: "Y", icon: "slip", title: "Slip" },
+  { id: "slide", label: "Slide", key: "U", icon: "slide", title: "Slide" }
 ];
 var HIDE_ORDER = ["fit-beats", "linked", "slide", "zoom-in", "zoom-out", "redo", "zoom-fit", "beats", "slip", "trim", "snap", "blade", "undo", "select"];
 var TOOLROW_CSS = `
@@ -108935,15 +113787,15 @@ function rowItems({ tool, onTool, toggles, onToggle, edit, view, zoom, fit: fit4
     { id: "Snapping", items: [
       { id: "snap", label: "Snap", icon: "magnet", key: "N", kind: "check", pressed: toggles.snap, title: `Snap to edges, playhead and markers: ${toggles.snap ? "on" : "off"} (N)`, run: () => onToggle("snap") },
       { id: "linked", label: "Linked", icon: "link", kind: "check", pressed: toggles.linked, title: `Linked: IN–OUT edits cut the sound tracks A1–A3 too: ${toggles.linked ? "on" : "off"}`, run: () => onToggle("linked") },
-      { id: "beats", label: "Beats", icon: "music", kind: "check", pressed: toggles.beats, title: `Snap to the song's beats, downbeats and sections: ${toggles.beats ? "on" : "off"}`, run: () => onToggle("beats") }
+      { id: "beats", label: "Beats", icon: "metronome", kind: "check", pressed: toggles.beats, title: `Snap to the song's beats, downbeats and sections: ${toggles.beats ? "on" : "off"}`, run: () => onToggle("beats") }
     ] },
     // Fit to beats (the agent's fit_to_beats): the selected V1 clips, or every V1 clip when none is selected.
     fit4 ? { id: "Fit", items: [{ id: "fit-beats", label: "Fit to beats", icon: "fit-beats", kind: "cmd", disabled: Boolean(fit4.refuse), title: fit4.refuse || fit4.title, run: fit4.run }] } : null,
     // w33-design GEM-201 point 2: Undo / Redo live in the page bar (the shared pair after the cut's name), not here.
     zoom ? { id: "Zoom", spacer: true, items: [
-      { id: "zoom-out", testid: "tl-zoom-out", label: "Zoom out", icon: "minus", key: "-", kind: "cmd", title: "Zoom out (-)", run: () => v && v.zoomOut() },
-      { id: "zoom-in", testid: "tl-zoom-in", label: "Zoom in", icon: "plus", key: "=", kind: "cmd", title: "Zoom in (=)", run: () => v && v.zoomIn() },
-      { id: "zoom-fit", testid: "tl-zoom-fit", label: "Fit the cut", icon: "fit", key: "Shift+Z", kind: "cmd", title: "Fit the cut (Shift+Z)", run: () => v && v.fit() }
+      { id: "zoom-out", testid: "tl-zoom-out", label: "Zoom out", icon: "zoom-out", key: "-", kind: "cmd", title: "Zoom out (-)", run: () => v && v.zoomOut() },
+      { id: "zoom-in", testid: "tl-zoom-in", label: "Zoom in", icon: "zoom-in", key: "=", kind: "cmd", title: "Zoom in (=)", run: () => v && v.zoomIn() },
+      { id: "zoom-fit", testid: "tl-zoom-fit", label: "Fit the cut", icon: "whole", key: "Shift+Z", kind: "cmd", title: "Fit the cut (Shift+Z)", run: () => v && v.fit() }
     ] } : null
   ];
   return groups2.filter(Boolean);
@@ -108971,14 +113823,14 @@ function overflowAt(groups2, width, { btn, inner, gap, trackPad }) {
   }
   return hidden3;
 }
-function MoreMenu({ items, at, onClose }) {
+function MoreMenu({ items, at: at2, onClose }) {
   const ref = useRef(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const b = el.getBoundingClientRect();
-    el.style.left = parseFloat(el.style.left) + (at.right - b.right) + "px";
-    el.style.top = parseFloat(el.style.top) + (at.top - b.top) + "px";
+    el.style.left = parseFloat(el.style.left) + (at2.right - b.right) + "px";
+    el.style.top = parseFloat(el.style.top) + (at2.top - b.top) + "px";
     const first = el.querySelector('[role^="menuitem"]:not([aria-disabled="true"])');
     if (first) first.focus();
   }, []);
@@ -109016,7 +113868,7 @@ function MoreMenu({ items, at, onClose }) {
     "aria-label": "More tools",
     "data-testid": "tl-tools-menu",
     "data-ready": "true",
-    style: { left: at.right - 200 + "px", top: at.top + "px" },
+    style: { left: at2.right - 200 + "px", top: at2.top + "px" },
     children: items.map((it) => jsxs118("button", {
       type: "button",
       role: role(it.kind),
@@ -109156,8 +114008,8 @@ function SpeedLane({ model, state, clip: clip3, edit, run, music: music2 = null,
   const top2 = topOf(shown);
   const x = (f2) => PAD3 + f2 / Math.max(1, duration - 1) * (width - 2 * PAD3);
   const y = (p) => PAD3 + (1 - p / top2) * (H - 2 * PAD3);
-  const frameAt = (px) => Math.max(0, Math.min(duration - 1, Math.round((px - PAD3) / (width - 2 * PAD3) * Math.max(1, duration - 1))));
-  const pctAt = (py) => Math.max(0, Math.min(1e4, Math.round((1 - (py - PAD3) / (H - 2 * PAD3)) * top2)));
+  const frameAt = (px2) => Math.max(0, Math.min(duration - 1, Math.round((px2 - PAD3) / (width - 2 * PAD3) * Math.max(1, duration - 1))));
+  const pctAt = (py2) => Math.max(0, Math.min(1e4, Math.round((1 - (py2 - PAD3) / (H - 2 * PAD3)) * top2)));
   const pts = [];
   for (let f2 = 0; f2 < duration; f2 += Math.max(1, Math.floor(duration / 240))) pts.push(`${x(f2).toFixed(1)},${y(speedAt(shown, f2)).toFixed(1)}`);
   pts.push(`${x(duration - 1).toFixed(1)},${y(speedAt(shown, duration - 1)).toFixed(1)}`);
@@ -109169,10 +114021,10 @@ function SpeedLane({ model, state, clip: clip3, edit, run, music: music2 = null,
     const r = boxRef.current.getBoundingClientRect();
     return [e.clientX - r.left, e.clientY - r.top];
   };
-  const keyAt = (px, py) => {
+  const keyAt = (px2, py2) => {
     let best = null;
     for (const k of keys) {
-      const d = Math.hypot(x(k.frame) - px, y(k.percent) - py);
+      const d = Math.hypot(x(k.frame) - px2, y(k.percent) - py2);
       if (d <= HIT && (!best || d < best.d)) best = { k, d };
     }
     return best ? best.k : null;
@@ -109185,12 +114037,12 @@ function SpeedLane({ model, state, clip: clip3, edit, run, music: music2 = null,
   const onPointerDown = (e) => {
     if (!edit.enabled || e.button !== 0) return;
     if (e.currentTarget.focus) e.currentTarget.focus({ preventScroll: true });
-    const [px, py] = local(e);
-    const hit2 = keyAt(px, py);
+    const [px2, py2] = local(e);
+    const hit2 = keyAt(px2, py2);
     if (e.altKey) {
       e.preventDefault();
       if (hit2) return;
-      const f2 = frameAt(px);
+      const f2 = frameAt(px2);
       if (f2 < 1 || keys.some((k) => k.frame === f2)) return;
       setSel2(f2);
       run([{ op: "add_speed_key", clip: clip3.id, frame: f2 }], `Speed key ${label2} at ${f2} f`);
@@ -109366,7 +114218,7 @@ function Sec({ id, open, setOpen, start = true, ...rest2 }) {
 var Val = (testid, text2) => jsx140(PropValue, { testid, children: text2 });
 function ClipTab({ model, state, clip: clip3, track, run, edit, posters, speed = null, open, setOpen, readout = "", onReadout = null }) {
   const { slot, takes } = takesOf(state, clip3);
-  const at = takes.find((t2) => t2.ref === clip3.ref);
+  const at2 = takes.find((t2) => t2.ref === clip3.ref);
   const rateDiff = !clip3.still && clip3.sourceRate.num * model.rate.den !== model.rate.num * clip3.sourceRate.den;
   const used = Math.floor(clip3.duration * clip3.sourceRate.num * model.rate.den / (clip3.sourceRate.den * model.rate.num));
   const len = durationText(clip3.duration, model.rate);
@@ -109385,7 +114237,7 @@ function ClipTab({ model, state, clip: clip3, track, run, edit, posters, speed =
     // reset is the section's reset icon (the lane's set_speed_curve [{0, 100}]: ramps and holds go).
     picture ? jsx140(Sec, {
       id: "speed",
-      icon: "kf",
+      icon: "speed",
       title: "Speed",
       value: jsx140("span", { "data-testid": "tl-speed-readout", children: speed && readout || `${retimed2 ? speedText(clip3.retime) : "100 %"} · ${clip3.duration} f` }),
       valueTestid: "tl-insp-speed",
@@ -109400,7 +114252,7 @@ function ClipTab({ model, state, clip: clip3, track, run, edit, posters, speed =
       id: "takes",
       icon: "layers",
       title: "Takes",
-      value: at ? `${at.n} of ${takes.length}` : `${takes.length}`,
+      value: at2 ? `${at2.n} of ${takes.length}` : `${takes.length}`,
       open,
       setOpen,
       start: takes.length > 1,
@@ -109539,7 +114391,7 @@ function CutTab({ model, run, playhead, open, setOpen }) {
     ] }, "tc"),
     jsx140(Sec, {
       id: "markers",
-      icon: "kf",
+      icon: "markers",
       title: "Markers",
       value: markers.length ? String(markers.length) : "none",
       open,
@@ -109593,10 +114445,10 @@ function ClipStrip({ model, state, selection, edit, run, onDetails }) {
   if (!found || found.item.sound) return null;
   const clip3 = found.item;
   const { takes } = takesOf(state, clip3);
-  const at = takes.find((t2) => t2.ref === clip3.ref);
-  const next = takes.length > 1 && at ? takes[at.n % takes.length] : null;
+  const at2 = takes.find((t2) => t2.ref === clip3.ref);
+  const next = takes.length > 1 && at2 ? takes[at2.n % takes.length] : null;
   return jsxs120("div", { className: "tli-strip", "data-testid": "tl-clipstrip", children: [
-    jsx140("span", { className: "tli-strip-t", title: clip3.label, children: `${clip3.label}${at ? ` · take ${at.n} of ${takes.length}` : ""} · ${durationText(clip3.duration, model.rate)}` }, "t"),
+    jsx140("span", { className: "tli-strip-t", title: clip3.label, children: `${clip3.label}${at2 ? ` · take ${at2.n} of ${takes.length}` : ""} · ${durationText(clip3.duration, model.rate)}` }, "t"),
     // Board E5-A 496 clip sheet: Swap take always stands there; without another take it says why (lane w10-cut item 7).
     jsx140(FwButton, { variant: "ghost", "data-testid": "tl-strip-swap", disabled: !next, title: next ? `Swap to take ${next.n}` : "No other takes of this shot", onClick: () => {
       if (next) void edit.commit([{ op: "swap_take", clip: clip3.id, ref: next.ref }], `Swap ${clip3.label} to take ${next.n}`, { remote: true });
@@ -110002,7 +114854,7 @@ function FilmSuiteTimelineModule({ visible = true, project = null, ownerScope = 
   }, [visible, pane.w, inspDocked, inspPane.width]);
   const maxExtra = Math.max(0, pane.h - baseTracks - MONITOR_MIN - 36 - TOOLROW_H - VIEWER_HEAD_H - TRANSPORT_H - (hermes.entry ? 32 : 0) - (wide ? 0 : 36));
   const extra = Math.max(0, Math.min(maxExtra, Number.isFinite(prefs.extra) ? prefs.extra : defaultExtra));
-  const setExtra = (px) => setPrefs({ extra: Math.max(0, Math.min(maxExtra, Math.round(px))) });
+  const setExtra = (px2) => setPrefs({ extra: Math.max(0, Math.min(maxExtra, Math.round(px2))) });
   const fitSaid = (written) => {
     const r = (written && Array.isArray(written.results) ? written.results : []).find((x) => x && x.op === "fit_to_beats");
     if (!r) return;
@@ -110149,8 +115001,8 @@ function FilmSuiteTimelineModule({ visible = true, project = null, ownerScope = 
     const handled = transport.key(event, { music: musicQuery.data || null });
     if (handled && (event.key === "ArrowUp" || event.key === "ArrowDown") && model) {
       const engine = transport.engineRef.current;
-      const at = engine && engine.model ? engine.current : null;
-      const cut2 = at === null ? null : storylineCuts(model).find((c) => c.frame === at);
+      const at2 = engine && engine.model ? engine.current : null;
+      const cut2 = at2 === null ? null : storylineCuts(model).find((c) => c.frame === at2);
       setSelection(cut2 ? { kind: "cut", frame: cut2.frame } : null);
     }
     if (handled === false && event.key === "Escape" && selection) {
@@ -110453,8 +115305,8 @@ function FilmSuiteTimelineModule({ visible = true, project = null, ownerScope = 
   }, [continueRequest, model, doc2, project]);
   const songRequest = useValue30($timelineSongRequest);
   const songSeen = useRef(0);
-  const placeSong = (song, at = 0) => {
-    const plan = songOps(model, song, { at });
+  const placeSong = (song, at2 = 0) => {
+    const plan = songOps(model, song, { at: at2 });
     return edit.commit(plan.ops, plan.label);
   };
   useEffect(() => {
@@ -110462,25 +115314,25 @@ function FilmSuiteTimelineModule({ visible = true, project = null, ownerScope = 
     songSeen.current = songRequest.n;
     void placeSong(songRequest.song, 0);
   }, [songRequest, model, doc2, project]);
-  const addSound = (paths, { role, track, at }) => edit.external((rev) => addSoundFiles(project, { paths, role, track, at, expectedRevision: rev }).then((out) => {
+  const addSound = (paths, { role, track, at: at2 }) => edit.external((rev) => addSoundFiles(project, { paths, role, track, at: at2, expectedRevision: rev }).then((out) => {
     const refused = out.errors && out.errors.length ? ` · ${out.errors.length} not added: ${out.errors[0].message}` : "";
     if (!out.placed) throw Object.assign(new Error(`Nothing was added: ${out.errors && out.errors[0] && out.errors[0].message || "no sound file"}`), { code: "invalid_op" });
     edit.say(`${out.placed.label} · Ctrl+Z undoes${refused}`);
     if (out.placed.created && out.placed.created.length) setSelection({ kind: "clips", ids: out.placed.created });
     return out.placed;
   }), `Add sound`);
-  const onDrop = (take, at) => {
-    if (at.row && at.row.sound) {
+  const onDrop = (take, at2) => {
+    if (at2.row && at2.row.sound) {
       if (take.kind === "media" && !take.ref) {
-        void addSound([take.path], { track: at.track.id, at: at.frame });
+        void addSound([take.path], { track: at2.track.id, at: at2.frame });
         return;
       }
-      const plan = placeOps(model, take, at.track, at.frame);
+      const plan = placeOps(model, take, at2.track, at2.frame);
       void edit.commit(plan.ops, plan.label, { remote: true });
       return;
     }
     if (take.audio) {
-      void addSound([take.path], { role: "dialogue", at: at.frame });
+      void addSound([take.path], { role: "dialogue", at: at2.frame });
       return;
     }
     if (take.kind === "cut" && take.ref === model.id) {
@@ -110497,7 +115349,7 @@ function FilmSuiteTimelineModule({ visible = true, project = null, ownerScope = 
         }
         source2 = ready.sources[0];
       }
-      const plan = dropOps(model, source2, at);
+      const plan = dropOps(model, source2, at2);
       await edit.commit(plan.ops, plan.label, { remote: true });
     })();
   };
@@ -110655,6 +115507,7 @@ function FilmSuiteTimelineModule({ visible = true, project = null, ownerScope = 
             rate: source.clip.sourceRate,
             frames: source.clip.frames || 0,
             poster: posters.urls.get(source.clip.ref) || void 0,
+            still: Boolean(source.clip.still),
             place: cutPlace(model, transport.frame),
             onAdd: addFromSource,
             keyRef: srcKeyRef
@@ -110738,7 +115591,7 @@ var VIEWER_CSS2 = `
 `;
 
 // desktop/film-suite/src/project/start/sample-cover.js
-var SAMPLE_COVER = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAC0CAMAAADSOgUjAAAAYFBMVEX75rn10aH+zZD+yIr9xYf9wYP9vn/9u3z7uHn8tnX8s3L8sXD7rWv7qWf7p2P7pGD7ol73oF/6nFj6mVThnW7piFLKbErGaEbEaEamd2DDZ0XCZkTAZ0WoVj1JNjEnISXF67W3AAAEUUlEQVR42u3bbXtjQBSH8TGk7T7vtZslBP3+33IRkT5IMpyZGOb+v2mqvQY/5xhU1V8iioIAQAABBJAACCCAYQL+IaIACCCAAAJIAAQQwEABfxNRAAQQQACDBvxFRAEQQAABBJDMB/xJRAEQwIUBfxBRAAQQQAABJAAuBvidiAIggAACCCABcDHAb0QUAAEEEEAAyXzAr0QUAAFcGPALEQVAAAEEEEAyH/CFiAIggAsDPhNRAAQQQAABJPMBn4goAAIIIIBBA+5CTL/zNoYKEzDukgA4twD/ddknAM7LS9XlGAM4K8nzCTADUAa48QpMkn6+7L7xFzDxNO2Oah010TruPK2NnDwNgPLRlK98caTeJNI2CZ+Gc+BWAT/w9YT2AROvAO3VyO4TX0eYWFpB7Cdg3JyrrIyTxOpK9C62CqhtAMZ20mxVnj81X8TjJFpdTbSLTVeR3PjJbgC8+8t3Ywkw0fvXJnstF7zh17axlWP9ETD2ALBqASvxJt32syOo+wo86tgjwLoFrOXHVN2J6RqS6NZhOGX4dnnAWOctYC49pjd3+xR7IymvAHVe17mWAmqDvTUswXUB6l3eZa/dNnDXxEYbNA1QL16B3Smwm4cFR8Fsp4129zTWvjuqzafodHzHF8kAtZXsXi+A80eJzQrGaBUdYHNaadIgRd2HOhpd1ALOjk+AJmdAZbq/PWBTYyet/sPYIs8ABQVoetqaVIH5pdzy8UU+ACY2ALXpSd9osL4Cz1r5APhpUfOkB8BrgO9OePn4IgCvAl7uOD58eLcoPMDIFNDmeAACGAZgBKD/gNonwMhK9AVQMIjxDptETYhgo9XeTs6A+f7xyccjHsBoCHW0kqw6+VXZ8eHJzk+CrKc2WLvKRnKYnKzsAdNySNH94AFJXQmW6f3tV2Mc6fScAat6SNkun3EwpqZIKzd+TTXcX/sYYDYDML0CmBbuBUs3grXRto9W4PTz0GGkArvz4QP82hp00cSlUfcoO7uQjQGmhwfFSRMbNfBGAF00cW148lGFjZSjgFlZuI67Ji4Npz+V2klxbRJxm8xVExs2cANYWUpf+G8r8AEZ6sRyE9fGVw+qXnOaQimcNHFpfP26bsD6LWC1QANvCNBmE9cTLv+3A2ixicsJN6CbAqxsDVoGCTjzJn7smuwQKODB8uX5Q68Dl0mZHRaOSledxf0s3QsvlsPygAfiMWAARaicPud8SIrtVmAWwDxCCzOJABgKYHFcZ7wB5G5FBpit9n6v8KQCV9rBjl+OYBIBEMDgAdf09MlDwGJVzz99rMAsZD9amEkEQADtPXwoABQ+0AdQCFgASAsTAAHcIiDvwogAiyAez7uswIzX2WhhJhFmYQC9f19hfYChvzSt1vAKoM/XOeIKDOo1BCYRAAEEcF23Ls7vZdS6/8Vh+esctep/cfDgOpEWZhJhFg4AsNjETcNygI6mVAC39vcNWphJBMDg8h9AvC4/zKHDwAAAAABJRU5ErkJggg==";
+var SAMPLE_COVER = "data:image/jpeg;base64,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";
 
 // desktop/film-suite/src/project/start/project-start-screen.js
 import { Button as Button5, GlyphSpinner as GlyphSpinner15, Input as Input2, Tip as Tip5, cn as cn50, useQuery as useQuery15, useValue as useValue31 } from "@hermes/plugin-sdk";
@@ -110761,6 +115614,9 @@ var START_CSS = `
 .fss-bar{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:16px}
 .fss-bar .fw-ic{width:var(--fss-ic);height:var(--fss-ic);flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .fss-act{display:inline-flex;align-items:center;gap:6px}
+/* w39-p2-wins item 2: New project… is the one primary action of Start (accent fill), Open folder… stays secondary. */
+.fss-bar .fss-primary{background:var(--fw-accent);border-color:transparent;color:var(--fw-on-accent)}
+.fss-bar .fss-primary:hover{background:var(--fw-accent-hover);color:var(--fw-on-accent)}
 .fss button,.fss input{font-size:var(--fw-fs,.75rem)}
 /* w15-shell FRM-039 (board S1): Recent is as wide as the columns its cards fill (same column width as a full row), so a
    short list sits on the axis of the logotype and the buttons instead of hanging off the left edge. */
@@ -110807,10 +115663,10 @@ var START_CSS = `
 .fss.is-narrow{--fss-word:clamp(40px,15vw,72px)}
 `;
 function openedText(value) {
-  const at = typeof value === "number" ? value * (value < 1e12 ? 1e3 : 1) : typeof value === "string" ? Date.parse(value) : NaN;
-  if (!Number.isFinite(at)) return "";
+  const at2 = typeof value === "number" ? value * (value < 1e12 ? 1e3 : 1) : typeof value === "string" ? Date.parse(value) : NaN;
+  if (!Number.isFinite(at2)) return "";
   try {
-    return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(at));
+    return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(at2));
   } catch {
     return "";
   }
@@ -110950,19 +115806,19 @@ function moveFocus(event) {
   const tiles = [...event.currentTarget.querySelectorAll('.fss-tile:not(:disabled):not([aria-disabled="true"])')];
   if (!tiles.length) return;
   event.preventDefault();
-  const at = tiles.indexOf(document.activeElement);
-  let next = at < 0 ? tiles[0] : null;
+  const at2 = tiles.indexOf(document.activeElement);
+  let next = at2 < 0 ? tiles[0] : null;
   if (!next && (key === "Home" || key === "End")) next = tiles[key === "Home" ? 0 : tiles.length - 1];
-  else if (!next && (key === "ArrowRight" || key === "ArrowLeft")) next = tiles[Math.max(0, Math.min(tiles.length - 1, at + (key === "ArrowRight" ? 1 : -1)))];
+  else if (!next && (key === "ArrowRight" || key === "ArrowLeft")) next = tiles[Math.max(0, Math.min(tiles.length - 1, at2 + (key === "ArrowRight" ? 1 : -1)))];
   else if (!next) {
     const box = (el) => el.getBoundingClientRect();
-    const from = box(tiles[at]);
+    const from = box(tiles[at2]);
     const down = key === "ArrowDown";
     const rows = tiles.filter((t2) => down ? box(t2).top > from.bottom - 1 : box(t2).bottom < from.top + 1);
     const rowTop = rows.length ? down ? Math.min(...rows.map((t2) => box(t2).top)) : Math.max(...rows.map((t2) => box(t2).top)) : null;
     const row2 = rows.filter((t2) => Math.abs(box(t2).top - rowTop) < 2);
     const cx = from.left + from.width / 2;
-    next = row2.sort((a, b) => Math.abs(box(a).left + box(a).width / 2 - cx) - Math.abs(box(b).left + box(b).width / 2 - cx))[0] || tiles[at];
+    next = row2.sort((a, b) => Math.abs(box(a).left + box(a).width / 2 - cx) - Math.abs(box(b).left + box(b).width / 2 - cx))[0] || tiles[at2];
   }
   next.focus();
 }
@@ -111128,7 +115984,7 @@ function ProjectStartScreen({ onDropFiles = null } = {}) {
     jsx143("h1", { className: "fss-word wordmark", "data-testid": "start-wordmark", children: "Continuo" }, "w")
   ] }, "lock");
   const actions = jsxs123("div", { className: "fss-bar", "data-testid": "start-actions", children: [
-    jsx143(Tip5, { label: "Pick a folder for a new project", children: jsx143(Button5, { type: "button", className: "fw-b", onClick: guarded(() => openDirectory(true)), children: jsxs123("span", { className: "fss-act", children: [jsx143(FwIcon, { name: "plus" }, "i"), "New project…"] }) }) }, "new"),
+    jsx143(Tip5, { label: "Pick a folder for a new project", children: jsx143(Button5, { type: "button", className: "fw-b fss-primary", onClick: guarded(() => openDirectory(true)), children: jsxs123("span", { className: "fss-act", children: [jsx143(FwIcon, { name: "plus" }, "i"), "New project…"] }) }) }, "new"),
     jsx143(Tip5, { label: "Open a folder that already holds a project", children: jsx143(Button5, { type: "button", variant: "secondary", className: "fw-b", onClick: guarded(() => openDirectory(false)), children: jsxs123("span", { className: "fss-act", children: [jsx143(FwIcon, { name: "folder" }, "i"), "Open folder…"] }) }) }, "open")
   ] }, "bar");
   const sample3 = !decided && !recent.some((project) => project.available !== false) || recent.some((project) => project.available === false && /^Sample film(?: \d+)?$/.test(project.name || "")) || chooser.error === SAMPLE_INTERRUPTED;
@@ -111276,10 +116132,10 @@ var MPRO_CSS = `
 .mpro-ov-win{position:absolute;top:0;bottom:0;border:2px solid var(--ui-accent);background:color-mix(in srgb,var(--ui-accent) 14%,transparent);border-radius:3px;pointer-events:none}
 .mpro-ov-ph{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--mp-ph,#f4f1ea);pointer-events:none}
 @container fim (max-width: 640px){.mpro{--mp-head:28px;--mp-rows-h:144px}}
-/* w16-tv item 2 (D-2 Tafel 2a; DESIGN.md Time view): the Audio page's lanes. Head column 88 at every width (name 12/600
+/* w16-tv item 2 (D-2 Tafel 2a; DESIGN.md Time view): the Audio page's lanes. Head column 104 at every width (was 88) (name 12/600
    --fw-t2, 8 px in); overview 24 over the lane column only, its view window a neutral outline; ruler 28 in m:ss;
    event lanes 22, curves 32; the lane list scrolls with a visible scrollbar (AUD-063). */
-.mpro.is-audio{--mp-head:88px}
+.mpro.is-audio{--mp-head:104px} /* orchestrator item (w39-p2-wins): 104, was 88: a stem head holds its full name (Drums 36 px at 12/600) plus 4 px air beside the 24 px M / S pair */
 .mpro.is-audio .mpro-hd{justify-content:flex-start;padding:0 0 0 8px;font-size:var(--fw-fs,.75rem);font-weight:600;color:var(--fw-t2,var(--ui-text-secondary))}
 .mpro.is-audio .mpro-hd-name{flex:1 1 auto;text-align:left}
 .mpro.is-audio .mpro-hd-name>.mpro-hd-full{display:inline}
@@ -112201,7 +117057,7 @@ function useAudioInspWidth(ref) {
   };
   return { on: rowW >= 900, shown, min: limits.min, max, size };
 }
-function AudioEditInspector({ tab: tab2, onTab, parts, values = {}, track = "", projectRef = null, foot = null, onHide }) {
+function AudioEditInspector({ tab: tab2, onTab, parts, values = {}, track = "", projectName = "", projectDir = "", projectRef = null, foot = null, onHide }) {
   const footRef = useFootClearance(Boolean(foot));
   const asideRef = useRef(null);
   const insp = useAudioInspWidth(asideRef);
@@ -112235,7 +117091,9 @@ function AudioEditInspector({ tab: tab2, onTab, parts, values = {}, track = "", 
   const stemCount = stems && Array.isArray(stems.stems) ? stems.stems.length : 0;
   const song = jsxs124("div", { className: "aei-song", "data-testid": "aud-insp-song", children: [
     jsxs124("div", { className: "fw-ins-head", "data-testid": "aud-insp-head", children: [
-      jsx144("span", { className: "fw-ins-name", title: track || void 0, children: fileName(track) || "—" }, "n"),
+      // w39-p2-detail2 (decided, rule 3): the song's place reads project-relative (‹Sample film›\\sound\\harbour-pad.mp3) like
+      // Deliver's Location; a file outside the project shows its name only, never a full user path on the surface.
+      jsx144("span", { className: "fw-ins-name", "data-testid": "aud-insp-name", title: track ? projectOutputText({ folder: track, projectFolder: projectDir }, projectName) !== String(track).replace(/[\\/]+$/, "") ? projectOutputText({ folder: track, projectFolder: projectDir }, projectName) : fileName(track) : void 0, children: fileName(track) || "—" }, "n"),
       fileFormat(track) ? jsx144("span", { className: "fw-ins-meta", children: fileFormat(track) }, "m") : null
     ] }, "head"),
     an ? sec("analysis", "spark", "Analysis", an.value, an.body, an.open !== void 0 ? an.open : !analysed) : null,
@@ -112252,9 +117110,9 @@ function AudioEditInspector({ tab: tab2, onTab, parts, values = {}, track = "", 
       children: values.key.sure ? values.key.text : `${values.key.text}?`
       /* w18-aedit2 item 5: the tempo's convention ("120? BPM") */
     }), valueTestid: "aud-sec-key-v", testid: "aud-sec-key", open: false, fixed: true }, "key") : null,
-    sec("bar1", "kf", "Bar 1", values.barOne, analysed && tim && tim.bar1 ? jsx144("div", { className: "aei-timing", "data-testid": "aud-insp-bar1", children: tim.bar1 }) : null, false),
+    sec("bar1", "bar-one", "Bar 1", values.barOne, analysed && tim && tim.bar1 ? jsx144("div", { className: "aei-timing", "data-testid": "aud-insp-bar1", children: tim.bar1 }) : null, false),
     // w17-ainspb item 3: the list in the body, the '+' (M) in the head (Tafel 2 D2.s2a: act ibtn plus).
-    sec("markers", "flag", "Markers", parts && parts.markers && parts.markers.value || values.markers, parts && parts.markers ? parts.markers.body : null, true, parts && parts.markers ? { action: parts.markers.action } : {}),
+    sec("markers", "markers", "Markers", parts && parts.markers && parts.markers.value || values.markers, parts && parts.markers ? parts.markers.body : null, true, parts && parts.markers ? { action: parts.markers.action } : {}),
     // w24-rest AUD-066: the lyrics the Words lane is aligned to (the recognizer's draft until corrected).
     values.lyrics ? sec("lyrics", "focus-text", "Lyrics", lyricsValue(values.lyrics.body && values.lyrics.body.lyrics), jsx144(LyricsField, { body: values.lyrics.body, onEdit: values.lyrics.onEdit }), false) : null,
     sec("stems", "wave", "Stems", stems ? stems.status === "running" ? `${stems.pct} %` : stemCount ? `${stemCount} stems` : "none" : "none", stems ? jsx144(StemsTab, {}) : null, false),
@@ -112294,8 +117152,8 @@ function AudioInspShow() {
   return jsx144(FwButton, { variant: "ghost", icon: "panel-r", className: "aud-insp-show", "data-testid": "aud-insp-show", "aria-label": "Show the inspector", title: "Show the inspector (Ctrl+[)", onClick: () => setAudioInspOpen(true) }, "show");
 }
 var AUDIO_INSP_BLOCKS_CSS = FW_CSS.split("\n").filter((line) => /^\.fw-(ins|insp-b|insp-f|sec|dtabs|tabs?|grow|btn|ic|prow|lbl|pctl|select|seg|num|input|dock-hide)\b[^{]*\{[^}]*\}$/.test(line)).map((line) => {
-  const at = line.indexOf("{");
-  return line.slice(0, at).split(",").map((x) => ".aei " + x.trim()).join(",") + line.slice(at);
+  const at2 = line.indexOf("{");
+  return line.slice(0, at2).split(",").map((x) => ".aei " + x.trim()).join(",") + line.slice(at2);
 }).join("\n");
 var AUDIO_SPLIT_CSS = FW_CSS.split("\n").filter((line) => line.startsWith(".fw-split")).join("\n");
 var AUDIO_EDIT_INSPECTOR_CSS = AUDIO_INSP_BLOCKS_CSS + LYRICS_CSS + AUDIO_SPLIT_CSS + HISTORY_ROW_CSS + `
@@ -112784,19 +117642,19 @@ function musicBarJump(time, direction, bars, analysis, duration) {
 var beatList = (analysis) => (Array.isArray(analysis?.beats) ? analysis.beats : []).map((v) => typeof v === "number" ? v : Number(v?.time)).filter(Number.isFinite);
 async function musicMarkerKey(shortcut, { markers, playhead, analysis, duration, seek, by = "artist" }) {
   if (!shortcut || !markers) return { ok: false, reason: "music_marker_unavailable" };
-  const at = Number.isFinite(playhead) ? playhead : null;
+  const at2 = Number.isFinite(playhead) ? playhead : null;
   if (shortcut.kind === "marker") {
-    if (at === null) return { ok: false, reason: "music_playhead_unavailable" };
-    let time = at;
+    if (at2 === null) return { ok: false, reason: "music_playhead_unavailable" };
+    let time = at2;
     if (shortcut.snap) {
       const beats = beatList(analysis);
-      if (beats.length) time = beats.reduce((best, b) => Math.abs(b - at) < Math.abs(best - at) ? b : best, beats[0]);
+      if (beats.length) time = beats.reduce((best, b) => Math.abs(b - at2) < Math.abs(best - at2) ? b : best, beats[0]);
     }
     return markers.addMarker(time, by);
   }
   if (shortcut.kind === "cue-set") {
-    if (at === null) return { ok: false, reason: "music_playhead_unavailable" };
-    return markers.setCue(shortcut.n, at, by);
+    if (at2 === null) return { ok: false, reason: "music_playhead_unavailable" };
+    return markers.setCue(shortcut.n, at2, by);
   }
   if (shortcut.kind === "cue") {
     const time = musicCueTime(markers.markers, shortcut.n);
@@ -112806,7 +117664,7 @@ async function musicMarkerKey(shortcut, { markers, playhead, analysis, duration,
   }
   if (shortcut.kind === "bars") {
     const count3 = shortcut.count || (shortcut.many ? markers.jumpBars || 4 : 1);
-    const jump = musicBarJump(at, shortcut.direction, count3, analysis, duration);
+    const jump = musicBarJump(at2, shortcut.direction, count3, analysis, duration);
     if (!jump) return { ok: false, reason: "music_playhead_unavailable" };
     const moved = seek(jump.time);
     return moved ? { ok: true, time: jump.time, unit: jump.unit, count: count3, reason: jump.reason } : { ok: false, reason: "music_transport_unavailable" };
@@ -113767,7 +118625,7 @@ import { jsx as jsx148, jsxs as jsxs128 } from "react/jsx-runtime";
 var AUDIO_CSS = HISTORY_ROW_CSS + `
 .aud{--aud-tick:6px;--aud-row:52px;--aud-lane:44px;--aud-facts-lh:15px;--aud-words-row:34px;--aud-ta:64px;${FW_TOKENS};--fw-insp-w:256px;container-type:inline-size;display:grid;grid-template-columns:minmax(0,1fr) var(--fw-insp-w,256px);grid-template-rows:minmax(0,1fr);height:100%;min-height:0;min-width:0;background:var(--fw-s1);color:var(--ui-text-secondary);font:400 var(--fw-fs,.75rem)/var(--fw-lh,1rem) var(--fw-font);font-variant-numeric:tabular-nums}
 .aud-main{display:flex;flex-direction:column;min-width:0;min-height:0}
-.aud-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 12px;border-bottom:1px solid var(--fw-line);min-width:0;flex:none}
+.aud-head{display:flex;align-items:center;flex-wrap:nowrap;gap:12px;box-sizing:border-box;height:var(--fw-bar-h);padding:0 8px;border-bottom:1px solid var(--fw-line);min-width:0;flex:none;overflow:hidden}
 .aud-head>.fw-seg,.fmu-head>.fw-seg{flex:none}
 .aud-line{flex:0 1 220px;min-width:120px}
 .aud-status{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fw-t3);text-align:right}
@@ -113853,6 +118711,7 @@ var AUDIO_CSS = HISTORY_ROW_CSS + `
 .aud.is-narrow .aud-row,.aud.is-narrow .aud-ruler{grid-template-columns:56px minmax(0,1fr) 84px}
 .aud.is-narrow .aud-lbl{padding-left:4px}
 .aud.is-narrow .aud-status{display:none}
+.aud.is-narrow .aud-head{padding:0 6px}
 /* w18-acre2: Create shows the Edit tool row's View group only; the model dropdown + folder without a heading. */
 .aud .atr-g[data-group=Tool],.aud .atr-g[data-group=Snapping],.aud .atr-b[data-tool=fit]{display:none}
 .aud .atr{margin:0}
@@ -113958,8 +118817,8 @@ function abcNotes(abc) {
 }
 function abcSet(abc, field, value) {
   const lines = String(abc || "").split("\n");
-  const at = lines.findIndex((l) => new RegExp(`^${field}:`).test(l.trim()));
-  if (at >= 0) lines[at] = `${field}:${value}`;
+  const at2 = lines.findIndex((l) => new RegExp(`^${field}:`).test(l.trim()));
+  if (at2 >= 0) lines[at2] = `${field}:${value}`;
   else {
     const k = lines.findIndex((l) => /^K:/.test(l.trim()));
     lines.splice(k >= 0 ? k : lines.length, 0, `${field}:${value}`);
@@ -113978,19 +118837,19 @@ var keyAbc = (words2) => {
 var KEY_CHOICES = [...ROOTS.map((r) => `${r} major`), ...ROOTS.map((r) => `${r} minor`)];
 var textW = (s) => String(s).length * 7 + 8;
 function PlanLanes({ plan, scale, laneW, hide: hide2 = /* @__PURE__ */ new Set() }) {
-  const px = (s) => s / scale * laneW;
+  const px2 = (s) => s / scale * laneW;
   const pct3 = (s) => `${s / scale * 100}%`;
   const inside = (s) => s < scale - 1e-6;
   let every = 1;
-  while (plan.barSec > 0 && px(plan.barSec * every) < 28) every *= 2;
-  const bars = plan.bars.map((t2, i2) => ({ t: t2, n: i2 + 1 })).filter((b) => inside(b.t) && (b.n - 1) % every === 0 && px(scale - b.t) >= 20);
+  while (plan.barSec > 0 && px2(plan.barSec * every) < 28) every *= 2;
+  const bars = plan.bars.map((t2, i2) => ({ t: t2, n: i2 + 1 })).filter((b) => inside(b.t) && (b.n - 1) % every === 0 && px2(scale - b.t) >= 20);
   const secs = plan.sections.filter((s) => inside(s.t)).map((s, i2, all) => ({ ...s, end: Math.min(scale, i2 + 1 < all.length ? all[i2 + 1].t : Math.max(plan.total, s.t)) }));
   const chords = [];
   for (const c of plan.chords) {
     if (!inside(c.t)) continue;
     const prev = chords[chords.length - 1];
-    if (prev && (px(c.t) < px(prev.t) + textW(prev.name) || c.name === prev.name)) continue;
-    if (px(scale - c.t) < textW(c.name)) continue;
+    if (prev && (px2(c.t) < px2(prev.t) + textW(prev.name) || c.name === prev.name)) continue;
+    if (px2(scale - c.t) < textW(c.name)) continue;
     chords.push(c);
   }
   const pitches = plan.notes.map((n) => n.midi);
@@ -114563,14 +119422,14 @@ var AUDIO_TOOLROW_CSS = `
 .atr-menu .atr-mc{width:16px;height:var(--atr-ic,1rem);flex:none;display:inline-grid;place-items:center}
 .atr-menu .fw-menu-h{padding:6px 10px 2px}
 `;
-function RowMenu({ label: label2, testid, items, at, onClose, anchorTestid }) {
+function RowMenu({ label: label2, testid, items, at: at2, onClose, anchorTestid }) {
   const ref = useRef(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const b = el.getBoundingClientRect();
-    el.style.left = parseFloat(el.style.left) + (at.right - b.right) + "px";
-    el.style.top = parseFloat(el.style.top) + (at.top - b.top) + "px";
+    el.style.left = parseFloat(el.style.left) + (at2.right - b.right) + "px";
+    el.style.top = parseFloat(el.style.top) + (at2.top - b.top) + "px";
     const first = el.querySelector('[role^="menuitem"]:not([aria-disabled="true"])');
     if (first) first.focus();
   }, []);
@@ -114608,7 +119467,7 @@ function RowMenu({ label: label2, testid, items, at, onClose, anchorTestid }) {
     "aria-label": label2,
     "data-testid": testid,
     "data-ready": "true",
-    style: { left: at.right - 200 + "px", top: at.top + "px" },
+    style: { left: at2.right - 200 + "px", top: at2.top + "px" },
     children: items.map((it) => it.head ? jsx147("div", { className: "fw-menu-h", role: "presentation", children: it.head }, "h-" + it.head) : jsx147(Tip6, { label: it.title, children: jsxs127("button", {
       type: "button",
       role: role(it.kind),
@@ -114635,20 +119494,20 @@ function RowMenu({ label: label2, testid, items, at, onClose, anchorTestid }) {
 function AudioToolRow({ tool, onTool, snap, onSnap, snapBeats = null, onSnapBeats = null, onBeatHere, beatHereWhy = "", zoom, lanes = [], extra = null }) {
   const groups2 = [
     { id: "Tool", items: [
-      { id: "select", testid: "aud-tool-select", label: "Select", icon: "arrow", key: "A", kind: "radio", pressed: tool === "select", title: "Select · a click moves the playhead (A)", run: () => onTool("select") },
+      { id: "select", testid: "aud-tool-select", label: "Select", icon: "pointer", key: "A", kind: "radio", pressed: tool === "select", title: "Select · a click moves the playhead (A)", run: () => onTool("select") },
       { id: "range", testid: "aud-tool-range", label: "Range", icon: "range", key: "R", kind: "radio", pressed: tool === "range", title: "Range · a drag sets IN–OUT (R)", run: () => onTool("range") },
-      { id: "marker", testid: "aud-tool-marker", label: "Marker", icon: "flag", key: "M", kind: "radio", pressed: tool === "marker", title: "Marker · a click adds one (M)", run: () => onTool("marker") },
+      { id: "marker", testid: "aud-tool-marker", label: "Marker", icon: "marker", key: "M", kind: "radio", pressed: tool === "marker", title: "Marker · a click adds one (M)", run: () => onTool("marker") },
       { id: "beat", testid: "aud-tool-beat", label: "Beat here", icon: "beat-here", kind: "cmd", disabled: Boolean(beatHereWhy), title: beatHereWhy ? `Beat here · ${beatHereWhy}` : "Beat here · grid from the playhead", run: () => onBeatHere && onBeatHere() }
     ] },
     { id: "Snapping", items: [
       { id: "snap", testid: "mpro-snap-toggle", label: "Snap", icon: "magnet", key: "N", kind: "check", pressed: Boolean(snap), title: `Snap to sections, bars and beats: ${snap ? "on" : "off"} (N)`, run: () => onSnap && onSnap() },
-      { id: "snap-beats", testid: "aud-snap-beats", label: "Snap to beats", icon: "music", kind: "check", disabled: snapBeats === null, pressed: Boolean(snapBeats), title: snapBeats === null ? "Snap to beats · Song not analysed" : `Snap to beats and bars: ${snapBeats ? "on" : "off"}`, run: () => onSnapBeats && onSnapBeats() }
+      { id: "snap-beats", testid: "aud-snap-beats", label: "Snap to beats", icon: "metronome", kind: "check", disabled: snapBeats === null, pressed: Boolean(snapBeats), title: snapBeats === null ? "Snap to beats · Song not analysed" : `Snap to beats and bars: ${snapBeats ? "on" : "off"}`, run: () => onSnapBeats && onSnapBeats() }
     ] },
     { id: "View", spacer: true, items: [
       { id: "lanes", testid: "aud-lanes", label: "Lanes", icon: "lanes", kind: "menu", title: "Lanes", run: null },
-      { id: "zoom-out", testid: "mpro-zoom-out", label: "Zoom out", icon: "minus", key: "-", kind: "cmd", disabled: !zoom.canOut, title: zoom.canOut ? "Zoom out (-)" : "Zoom out · Whole song in view", run: zoom.onOut },
-      { id: "zoom-in", testid: "mpro-zoom-in", label: "Zoom in", icon: "plus", key: "=", kind: "cmd", disabled: !zoom.canIn, title: zoom.canIn ? "Zoom in (=)" : "Zoom in · Maximum zoom reached", run: zoom.onIn },
-      { id: "fit", testid: "mpro-fit", label: "Fit IN–OUT", icon: "fit", key: "Shift+Z", kind: "cmd", disabled: !zoom.canFit, title: zoom.canFit ? "Fit IN–OUT (Shift+Z)" : "Fit IN–OUT · IN–OUT already fills the view", run: zoom.onFit },
+      { id: "zoom-out", testid: "mpro-zoom-out", label: "Zoom out", icon: "zoom-out", key: "-", kind: "cmd", disabled: !zoom.canOut, title: zoom.canOut ? "Zoom out (-)" : "Zoom out · Whole song in view", run: zoom.onOut },
+      { id: "zoom-in", testid: "mpro-zoom-in", label: "Zoom in", icon: "zoom-in", key: "=", kind: "cmd", disabled: !zoom.canIn, title: zoom.canIn ? "Zoom in (=)" : "Zoom in · Maximum zoom reached", run: zoom.onIn },
+      { id: "fit", testid: "mpro-fit", label: "Fit IN–OUT", icon: "zoom-range", key: "Shift+Z", kind: "cmd", disabled: !zoom.canFit, title: zoom.canFit ? "Fit IN–OUT (Shift+Z)" : "Fit IN–OUT · IN–OUT already fills the view", run: zoom.onFit },
       { id: "whole", testid: "mpro-whole", label: "Whole song", icon: "whole", key: "Z", kind: "cmd", disabled: !zoom.canWhole, title: zoom.canWhole ? "Whole song (Z)" : "Whole song · Already in view", run: zoom.onWhole }
     ] }
   ];
@@ -115942,10 +120801,11 @@ async function useSongFileInCut(project, payload) {
 }
 function useInCutRefusal(result) {
   const code2 = result && result.reason || "not_placed";
-  if (code2 === "overlap") return "Not placed · the music lane already has a clip at the start";
-  if (code2 === "timeline_conflict") return "Not placed · the Cut changed meanwhile";
-  if (code2 === "no_project") return "Not placed · no project";
-  return `Not placed · ${code2.replace(/_/g, " ")}`;
+  if (code2 === "overlap") return "Not placed · The music lane already has a clip at the start";
+  if (code2 === "timeline_conflict") return "Not placed · The Cut changed meanwhile";
+  if (code2 === "no_project") return "Not placed · No project";
+  const words2 = code2.replace(/_/g, " ");
+  return `Not placed · ${words2[0].toUpperCase()}${words2.slice(1)}`;
 }
 
 // desktop/film-suite/src/audio/audio-undo.js
@@ -116006,8 +120866,8 @@ function AudioUndoButtons({ log }) {
   return jsx152(UndoRedoPair, {
     className: "aud-undo",
     testid: "aud-undo",
-    undo: { can: Boolean(u), title: u ? `Undo ${u.label} (Ctrl+Z)` : "Undo · nothing to undo", run: () => void undoAudio(log), testid: "aud-undo-b" },
-    redo: { can: Boolean(r), title: r ? `Redo ${r.label} (Ctrl+Shift+Z)` : "Redo · nothing to redo", run: () => void redoAudio(log), testid: "aud-redo-b" }
+    undo: { can: Boolean(u), title: u ? `Undo ${u.label} (Ctrl+Z)` : "Undo · Nothing to undo", run: () => void undoAudio(log), testid: "aud-undo-b" },
+    redo: { can: Boolean(r), title: r ? `Redo ${r.label} (Ctrl+Shift+Z)` : "Redo · Nothing to redo", run: () => void redoAudio(log), testid: "aud-redo-b" }
   });
 }
 var AUDIO_UNDO_CSS = UNDO_REDO_CSS + `
@@ -116199,13 +121059,13 @@ function FilmSuiteMusicView({ wb, suite }) {
   };
   const gridCorrect = (kind, arg, fromAgent = false) => {
     if (!draftBody || typeof applyTimingDraftEdit !== "function" || state !== "ready") return { ok: false, reason: "music_timing_unavailable" };
-    let body2 = null, at = null;
+    let body2 = null, at2 = null;
     if (kind === "factor") body2 = musicTempoFactorBody(draftBody, currentBpm(), arg);
     else if (kind === "nudge") body2 = musicGridNudgeBody(draftBody, currentBpm(), barOne, arg, musicEvidenceDuration(musicAnalysis));
     else if (kind === "beat_here" || kind === "bar_one") {
       const r = musicBeatHereBody(draftBody, currentBpm(), musicPlayheadRef?.current, musicAnalysis);
       body2 = r && r.body;
-      at = r && r.at;
+      at2 = r && r.at;
     } else if (kind === "meter") body2 = Number.isInteger(arg) && arg >= 1 && arg <= 32 ? { ...draftBody, meter: { mode: "fixed", numerator: arg, denominator: Number.isInteger(draftBody.meter?.denominator) ? draftBody.meter.denominator : 4, regions: [], confirmed_by_artist: true } } : null;
     if (!body2) return { ok: false, reason: "music_grid_out_of_range" };
     if (kind === "bar_one" && body2.meter && body2.meter.mode === "inherit") {
@@ -116217,9 +121077,9 @@ function FilmSuiteMusicView({ wb, suite }) {
     if (!next) return { ok: false, reason: "music_timing_busy" };
     if (fromAgent || kind === "bar_one") setTimingNonce((n) => n + 1);
     const factor = kind === "factor" ? musicTempoFactor(arg) : null;
-    const label2 = kind === "bar_one" ? `Bar 1 at ${formatMusicSeconds(at.time)}` : kind === "meter" ? `Meter ${body2.meter.numerator}/${body2.meter.denominator}` : kind === "factor" ? `Tempo ${factor ? factor.label || factor.id : arg} · ${Math.round(Number(body2.tempo?.bpm) * 10) / 10} BPM` : kind === "nudge" ? `Grid ${arg > 0 ? "+" : ""}${arg} ms` : `Beat here at ${formatMusicSeconds(at && at.time)}`;
+    const label2 = kind === "bar_one" ? `Bar 1 at ${formatMusicSeconds(at2.time)}` : kind === "meter" ? `Meter ${body2.meter.numerator}/${body2.meter.denominator}` : kind === "factor" ? `Tempo ${factor ? factor.label || factor.id : arg} · ${Math.round(Number(body2.tempo?.bpm) * 10) / 10} BPM` : kind === "nudge" ? `Grid ${arg > 0 ? "+" : ""}${arg} ms` : `Beat here at ${formatMusicSeconds(at2 && at2.time)}`;
     storeTiming(prev, body2, label2, fromAgent ? "hermes" : "artist", `grid-${kind}`);
-    return { ok: true, body: body2, at };
+    return { ok: true, body: body2, at: at2 };
   };
   const markerStore = useMusicMarkers({ projectId: activeProject?.project_id || null, sha: musicAnalysis?.source_sha256 || musicAnalysis?.track_sha256 || null });
   const [jumpBars, setJumpBars] = useState(4);
@@ -116235,9 +121095,9 @@ function FilmSuiteMusicView({ wb, suite }) {
   };
   const addMarkerLogged = (time, by = audioActor.current) => markerRef.current.addMarker(time, by).then((r) => {
     if (r && r.ok) {
-      const at = r.marker && Number.isFinite(r.marker.time) ? r.marker.time : time;
-      logAudioEdit(`Marker at ${formatMusicSeconds(at)}`, by);
-      undoableMarker(r.op, at);
+      const at2 = r.marker && Number.isFinite(r.marker.time) ? r.marker.time : time;
+      logAudioEdit(`Marker at ${formatMusicSeconds(at2)}`, by);
+      undoableMarker(r.op, at2);
     }
     return r;
   });
@@ -116333,7 +121193,7 @@ function FilmSuiteMusicView({ wb, suite }) {
     onTool: setEditTool,
     toolRow: musicTrack ? (row2) => jsx153(AudioToolRow, { tool: editTool, onTool: setEditTool, onBeatHere: beatHere, beatHereWhy, ...row2 }, "toolrow") : null,
     onMarkerAt: markerAt2,
-    inspector: (parts) => inspOpen ? jsx153(AudioEditInspector, { tab: inspTab, onTab: setInspTab, parts, track: musicTrack, values: inspValues, foot: useFoot, onHide: () => setAudioInspOpen(false), projectRef: activeProject && activeProject.project_id ? { project_id: activeProject.project_id } : null }, "insp") : null,
+    inspector: (parts) => inspOpen ? jsx153(AudioEditInspector, { tab: inspTab, onTab: setInspTab, parts, track: musicTrack, projectName: activeProject ? activeProject.name || "" : "", projectDir: activeProject ? activeProject.directory || "" : "", values: inspValues, foot: useFoot, onHide: () => setAudioInspOpen(false), projectRef: activeProject && activeProject.project_id ? { project_id: activeProject.project_id } : null }, "insp") : null,
     // w17-ainsp item 1: what Hermes reads (music.inspector).
     inspectorState: { open: inspOpen, tab: inspTab },
     markers: { ...markerStore, addMarker: addMarkerLogged, jumpBars, setJumpBars, jumpReason: meterFixed ? "" : "Meter unsure: Ctrl/Alt+←/→ jump by beats", onAdd: () => void addMarkerLogged(musicPlayheadRef?.current ?? 0) },
@@ -117599,12 +122459,12 @@ function KeyframeEditor({
     setDepth(history2.current.length);
   };
   const commit = (next, label2) => {
-    const at = Date.now();
-    if (!label2 || label2 !== lastPush.current.label || at - lastPush.current.at > 700) {
+    const at2 = Date.now();
+    if (!label2 || label2 !== lastPush.current.label || at2 - lastPush.current.at > 700) {
       history2.current = [...history2.current, value].slice(-MAX_UNDO);
       setDepth(history2.current.length);
     }
-    lastPush.current = { at, label: label2 || "" };
+    lastPush.current = { at: at2, label: label2 || "" };
     onChange(next);
   };
   const undo2 = () => {
@@ -117638,11 +122498,11 @@ function KeyframeEditor({
     }
     if (rows.length <= 1) return;
     const before = [...value].sort(byFrame);
-    const at = before.findIndex((item) => item.id === id);
+    const at2 = before.findIndex((item) => item.id === id);
     const kept = before.filter((item) => item.id !== id);
     const shift2 = kept.length && before[0].id === id ? (Number(kept[0].frame) || 0) - (Number(before[0].frame) || 0) : 0;
     commit(kept.map((row2) => ({ ...row2, frame: Math.max(0, (Number(row2.frame) || 0) - shift2) })));
-    const nextId = (kept[Math.min(at, kept.length - 1)] || {}).id || "";
+    const nextId = (kept[Math.min(at2, kept.length - 1)] || {}).id || "";
     setSelectedId(nextId);
     setTimeout(() => {
       const box = boxRef.current;
@@ -117765,14 +122625,14 @@ function KeyframeEditor({
       if (!pick) pick = row2.id;
       return { ...row2, source: queue.shift() };
     });
-    let at = frame;
+    let at2 = frame;
     while (queue.length && next.length < MAX_KEYFRAMES) {
-      const blank = frame !== null && (untouched && !next[0].source.trim() ? next[0] : next.find((row3) => !row3.source.trim() && Number(row3.frame) === Math.round(at)));
-      const place2 = frame === null ? nextFreeFrame(next) : blank ? Number(blank.frame) : kfFreeFrame(next, at, "", maxFrame);
+      const blank = frame !== null && (untouched && !next[0].source.trim() ? next[0] : next.find((row3) => !row3.source.trim() && Number(row3.frame) === Math.round(at2)));
+      const place2 = frame === null ? nextFreeFrame(next) : blank ? Number(blank.frame) : kfFreeFrame(next, at2, "", maxFrame);
       const row2 = blank ? { ...blank, source: queue.shift() } : { ...newKeyframe(place2), source: queue.shift() };
       next = blank ? next.map((item) => item.id === blank.id ? row2 : item) : [...next, row2];
       if (!pick) pick = row2.id;
-      if (frame !== null && !(untouched && blank && blank.id === rows[0].id)) at = place2 + 1;
+      if (frame !== null && !(untouched && blank && blank.id === rows[0].id)) at2 = place2 + 1;
     }
     if (untouched && frame === null && !onto && next.length > 1) {
       const gap = maxFrame / (next.length - 1);
@@ -117955,9 +122815,9 @@ function KeyframeEditor({
     onDragLeave: () => setOver(null),
     onDrop: (event) => onDrop(event, row2.id)
   });
-  const openMenu = (event, at) => {
+  const openMenu = (event, at2) => {
     const box = boxRef.current ? boxRef.current.getBoundingClientRect() : { left: 0, top: 0 };
-    setMenu({ x: Math.round(event.clientX - box.left), y: Math.round(event.clientY - box.top), ...at });
+    setMenu({ x: Math.round(event.clientX - box.left), y: Math.round(event.clientY - box.top), ...at2 });
   };
   const menuItems = !menu ? [] : menu.id ? chain ? [{ id: "remove", label: "Remove mark", keys: "Del", run: () => remove2(menu.id) }] : [
     { id: "pick", label: "Choose picture…", keys: "Enter", run: () => void browseInto(menu.id) },
@@ -118664,8 +123524,7 @@ function JobCard({ job, now, stale, onCheck, busy: busy2, onEdit, onCancel, canc
   ].filter(Boolean);
   const playable = Boolean(job.savedPath) && failedSrc !== job.savedPath && Boolean(bridge());
   const reveal = () => {
-    const desktop = bridge();
-    if (desktop && desktop.revealPath) void desktop.revealPath(job.savedPath);
+    void revealPath(job.savedPath);
   };
   const fitFullscreen = useCallback((node) => {
     if (!node) return void 0;
@@ -120759,12 +125618,16 @@ function FshShotStrip({ wb, takes, stage, onPick, ownerScope, now, tools, kfHint
   const lastFrame = Number(wb.catalogMaxFrame || wb.shotLastFrame || wb.maxFrame) || 0;
   const roleOf3 = (row2, i2) => wb.selectedTarget && wb.selectedTarget.mode === "keyframes_to_video" && wb.keyframesControl ? Number(row2.frame) === 0 ? "Opening frame" : Number(row2.frame) === lastFrame ? "Closing frame" : `Keyframe ${i2 + 1}` : wb.keyframesControl && wb.selectedTarget && wb.selectedTarget.mode === "references_to_video" ? `Guide ${i2 + 1}` : `Keyframe ${i2 + 1}`;
   const kfLane = wb.keyframesControl || wb.selectedTarget && wb.selectedTarget.capabilities && wb.selectedTarget.capabilities.keyframes;
-  const idle = (testid, icon, title) => jsx163("button", { type: "button", className: "fsh-pbtn fw-b", "data-testid": testid, title: `${title} · No take to play`, "aria-label": title, "aria-disabled": "true", children: fshGlyph(icon) }, testid);
+  const idle = (testid, icon, title) => jsx163("button", { type: "button", className: "fw-btn fw-btn-ghost fw-btn-icon fsh-tbtn", "data-testid": testid, title: `${title} · No take to play`, "aria-label": title, "aria-disabled": "true", children: fshGlyph(icon) }, testid);
   const transport = idleTransport ? jsxs142("div", { className: "fsh-bar fsh-bar-idle", "data-testid": "fsh-transport", children: [
-    idle("fsh-idle-play", "play", "Play (Space)"),
-    idle("fsh-idle-back", "chev-l", "Back 1 frame (←)"),
-    idle("fsh-idle-fwd", "chev-r", "Forward 1 frame (→)"),
-    jsx163("span", { className: "fsh-tc", "data-testid": "fsh-timecode", title: `Hours:minutes:seconds:frames at ${fps} fps`, children: `${fshSmpte(0, fps)} / ${fshSmpte(lastFrame / Math.max(1, Number(fps) || 24), fps)}` }, "tc"),
+    jsx163("span", { className: "fsh-tc", "data-testid": "fsh-timecode", title: `Hours:minutes:seconds:frames at ${fps} fps`, children: [jsx163("span", { className: "fsh-tc-now", children: fshSmpte(0, fps) }, "n"), " / ", jsx163("span", { className: "fsh-tc-len", "data-testid": "fsh-tc-len", "data-frames": lastFrame + 1, children: durationText(lastFrame + 1, { num: Number(fps) || 24, den: 1 }) }, "l")] }, "tc"),
+    jsxs142("div", { className: "fsh-tgrp", role: "group", "aria-label": "Transport", children: [
+      idle("fsh-idle-start", "stepb", "Go to start (Home)"),
+      idle("fsh-idle-back", "chev-l", "Back 1 frame (←)"),
+      idle("fsh-idle-play", "play", "Play (Space)"),
+      idle("fsh-idle-fwd", "chev-r", "Forward 1 frame (→)"),
+      idle("fsh-idle-end", "stepf", "Go to end (End)")
+    ] }, "grp"),
     jsx163("input", { type: "range", className: "fsh-scrub", "data-testid": "fsh-scrub", "aria-label": "Position", title: "Position · No take to play", min: 0, max: 0, value: 0, "aria-disabled": "true", readOnly: true }, "s"),
     idle("fsh-idle-full", "fit", "Fullscreen (F)")
   ] }, "tr") : null;
@@ -120851,16 +125714,21 @@ var FSH_STRIP_CSS = `
 .fsh-st-an{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fsh-st-takes{display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;min-width:0;min-height:var(--fsh-st-take);box-sizing:content-box;padding:2px 0;scrollbar-width:thin}
 .fsh-bar-idle{border-top:1px solid var(--fw-line);border-radius:0}
-.fsh-bar-idle .fsh-pbtn:disabled,.fsh-bar-idle .fsh-pbtn[aria-disabled=true],.fsh-bar-idle .fsh-scrub[aria-disabled=true]{opacity:.4;cursor:default}
+.fsh-bar-idle .fsh-pbtn:disabled,.fsh-bar-idle .fsh-pbtn[aria-disabled=true],.fsh-bar-idle .fsh-tbtn[aria-disabled=true],.fsh-bar-idle .fsh-scrub[aria-disabled=true]{opacity:.4;cursor:default}
 /* w39-regress (DESIGN.md Controls "Disabled": disabled ink 1.5:1 to 2.5:1 against its ground): at 40 % the primary ink
    still measured 3.1:1 on the dark bar, a resting icon's contrast. The off glyphs take the secondary ink, as the
    other disabled bar icons do (dark 3.1 -> within the band; light stays within it). */
-.fsh-bar-idle .fsh-pbtn:disabled,.fsh-bar-idle .fsh-pbtn[aria-disabled=true]{color:var(--ui-text-secondary)}
+.fsh-bar-idle .fsh-pbtn:disabled,.fsh-bar-idle .fsh-pbtn[aria-disabled=true],.fsh-bar-idle .fsh-tbtn[aria-disabled=true]{color:var(--ui-text-secondary)}
 .fsh-bar-idle .fsh-scrub{flex:1 1 auto;min-width:0;height:var(--fw-ctl-h-sm)}
 .fsh-st-film{position:absolute;inset:2px auto 2px 2px;width:56px;overflow:hidden}
 .fsh-st-film img{width:100%;height:100%;object-fit:cover;display:block}
 .fsh-strip>.fsh-work:not([hidden]){flex:none;max-height:none;overflow:visible;padding-bottom:0}
-.fsh-strip:has(>.fsh-work:not([hidden])){flex:0 0 auto}
+.fsh-strip:has(>.fsh-work:not([hidden])){flex:1 0 auto}
+/* w39-p2-green3 (W12SC M-96): with the 36 px bar (4e9dfd27) a width-bound idle viewer left 18 px under the strip; the open
+   editor takes the rest of the column, so nothing dead sits under the takes. The viewer grows first (1000:1) up to its
+   width-bound max-height; only the remainder goes to the strip, so the viewer keeps its size. */
+.fsh-strip:has(>.fsh-work:not([hidden]))>.fsh-work:not([hidden]){flex:1 0 auto}
+.fsh-main:has(>.fsh-strip>.fsh-work:not([hidden]))>.fsh-playarea.is-idle{flex-grow:1000}
 .fsh-strip:has(>.fsh-work:not([hidden]))>.fsh-st-takes{flex:none}
 .fsh-st-take{position:relative;flex:0 0 72px;width:72px;height:var(--fsh-st-take);padding:0;margin:0;border:1px solid var(--fw-line-2);border-radius:0;background:var(--fw-s0);color:var(--fw-t1);cursor:pointer;overflow:hidden}
 .fsh-st-take.is-current{outline:2px solid var(--ui-text-primary);outline-offset:1px}
@@ -121217,23 +126085,35 @@ function FshTakeMarks({ scope, id }) {
   const write2 = (change) => {
     if (ready) void writeMediaMarks(scope, [{ item_id: id, ...change }]);
   };
-  return jsxs145("div", { className: "fsh-marks", "data-testid": "fsh-take-marks", children: [
-    jsxs145("button", {
-      type: "button",
-      className: cn64("fw-btn fsh-kept", mark.kept && "is-on"),
-      "data-testid": "fsh-take-kept",
-      "aria-pressed": Boolean(mark.kept),
-      "aria-disabled": ready ? void 0 : "true",
-      title: ready ? mark.kept ? "Unkeep" : "Keep this take" : marks2.state === "unknown" ? "Kept · Marks are loading" : "Kept · Marks are unavailable",
-      onClick: () => write2({ kept: !mark.kept }),
-      children: [jsx166(FwIcon, { name: "check" }, "i"), jsx166("span", { children: "Kept" }, "t")]
-    }, "k"),
-    jsx166("span", { className: "fsh-stars", role: "group", "aria-label": "Rating", "data-testid": "fsh-take-rating", "data-rating": rating, children: [1, 2, 3, 4, 5].map((n) => jsx166("button", { type: "button", className: cn64("fsh-star fw-b", n <= rating && "is-on"), "aria-label": `${n} star${n > 1 ? "s" : ""}`, "aria-pressed": n <= rating, "aria-disabled": ready ? void 0 : "true", title: !ready ? `Rate ${n} of 5 · ${marks2.state === "unknown" ? "Marks are loading" : "Marks are unavailable"}` : n === rating ? "Clear rating" : `Rate ${n} of 5`, onClick: () => write2({ rating: n === rating ? 0 : n }), children: "★" }, n)) }, "s"),
-    marks2.issue ? jsx166("span", { className: "fsh-why", role: "alert", children: marks2.issue }, "i") : null
-  ] });
+  return jsxs145("div", {
+    className: "fsh-marks",
+    "data-testid": "fsh-take-marks",
+    onKeyDown: (event) => {
+      if ((event.key === "k" || event.key === "K") && !event.ctrlKey && !event.metaKey && !event.altKey && ready) {
+        event.preventDefault();
+        write2({ kept: !mark.kept });
+      }
+    },
+    children: [
+      jsx166(FimKeepToggle, {
+        keptAs: mark.kept ? "this take" : "",
+        what: "take",
+        small: true,
+        testid: "fsh-take-kept",
+        disabled: ready ? false : marks2.state === "unknown" ? "Marks are loading" : "Marks are unavailable",
+        onKeep: () => write2({ kept: true }),
+        onUnkeep: () => write2({ kept: false })
+      }, "k"),
+      jsx166("span", { className: "fsh-stars", role: "group", "aria-label": "Rating", "data-testid": "fsh-take-rating", "data-rating": rating, children: [1, 2, 3, 4, 5].map((n) => jsx166("button", { type: "button", className: cn64("fsh-star fw-b", n <= rating && "is-on"), "aria-label": `${n} star${n > 1 ? "s" : ""}`, "aria-pressed": n <= rating, "aria-disabled": ready ? void 0 : "true", title: !ready ? `Rate ${n} of 5 · ${marks2.state === "unknown" ? "Marks are loading" : "Marks are unavailable"}` : n === rating ? "Clear rating" : `Rate ${n} of 5`, onClick: () => write2({ rating: n === rating ? 0 : n }), children: "★" }, n)) }, "s"),
+      marks2.issue ? jsx166("span", { className: "fsh-why", role: "alert", children: marks2.issue }, "i") : null
+    ]
+  });
 }
 function FshFinish({ wb, job }) {
-  return jsxs145("div", { className: "fsh-tk-more", children: [jsx166(FshReview, { wb, job }, "rv"), jsx166(FshUpscaleBox, { wb, job }, "up"), jsx166(FshFinishBox, { wb, job }, "fin"), jsx166(FshTakeSync, { wb, job }, "sync")] });
+  return jsxs145("div", { className: "fsh-tk-more", children: [
+    jsxs145("div", { className: "fsh-tk-row", role: "group", "aria-label": "Take tools", children: [jsx166(FshReview, { wb, job }, "rv"), jsx166(FshUpscaleBox, { wb, job }, "up"), jsx166(FshFinishBox, { wb, job }, "fin")] }, "row-b"),
+    jsx166(FshTakeSync, { wb, job }, "sync")
+  ] });
 }
 function FshFinishBox({ wb, job }) {
   const [open, setOpen] = useState(false);
@@ -121320,7 +126200,7 @@ function FshHistory({ takes, ledger = [], changes = [], onUndo = null, ownIds = 
   }
   for (const change of changes) rows.push({ id: change.id, who: change.who === "hermes" ? "Hermes" : change.who === "elsewhere" ? "Elsewhere" : "You", what: change.what, at: change.at, change });
   rows.sort((a, b) => b.at - a.at);
-  if (!rows.length) return jsx166("p", { className: "fw-faint", "data-testid": "fsh-history-empty", children: "Nothing." });
+  if (!rows.length) return jsx166(EmptyWell, { icon: "history", testid: "fsh-history-empty" });
   const clock6 = (ms) => {
     const d = new Date(ms);
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -121348,8 +126228,19 @@ var FSH_TAKE_CSS = FSH_SYNC_CSS + FSH_UPSCALE_CSS + HISTORY_ROW_CSS + `
 .fsh-star:focus-visible,.fsh-kept:focus-visible{outline:2px solid var(--fw-accent-ring);outline-offset:1px}
 .fsh-finish{display:grid;gap:6px;padding:8px;border:1px solid var(--fw-line-2);border-radius:var(--fw-r1)}
 .fsh-tk-more{display:contents}
-.fsh-tk-acts{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+/* w39-p2-video (the artist's circle): the Take actions are whole rows of equal columns on ONE right edge, one gap
+   (6 px). A row of two = two columns, a row of three = three; an open box or picker takes its own full row. Below
+   290 px (a two-column cell would cut "Continue from this take") every row is one column: whole rows, no remainder.
+   Buttons stay FwButton; only their width and side padding follow the cell. */
+.fsh-tk-acts{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0;container:fsh-acts/inline-size}
 .fsh-tk-acts .fw-btn{min-height:var(--fw-ctl-h,1.75rem)}
+.fsh-tk-row{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px;min-width:0}
+.fsh-tk-row:empty{display:none}
+.fsh-tk-row>*{min-width:0;box-sizing:border-box}
+.fsh-tk-row:has(>.fsh-finish,>.frv .frv-pick,>.frv .frv-verdict,>.frv .frv-pending){grid-auto-flow:row;grid-template-columns:minmax(0,1fr)}
+.fsh-tk-row>.fw-btn,.fsh-tk-row>.frv>.fw-btn{width:100%;padding:0 6px;justify-content:center}
+.fsh-tk-acts .fsh-sync>.fw-btn{align-self:stretch}
+@container fsh-acts (max-width:289.98px){.fsh-tk-row{grid-auto-flow:row;grid-template-columns:minmax(0,1fr)}}
 .fsh-tk-sec{display:grid;gap:8px;padding:10px 12px;border-bottom:1px solid var(--fw-line);min-width:0}
 .fsh-history{list-style:none;margin:0;padding:0;display:grid}
 .fsh-history>li.fsh-hrow{padding:0 12px}
@@ -121528,10 +126419,16 @@ function TakeContinuation({ wb, job, takes, state, open, onOpen, onClose, onPlac
   ] });
 }
 var TAKE_CONTINUATION_CSS = `
-.fsh-cont{margin-top:8px}
+.fsh-cont{margin-top:8px;container:fsh-cont/inline-size}
+/* w39-p2-video: Extend · Prepend · Fill gap to… in equal columns on the panel's right edge (as the Take actions);
+   below 290 px one column. The chooser is a one-column list of takes: whole rows, never a ragged remainder. */
 .fsh-cont-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.fsh-bridge{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
-.fsh-bridge .fw-info-title{flex:1 1 100%;margin:0}
+.fsh-cont-row>*{flex:1 1 0;min-width:0;box-sizing:border-box}
+.fsh-cont-row>.fsh-cont-btn{justify-content:center;padding:0 6px}
+@container fsh-cont (max-width:289.98px){.fsh-cont-row>*{flex-basis:100%}}
+.fsh-bridge{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;margin-top:8px}
+.fsh-bridge>.fsh-cont-btn{justify-content:center}
+.fsh-bridge .fw-info-title{margin:0}
 .fsh .fsh-cont-btn{font-size:.8125rem}
 `;
 
@@ -121762,9 +126659,9 @@ function continueFacts(wb, takes, fps, argsOf) {
 function continueLine(facts, fps, seconds2) {
   if (!facts || facts.role !== "extend" && facts.role !== "prepend") return "";
   if (facts.refused) return continueBoundText(facts, fps);
-  const at = formatFrameTimecode(Number.isInteger(facts.used) ? facts.used : facts.out, fps);
+  const at2 = formatFrameTimecode(Number.isInteger(facts.used) ? facts.used : facts.out, fps);
   const plus = Number(seconds2) > 0 ? ` · +${Number(seconds2)} s` : "";
-  return facts.role === "extend" ? `Extend ${facts.label} from ${at}${plus}` : `Lead into ${facts.label} at ${at}${plus}`;
+  return facts.role === "extend" ? `Extend ${facts.label} from ${at2}${plus}` : `Lead into ${facts.label} at ${at2}${plus}`;
 }
 function continueBoundText(facts, fps) {
   const what = facts.role === "extend" ? `Extend ${facts.label}` : `Lead into ${facts.label}`;
@@ -121791,7 +126688,7 @@ function footFacts(wb, takes, fps, argsOf, isCat, countable) {
 // desktop/film-suite/src/shoot/view/fsh-css.js
 var FSH_CSS = `
 /* Video page (lane w3-video, board E12): one viewer, the strip under it, Shot · Take · History on the right. */
-.fw.fsh{--fim-dim:var(--fw-t2);--fim-edge:var(--fw-line-2);--fw-insp-w:320px;--fsh-bar:40px;--fsh-cap:44px;--fsh-strip:0px;
+.fw.fsh{--fim-dim:var(--fw-t2);--fim-edge:var(--fw-line-2);--fw-insp-w:320px;--fsh-bar:var(--fw-bar-h,2.25rem);--fsh-cap:44px;--fsh-strip:0px;
   grid-template-columns:minmax(0,1fr) var(--fw-insp-w);grid-template-rows:var(--fw-bar-h,36px) minmax(0,1fr);grid-template-areas:"bar insp" "canvas insp";font-size:var(--fw-fs,.75rem)}
 @container fim (min-width:1800px){.fw.fsh{--fw-insp-w:340px}}
 .fw.fsh .fw-insp{border-right:0;border-left:1px solid var(--fw-line)}
@@ -122064,6 +126961,15 @@ var FSH_CSS = `
 .fsh-pbtn .fw-ic{width:1rem;height:1rem}
 .fsh-pbtn[data-testid=fsh-play]{color:var(--ui-text-primary)}
 .fsh-tc{flex:0 0 auto;font-size:var(--fw-fs,.75rem);font-variant-numeric:tabular-nums;color:var(--ui-text-primary);padding:0 6px;white-space:nowrap}
+/* w39-p2-video: the transport in Cut's language (.tlt): timecode = Cut's .tlt-tc (14 px 600 tabular, --fw-t1), the
+   total a quieter length (12 px 400 --fw-t2); ghost FwButtons 28 px (house control height) with 16 px glyphs, Play
+   the largest target (32 px, 20 px glyph); toggles wear the house pressed look of .fw-btn (no own box). */
+.fsh-bar .fsh-tc{font-size:var(--fw-fs-title,.875rem);font-weight:600;line-height:1;font-variant-numeric:tabular-nums;color:var(--fw-t1)}
+.fsh-tc-len{font-weight:400;font-size:var(--fw-fs,.75rem);color:var(--fw-t2)}
+.fsh-tgrp{display:flex;align-items:center;gap:2px;flex:0 0 auto}
+.fsh-bar .fsh-tbtn{flex:0 0 auto;width:var(--fw-ctl-h,1.75rem);height:var(--fw-ctl-h,1.75rem);padding:0}
+.fsh-bar .fsh-tbtn[data-testid=fsh-play],.fsh-bar .fsh-tbtn[data-testid=fsh-idle-play]{width:2rem;height:2rem}
+.fsh-bar .fsh-tbtn[data-testid=fsh-play] .fw-ic,.fsh-bar .fsh-tbtn[data-testid=fsh-idle-play] .fw-ic{width:20px;height:20px}
 .fsh-scrub{flex:1 1 auto;min-width:40px;accent-color:var(--fw-accent-ring,#7ea4ff);height:var(--fw-ctl-h,1.75rem);margin:0 4px}
 .fsh-pnote{margin:4px 0 0;font-size:var(--fw-fs,.75rem);color:var(--ui-text-secondary)}
 .fsh-caption{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -122609,9 +127515,9 @@ function FshSoundSection({ wb, target }) {
       index,
       measured: measuredOf(`reference_audios/${index}`),
       dupVoice: item.role === "voice_of" && sound2.audios.slice(0, index).some((one) => one.role === "voice_of" && one.subject === item.subject),
-      onRole: (value) => wb.setCatalogSound((current2) => ({ ...current2, audios: current2.audios.map((one, at) => at !== index ? one : value === "music_bed" ? { ...one, role: "music_bed" } : { ...one, role: "voice_of", subject: Number(value.split(":")[1]) || 1 }) })),
-      onSpan: (change) => wb.setCatalogSound((current2) => ({ ...current2, audios: current2.audios.map((one, at) => at === index ? { ...one, ...change } : one) })),
-      onRemove: () => wb.setCatalogSound((current2) => ({ ...current2, audios: current2.audios.filter((_, at) => at !== index) }))
+      onRole: (value) => wb.setCatalogSound((current2) => ({ ...current2, audios: current2.audios.map((one, at2) => at2 !== index ? one : value === "music_bed" ? { ...one, role: "music_bed" } : { ...one, role: "voice_of", subject: Number(value.split(":")[1]) || 1 }) })),
+      onSpan: (change) => wb.setCatalogSound((current2) => ({ ...current2, audios: current2.audios.map((one, at2) => at2 === index ? { ...one, ...change } : one) })),
+      onRemove: () => wb.setCatalogSound((current2) => ({ ...current2, audios: current2.audios.filter((_, at2) => at2 !== index) }))
     }, item.source + "|" + index)) }, "list") : null,
     jsxs150("div", { className: "fss-path", children: [
       jsx171("input", {
@@ -122762,9 +127668,9 @@ async function frameToKeyframe({ wb, video, job, label: label2, fps, ownerScope,
   if (!video || !job || !job.savedPath) return { text: "No frame to take.", tone: "warn" };
   video.pause();
   const frame = Math.max(0, Math.round(Number(video.currentTime || 0) * fps));
-  const at = maxFrame > 0 ? Math.min(frame, maxFrame) : frame;
+  const at2 = maxFrame > 0 ? Math.min(frame, maxFrame) : frame;
   const rows = Array.isArray(wb.keyframes) ? wb.keyframes : [];
-  const same3 = rows.find((row2) => Number(row2.frame) === at);
+  const same3 = rows.find((row2) => Number(row2.frame) === at2);
   if (!same3 && rows.filter((row2) => row2 && String(row2.source || "").trim()).length >= max) return { text: `Keyframe track full (${max})`, tone: "warn" };
   try {
     const blob2 = await playerFrame(video) || await backendFrame(job, frame, fps, [...wb.approvedRoots || []]);
@@ -122774,10 +127680,10 @@ async function frameToKeyframe({ wb, video, job, label: label2, fps, ownerScope,
     if (!staged.path) throw new Error(staged.error || "The picture could not be prepared for Video");
     wb.setKeyframes((current2) => {
       const list = Array.isArray(current2) ? current2 : [];
-      const hit2 = list.find((row2) => Number(row2.frame) === at);
-      return hit2 ? list.map((row2) => row2 === hit2 ? { ...row2, source: staged.path } : row2) : [...list.filter((row2) => row2 && String(row2.source || "").trim()), { ...newKeyframe(at), source: staged.path }];
+      const hit2 = list.find((row2) => Number(row2.frame) === at2);
+      return hit2 ? list.map((row2) => row2 === hit2 ? { ...row2, source: staged.path } : row2) : [...list.filter((row2) => row2 && String(row2.source || "").trim()), { ...newKeyframe(at2), source: staged.path }];
     });
-    return { text: `${label2}, frame ${frame} is the keyframe at frame ${at}${at !== frame ? ` (the shot ends at frame ${maxFrame})` : ""}.`, tone: "ok", frame, at };
+    return { text: `${label2}, frame ${frame} is the keyframe at frame ${at2}${at2 !== frame ? ` (the shot ends at frame ${maxFrame})` : ""}.`, tone: "ok", frame, at: at2 };
   } catch (error) {
     return { text: `The frame could not become a keyframe: ${String(error && error.message || error)}`, tone: "warn" };
   }
@@ -122819,7 +127725,7 @@ var TAKE_ID = /^studio:[0-9a-f-]{8,64}$/;
 function ledgerTakeJob(row2, catalog, projectId) {
   const target = (catalog || []).find((item) => item && item.id === row2.targetId);
   if (!target || !target.provider_id) return null;
-  const at = Number(row2.createdAt) || Date.now();
+  const at2 = Number(row2.createdAt) || Date.now();
   const entry2 = { providerId: target.provider_id, targetId: row2.targetId, targetLabel: target.label || "", rowContract: 4, expectedProjectId: projectId, args: { prompt: row2.label || "" } };
   return {
     id: row2.jobId,
@@ -122827,7 +127733,7 @@ function ledgerTakeJob(row2, catalog, projectId) {
     mode: "",
     name: row2.resultName || row2.label || "Take",
     prompt: row2.label || "",
-    startedAt: at,
+    startedAt: at2,
     providerId: entry2.providerId,
     targetId: entry2.targetId,
     rowContract: 4,
@@ -123044,7 +127950,7 @@ function FilmSuiteShootView({ wb, suite }) {
     }
   }, [wb.approvedRoots, kfAdding]);
   const contWhy = isCat ? continueRefusal(continueFacts(wb, takes, modelFps, fshArgs), modelFps) : "";
-  const why = wb.targetUnavailable ? wb.catalogLoading ? "Loading models…" : "This model is not available" : wb.outputBlock ? wb.outputBlock : isCat && (wb.catalogBlock || contWhy) ? wb.catalogBlock || contWhy : kfAdding ? "Adding the keyframe folders…" : !isCat && !typed.trim() ? "No prompt" : wb.directedBlocker ? wb.directedBlocker : generationHealthBlocks(wb.generationHealth, wb.selectedProviderId, wb.selectedTargetId) ? wb.healthLabel : wb.preparingSource || wb.preparingContinuation || wb.preparingSelection ? "Preparing the source clip…" : wb.pending.length >= MAX_QUEUED ? `The queue holds ${MAX_QUEUED} clips` : "";
+  const why = wb.targetUnavailable ? wb.catalogLoading ? "Loading models…" : "This model is not available" : wb.outputBlock ? wb.outputBlock : wb.generationHealth && wb.generationHealth.reason_code === "unreachable" && generationHealthBlocks(wb.generationHealth, wb.selectedProviderId, wb.selectedTargetId) ? wb.healthLabel : isCat && (wb.catalogBlock || contWhy) ? wb.catalogBlock || contWhy : kfAdding ? "Adding the keyframe folders…" : !isCat && !typed.trim() ? "No prompt" : wb.directedBlocker ? wb.directedBlocker : generationHealthBlocks(wb.generationHealth, wb.selectedProviderId, wb.selectedTargetId) ? wb.healthLabel : wb.preparingSource || wb.preparingContinuation || wb.preparingSelection ? "Preparing the source clip…" : wb.pending.length >= MAX_QUEUED ? `The queue holds ${MAX_QUEUED} clips` : "";
   const canGenerate = !why && !wb.generateDisabled;
   const whyShown = /^No prompt( or picture)?$/.test(why) ? "" : why;
   const busyNow = wb.activeJobs.length || wb.pending.length || wb.outgoing;
@@ -123322,9 +128228,11 @@ function FilmSuiteShootView({ wb, suite }) {
     state === "running" && canCancelJob(stageJob) ? jsx173(ToolbarButton, { type: "button", className: "fim-btn", "data-testid": "fsh-cancel", disabled: wb.cancellingIds.includes(stageJob.id), onClick: () => void wb.cancelJob(stageJob), children: wb.cancellingIds.includes(stageJob.id) ? "Cancelling…" : "Cancel" }, "cancel") : null
   ].filter(Boolean) : [];
   const takeActions = stageJob ? [
-    stageJob.entry && !matches2 ? jsx173(FwButton, { "data-testid": "fsh-reuse", title: "Put this take’s prompt and settings back into the controls", onClick: () => useSettings2(stageJob), children: "Use these settings" }, "reuse") : null,
     stageJob.entry && matches2 ? jsx173("span", { className: "fsh-match", "data-testid": "fsh-matches", children: "The controls hold these settings" }, "match") : null,
-    state === "done" && stageJob.savedPath && continueOffered ? jsx173(FwButton, { "data-testid": "fsh-continue-take", title: "Continue from this take", onClick: () => continueFrom(stageJob), children: "Continue from this take" }, "cont") : null,
+    stageJob.entry && !matches2 || state === "done" && stageJob.savedPath && continueOffered ? jsx173("div", { className: "fsh-tk-row", role: "group", "aria-label": "Take settings", children: [
+      stageJob.entry && !matches2 ? jsx173(FwButton, { "data-testid": "fsh-reuse", title: "Put this take’s prompt and settings back into the controls", onClick: () => useSettings2(stageJob), children: "Use these settings" }, "reuse") : null,
+      state === "done" && stageJob.savedPath && continueOffered ? jsx173(FwButton, { "data-testid": "fsh-continue-take", title: "Continue from this take", onClick: () => continueFrom(stageJob), children: "Continue from this take" }, "cont") : null
+    ] }, "row-a") : null,
     state === "done" ? jsx173(FshFinish, { wb, job: stageJob }, "finish") : null
   ].filter(Boolean) : [];
   const kfLaneOn = Boolean(wb.keyframesControl || wb.selectedTarget?.capabilities?.keyframes);
@@ -123375,10 +128283,10 @@ function FilmSuiteShootView({ wb, suite }) {
   const tools = [
     { icon: "safe", testid: "fsh-safe", label: "Safe area", title: safeArea ? "Hide the safe area (action 90 %, title 80 %)" : "Show the safe area (action 90 %, title 80 %)", pressed: safeArea, run: () => setSafeArea(!safeArea) },
     {
-      icon: "guides",
+      icon: "kf-track",
       testid: "fsh-tool-editor",
       label: "Keyframe track",
-      title: workMode ? showWork ? takes.length ? "Hide the keyframe track" : "Hide the keyframe track · No take to show instead" : "Edit the keyframe track" : "Keyframe track · this model has none",
+      title: workMode ? showWork ? takes.length ? "Hide the keyframe track" : "Hide the keyframe track · No take to show instead" : "Edit the keyframe track" : "Keyframe track · This model has none",
       // w36-disabled GEM-204: with no take the editor is the only view, so the tool is off (40 %, reason), not a pressed toggle.
       pressed: workMode && !(showWork && !takes.length) ? showWork : void 0,
       disabled: !workMode || showWork && !takes.length,
@@ -123389,9 +128297,9 @@ function FilmSuiteShootView({ wb, suite }) {
         } else setWorkView("editor");
       }
     },
-    { icon: "folder", testid: "fsh-reveal", label: "Show in folder", title: takeDone && bridge() && bridge().revealPath ? "Show in folder" : "Show in folder · no take shown", disabled: !(takeDone && bridge() && bridge().revealPath), run: () => void bridge().revealPath(stageJob.savedPath) },
-    { icon: "zoom", testid: "fsh-open-large", label: "Open large", title: takeDone && suite.onOpenLarge && suite.hasItem && suite.hasItem(stageJob.id) ? "Big view of this clip" : "Open large · no take shown", disabled: !(takeDone && suite.onOpenLarge && suite.hasItem && suite.hasItem(stageJob.id)), run: (event) => suite.onOpenLarge(stageJob.id, null, event && event.currentTarget) },
-    { icon: "image", testid: "fsh-open-media", label: "Open in Media", title: takeDone && suite.onOpenMedia ? "Open in Media" : "Open in Media · no take shown", disabled: !(takeDone && suite.onOpenMedia), run: () => suite.onOpenMedia(stageJob.id) },
+    { icon: "reveal", testid: "fsh-reveal", label: "Show in folder", title: takeDone && canRevealPath() ? "Show in folder" : "Show in folder · No take shown", disabled: !(takeDone && canRevealPath()), run: () => void revealPath(stageJob.savedPath) },
+    { icon: "expand", testid: "fsh-open-large", label: "Open large", title: takeDone && suite.onOpenLarge && suite.hasItem && suite.hasItem(stageJob.id) ? "Big view of this clip" : "Open large · No take shown", disabled: !(takeDone && suite.onOpenLarge && suite.hasItem && suite.hasItem(stageJob.id)), run: (event) => suite.onOpenLarge(stageJob.id, null, event && event.currentTarget) },
+    { icon: "library", testid: "fsh-open-media", label: "Open in Media", title: takeDone && suite.onOpenMedia ? "Open in Media" : "Open in Media · No take shown", disabled: !(takeDone && suite.onOpenMedia), run: () => suite.onOpenMedia(stageJob.id) },
     // Board E12 (lane w4-video): the frame of the shown take at the playhead becomes a keyframe at the
     // same frame of the shot's keyframe track (the agent's chain: media frame -> image import -> stage).
     {
@@ -123399,7 +128307,7 @@ function FilmSuiteShootView({ wb, suite }) {
       testid: "fsh-frame-kf",
       label: "Frame at playhead → Keyframe",
       disabled: !(canPlay && state === "done") || !kfLaneOn || kfBusy,
-      title: !(canPlay && state === "done") ? "Frame at playhead → Keyframe · no take shown" : !kfLaneOn ? "Frame at playhead → Keyframe · this model has no keyframe track" : kfBusy ? "Frame at playhead → Keyframe · working…" : "Frame at playhead → Keyframe (K)",
+      title: !(canPlay && state === "done") ? "Frame at playhead → Keyframe · No take shown" : !kfLaneOn ? "Frame at playhead → Keyframe · This model has no keyframe track" : kfBusy ? "Frame at playhead → Keyframe · Working…" : "Frame at playhead → Keyframe (K)",
       run: () => void grabKeyframe()
     }
   ];
@@ -123519,6 +128427,7 @@ function FilmSuiteShootView({ wb, suite }) {
     jsx173("p", { className: "fw-info-title", children: foreign ? "Video from Media" : stage.label }, "t"),
     stageJob && state === "done" ? jsx173(FshTakeMarks, { scope: ownerScope, id: stageJob.id }, "marks") : null,
     stageJob && chain.active ? jsx173(ChainTakeCamera, { chain, jobId: stageJob.id, done: state === "done" }, "cam-chain") : null,
+    // w39-p2-video: the take's actions sit in whole rows that share one right edge (FSH_TAKE_CSS .fsh-tk-row).
     takeActions.length ? jsx173("div", { className: "fsh-tk-acts", "data-testid": "fsh-take-actions", children: takeActions }, "acts") : null,
     jsx173("dl", { className: "fw-meta", "data-testid": "fsh-take-meta", children: metaRows.flatMap(([k, v]) => [jsx173("dt", { children: k }, k + "-t"), jsx173("dd", { title: v, children: v }, k + "-d")]) }, "m"),
     stagePrompt ? jsx173("p", { className: "fw-prompt-read", "data-testid": "fsh-take-prompt", children: stagePrompt }, "p") : null,
@@ -123683,7 +128592,7 @@ function FilmSuiteShootView({ wb, suite }) {
             children: cutBusy ? "Adding…" : chainTake ? "Use in cut" : "Add to cut"
           }, "cut") : null,
           takeFoot && cutWhy ? jsx173("span", { className: "fim-why fw-why fsh-cut-why", id: "fsh-cut-why", "data-testid": "fsh-cut-why", children: cutWhy }, "cutwhy") : null,
-          chain.active && !takeFoot ? jsx173(ChainShootButton, { chain, short: frameW > 0 && frameW < 600 }, "chain-shoot") : jsxs152(GenerateButton, { ref: generateRef, type: "button", className: takeFoot ? "fw-btn fw-btn-secondary fw-generate is-quiet" : "fw-btn fw-btn-primary fw-btn-lg fw-generate", "data-testid": "fsh-generate", disabled: !canGenerate, disabledReason: why ? `Generate · ${why === "No prompt" ? "Write a prompt first" : why === "No prompt or picture" ? "Add a prompt or picture" : why}` : void 0, title: whyShown || (busyNow ? "Generate: this take waits and starts when the current one is done" : genCount > 1 ? `Generate ${genCount} takes, seeds n to n+${genCount - 1} (Ctrl+Enter)` : "Generate (Ctrl+Enter)"), "aria-describedby": whyShown ? "fsh-generate-why" : void 0, onClick: generate, children: [
+          chain.active && !takeFoot ? jsx173(ChainShootButton, { chain, short: frameW > 0 && frameW < 600 }, "chain-shoot") : jsxs152(GenerateButton, { ref: generateRef, type: "button", className: takeFoot ? "fw-btn fw-btn-secondary fw-generate is-quiet" : "fw-btn fw-btn-primary fw-btn-lg fw-generate", "data-testid": "fsh-generate", disabled: !canGenerate, disabledReason: why ? `Generate · ${why}` : void 0, title: whyShown || (busyNow ? "Generate: this take waits and starts when the current one is done" : genCount > 1 ? `Generate ${genCount} takes, seeds n to n+${genCount - 1} (Ctrl+Enter)` : "Generate (Ctrl+Enter)"), "aria-describedby": whyShown ? "fsh-generate-why" : void 0, onClick: generate, children: [
             jsx173("span", { children: wb.submitting ? "Sending…" : "Generate" }, "l"),
             jsx173("span", { className: "fw-kbd fim-kbd", "aria-hidden": "true", children: SUBMIT_KEYS.join(" ") }, "k")
           ] }, "g"),
@@ -123925,9 +128834,9 @@ var FILM_SUITE_PAGE_CSS = FW_SPIN_CSS + `
 .fsp-media{--fsp-m-fg2:var(--ui-text-secondary);display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;font-size:var(--fw-fs,.75rem)}
 .fsp-media.is-narrow{font-size:var(--fw-fs,.75rem)}
 .fsp-m-top{display:flex;align-items:center;gap:10px;min-width:0;padding:8px 12px;border-bottom:1px solid var(--fw-line);flex:0 0 auto}
-.fsp-m-back{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;min-height:var(--fw-ctl-h-sm,1.5rem);border:0;background:transparent;color:var(--ui-text-primary);padding:2px 4px 2px 0;font:inherit;font-size:var(--fw-fs,.75rem);cursor:pointer;white-space:nowrap}
+.fsp-m-back{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;min-height:var(--fw-ctl-h-sm,1.5rem);border:0;border-radius:var(--fw-r1,3px);background:transparent;color:var(--ui-text-primary);padding:2px 4px 2px 0;font:inherit;font-size:var(--fw-fs,.75rem);cursor:pointer;white-space:nowrap}
 .fsp-m-back:hover{text-decoration:underline;text-underline-offset:3px}
-.fsp-m-back span{font-size:var(--fw-fs-title,.875rem);line-height:1}
+.fsp-m-back .fw-ic{width:var(--fw-fs-title);height:var(--fw-fs-title);flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round} /* w39-p2-wins item 5: the chev-l glyph, was a typed ‹ */
 .fsp-m-h{margin:0;font-size:var(--fw-fs-title,.875rem);font-weight:600;color:var(--ui-text-primary)}
 .fsp-m-scope{min-width:0;flex:0 1 auto;font-size:var(--fw-fs,.75rem);color:var(--fsp-m-fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fsp-m-filters{display:flex;align-items:center;gap:10px;min-width:0;padding:8px 12px;flex:0 0 auto}
@@ -124159,8 +129068,8 @@ function ProjectMenu({ project, anchorRef, onClose, onAll, onSettings }) {
   const onKeyDown = (event) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     const items = [...ref.current.querySelectorAll('[role^="menuitem"]:not([aria-disabled="true"])')];
-    const at = items.indexOf(document.activeElement);
-    const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowDown" ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
+    const at2 = items.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowDown" ? (at2 + 1) % items.length : (at2 - 1 + items.length) % items.length;
     if (items[next]) {
       event.preventDefault();
       items[next].focus();
@@ -124383,8 +129292,7 @@ function ProjectSettingsSheet({ project, anchorRef, onClose }) {
     if (picked) await write2(picked);
   };
   const reveal = (path) => {
-    const b = bridge();
-    if (path && b && b.revealPath) void b.revealPath(path);
+    if (path) void revealPath(path);
   };
   const copy = (path, key) => {
     const clip3 = typeof navigator !== "undefined" && navigator.clipboard;
@@ -124395,8 +129303,8 @@ function ProjectSettingsSheet({ project, anchorRef, onClose }) {
     if (event.key !== "Tab" || !ref.current) return;
     const items = [...ref.current.querySelectorAll("button:not(:disabled)")];
     if (!items.length) return;
-    const at = items.indexOf(document.activeElement);
-    const next = event.shiftKey ? at <= 0 ? items.length - 1 : at - 1 : at === items.length - 1 ? 0 : at + 1;
+    const at2 = items.indexOf(document.activeElement);
+    const next = event.shiftKey ? at2 <= 0 ? items.length - 1 : at2 - 1 : at2 === items.length - 1 ? 0 : at2 + 1;
     event.preventDefault();
     items[next].focus();
   };
@@ -124700,8 +129608,8 @@ function FrameBar({ project, page, onPage, startOpen, onStart, onProject, switch
   const onTabsKey = (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     const tabs = [...event.currentTarget.querySelectorAll('[role="tab"]:not(:disabled)')];
-    const at = tabs.indexOf(document.activeElement);
-    const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : event.key === "ArrowRight" ? Math.min(tabs.length - 1, at + 1) : Math.max(0, at - 1);
+    const at2 = tabs.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : event.key === "ArrowRight" ? Math.min(tabs.length - 1, at2 + 1) : Math.max(0, at2 - 1);
     if (tabs[next]) {
       event.preventDefault();
       tabs[next].focus();
@@ -124723,8 +129631,10 @@ function FrameBar({ project, page, onPage, startOpen, onStart, onProject, switch
       jsxs155("div", { className: "fsb-left", children: [
         jsx176(ProjectSwitcher, { project, compact, disabled: switchBlocked, open: projectPop === "menu", anchorRef: projectRef, onToggle: () => setProjectPop(projectPop === "menu" ? null : "menu") }, "p"),
         media ? jsx176("button", { type: "button", className: cn69("fsb-media fw-b", media.on && "is-on"), "aria-pressed": media.on, "data-testid": "film-suite-media-tab", "aria-label": "Media library", title: media.on ? "Back to the page (Esc)" : "Media library", onClick: media.onToggle, children: jsx176(FrameIcon, { name: "media" }) }, "m") : null,
-        // w2-shell: the Media column, when hidden (or the closed drawer in a narrow window), opens from here.
-        column ? jsx176("button", { type: "button", className: "fsb-media fw-b", "data-testid": "media-col-show", "aria-label": "Show Media", title: column.drawer ? "Show the Media column over the page" : "Show the Media column", onClick: column.onShow, children: jsx176(FrameIcon, { name: "column" }) }, "col") : null
+        // w39-p2-chrome (the artist's marks 1 and 2): ONE Media column toggle, present whether the column is shown or hidden,
+        // always right of Media library (the same x on every page with the column); pressed while shown (the look of
+        // .fsb-media.is-on). Its glyph is a side panel, never the library's tiles.
+        column ? jsx176("button", { type: "button", className: cn69("fsb-media fsb-col fw-b", column.on && "is-on"), "aria-pressed": column.on, "data-testid": "media-col-show", "aria-label": "Media column", title: column.on ? "Hide the Media column" : "Show the Media column", onClick: column.onToggle, children: jsx176(FrameIcon, { name: "column" }) }, "col") : null
       ] }, "l"),
       jsxs155("div", { className: "fsb-mid", role: "tablist", "aria-label": "Pages", onKeyDown: onTabsKey, children: [
         tab2("start", "Start", "start", { onClick: onStart, title: "Start", label: false }),
@@ -124789,7 +129699,9 @@ var FRAME_BAR_CSS = `${PROJECT_MENU_CSS}${JOB_NAME_CSS}
 .fsb .fsb-caret{width:var(--fsb-caret);height:var(--fsb-caret);flex:none;fill:none;stroke:var(--ui-text-secondary);stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 .fsb-project.is-compact{padding:0 5px;gap:3px}
 /* w12-o-frame M-26: Open Media is a ghost button; open = the selection look (Hermes Tabs active), never the accent. */
+/* w39-p2-wins item 9: ONE pressed look in the suite: a pressed bar TOGGLE (the column toggle; the library button is a page switch and keeps the selection look) = fw-ctl-toggle's pressed tokens (.fw-btn[aria-pressed=true]: --fw-press fill, no shadow), never the accent. */
 .fsb-media.is-on{background:var(--fw-sel-bg,var(--background,var(--ui-bg-chrome)));box-shadow:var(--fw-sel-shadow,0 0.0625rem 0.125rem color-mix(in srgb,#000 5%,transparent));border-color:transparent;color:var(--ui-text-primary)}
+.fsb-media.fsb-col.is-on,.fsb-media.fsb-col.is-on:hover{background:var(--fw-press);box-shadow:none;border-color:transparent;color:var(--ui-text-primary)}
 .fsb-tab.is-icon{padding:0 5px}
 /* w12-o-frame M-25: the current page = Hermes Tabs active (bg-background + shadow-xs): no tint, border or underline. */
 .fsb-tab.is-on,.fsb-tab.is-on:hover:not(:disabled){background:var(--fw-sel-bg,var(--background,var(--ui-bg-chrome)));box-shadow:var(--fw-sel-shadow,0 0.0625rem 0.125rem color-mix(in srgb,#000 5%,transparent));border-color:transparent;color:var(--ui-text-primary)}
@@ -125500,8 +130412,8 @@ function FilmSuiteWorkspace({ startOpen, chooser, decision, windowId }) {
         onCancelJob: cancelJob,
         canStop,
         media: startOpen ? null : { on: inMedia, onToggle: () => inMedia ? setScreen("module") : openMedia(null) },
-        // The hidden Media column (or the closed drawer) comes back from the bar, so it never takes page width.
-        column: !startOpen && !inMedia && column.available && !column.visible ? { onShow: () => column.setVisible(true), drawer: !dock } : null
+        // w39-p2-chrome: the bar's ONE Media column toggle (shown or hidden, docked or the drawer), so it never moves.
+        column: !startOpen && !inMedia && column.available ? { on: column.visible, onToggle: () => column.setVisible(!column.visible), drawer: !dock } : null
       }, "bar")
     ]
   }) });
@@ -125535,6 +130447,11 @@ function contribute(list) {
   const off = contributeFn(list);
   return typeof off === "function" ? off : () => {
   };
+}
+var canRevealPath = () => Boolean(os && typeof os.revealPath === "function");
+function revealPath(path) {
+  if (!path || !canRevealPath()) return Promise.resolve(false);
+  return Promise.resolve(os.revealPath(path)).catch(() => false);
 }
 var runtime_default = {
   id: ID,

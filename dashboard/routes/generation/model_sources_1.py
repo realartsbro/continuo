@@ -242,4 +242,7 @@ async def models_missing(request: Request) -> Any:
         return JSONResponse(status_code=503, content={"error": {"code": "model_sources_unavailable", "message": "The model source list is unavailable"}})
     if "error" in out:
         return JSONResponse(status_code=404, content=out)
-    return out
+    # w39-p2-tester item 2: files are read from this machine's folders; whether an engine answers (and where) is the
+    # other half of the truth, so the agent never reads "absent" as the only reason.
+    engine = await asyncio.to_thread(_comfy_endpoint_module.engine_state)
+    return {**out, "engine": engine}

@@ -5,8 +5,8 @@ from __future__ import annotations
 #
 # Reference: DaVinci Resolve and Final Cut Pro offer their sample projects from the start screen and open a COPY, so
 # the shipped original never changes. POST /projects/sample/open copies dashboard/samples/sample_film (made by
-# catalog/make-sample-film.py: an own three-scene Fountain script, six drawn pictures and their 4 s clips, a
-# synthesised pad; CC0) into
+# catalog/make-sample-film.py: an own three-scene Fountain script and synthesised music, CC0; six pictures AI-generated
+# with Krea 2 Turbo and their 4 s clips) into
 # a new folder <parent>/Sample film[ N] (parent: the request's, else <home>/Documents/Continuo), creates the project
 # there with that folder approved, then builds it with the same route functions the page and Hermes use: script import,
 # footage add + one timeline apply (the six clips on V1, one undo step; Cut's viewer streams folder clips, not stills), audio add with place (the pad on the music
@@ -258,7 +258,7 @@ async def _sample_build(target: Path, manifest: dict[str, Any], holder: dict[str
         return _project_error_response(exc) if isinstance(exc, studio_core.ProjectError) else _sample_error(
             "sample_folder_unavailable", "The sample media could not be copied.")
     script = await projects_script_import(ScriptImportRequest(
-        project_ref=ref, expected_revision=0, format="fountain", by=by, name="sample",
+        project_ref=ref, expected_revision=0, format="fountain", by=by, name=manifest["script"],
         text=(_SAMPLE_DIR / manifest["script"]).read_text(encoding="utf-8")))
     if not isinstance(script, dict) or script.get("error"):
         return script
@@ -274,7 +274,7 @@ async def _sample_build(target: Path, manifest: dict[str, Any], holder: dict[str
         ops.append({"op": "append", "clip": {"source": {"kind": "media", "ref": item["ref"]}, "label": shot["label"],
                                              "duration_frames": shot["duration_frames"], "audio": "off"}})
     cut = await projects_timeline_apply(TimelineApplyRequest(
-        project_ref=ref, expected_revision=0, ops=ops, label="Sample film", by=by))
+        project_ref=ref, expected_revision=0, ops=ops, label="Sample film opened", by=by))
     if not isinstance(cut, dict) or cut.get("error"):
         return cut
     music = await projects_timeline_audio_add(TimelineAudioAddRequest(
@@ -293,7 +293,7 @@ async def _sample_build(target: Path, manifest: dict[str, Any], holder: dict[str
 
 # w22-dlv (BCK-214): the sample shows the shared plan, not only a cut. Its script has one shot line per clip
 # (WIDE ON THE PIER, ...); each shot gets its record (sample.json details) with the shot's drawn picture as the
-# storyboard picture (an owned picture of the project, the same import the Image page uses), scene 1 is blocked in
+# storyboard picture (an owned picture of the project, the same import the Image page uses), every scene is blocked in
 # Previz (figures, set, a camera per shot: the same route as the Previz button), and the pad is the song Audio opens
 # (the project's musicTrack). Every step is the route the page and Hermes use; the answer says what was seeded.
 async def _sample_plan(ref: ProjectReference, target: Path, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -310,9 +310,14 @@ async def _sample_plan(ref: ProjectReference, target: Path, manifest: dict[str, 
     plan = await projects_shot_plan_write(ShotPlanWriteRequest(project_ref=ref, expected_revision=0, changes=changes))
     if not plan.get("ok"):
         return _sample_error("sample_unavailable", "The sample shots could not be written.")
-    blocked = await projects_previz_block(PrevizBlockRequest(project_ref=ref, scene=shots[0]["scene"]))
-    if not blocked.get("ok"):
-        return _sample_error("sample_unavailable", "The sample's first scene could not be blocked.")
+    # w39-p2-previz: every scene is blocked (set from the heading's place, figures posed by the action, a camera per
+    # shot), so Previz and its strip are complete when a stranger opens the sample; scenes in script order.
+    cameras = 0
+    for scene in dict.fromkeys(row["scene"] for row in shots):
+        blocked = await projects_previz_block(PrevizBlockRequest(project_ref=ref, scene=scene))
+        if not blocked.get("ok"):
+            return _sample_error("sample_unavailable", "The sample's scenes could not be blocked.")
+        cameras += len(blocked.get("cameras_added") or [])
     # w23-first (BCK-216): blocking records a proposal (the Previz line with Undo); the sample's blocking is its
     # baseline, so that proposal is closed as accepted (kept as history, the state a newer change gives it).
     await asyncio.to_thread(_sample_accept_proposals, ref, str(target))
@@ -325,7 +330,7 @@ async def _sample_plan(ref: ProjectReference, target: Path, manifest: dict[str, 
         await asyncio.to_thread((target / "state" / _SAMPLE_LANDING_FILE).write_text, '{"page": "timeline"}', encoding="utf-8")
     except OSError:
         pass
-    return {"shots": len(changes), "storyboard": sum(1 for p in pictures if p), "previz_cameras": len(blocked.get("cameras") or {})}
+    return {"shots": len(changes), "storyboard": sum(1 for p in pictures if p), "previz_cameras": cameras}
 
 
 async def _sample_pictures(ref: ProjectReference, target: Path, manifest: dict[str, Any]) -> list[str | None]:

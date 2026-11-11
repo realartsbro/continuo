@@ -348,7 +348,13 @@ def identity_args(source_job: str, source_sha256: str, settings: Mapping[str, An
 
 STATE_FILE = ("state", "video-upscale.json")
 STATE_SCHEMA = "studio.video-upscale-settings/1"
-COMFY_ORIGIN = "http://127.0.0.1:8188"
+# w39-p2-tester item 4: the one configured ComfyUI address (generation/comfy_endpoint.py, loaded by path).
+import importlib.util as _endpoint_util
+from pathlib import Path as _EndpointPath
+_endpoint_spec = _endpoint_util.spec_from_file_location("film_suite_comfy_endpoint", _EndpointPath(__file__).resolve().parents[1] / "generation" / "comfy_endpoint.py")
+_endpoint = _endpoint_util.module_from_spec(_endpoint_spec)
+_endpoint_spec.loader.exec_module(_endpoint)
+COMFY_ORIGIN = _endpoint.DEFAULT_ORIGIN  # the default; upload_temp reads the configured address
 UPLOAD_MAX_BYTES = 2 * 1024 ** 3
 
 
@@ -383,7 +389,8 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def upload_temp(data: bytes, name: str, *, origin: str = COMFY_ORIGIN, opener: Any = None) -> str:
+def upload_temp(data: bytes, name: str, *, origin: str | None = None, opener: Any = None) -> str:
+    origin = origin or _endpoint.comfy_origin()
     """Upload the take byte-exact to ComfyUI temp/ under its content name; return the LoadVideo value."""
     if not _UPLOAD.match(name):
         raise VideoUpscaleError("the upload name does not match the take")

@@ -1,7 +1,7 @@
 """Live render preview from ComfyUI's websocket, for the Suite's own prompts.
 
 One websocket connection for the whole plugin
-(``ws://127.0.0.1:8188/ws?clientId=<PREVIEW_CLIENT_ID>``) is opened lazily and
+(the configured ComfyUI address, ``comfy_endpoint.comfy_ws_url``) is opened lazily and
 read only: the hub never sends anything except ComfyUI's documented
 ``feature_flags`` hello.  It keeps, per *watched* prompt id, the latest preview
 frame and the latest ``progress`` value - nothing else, bounded in count, size
@@ -40,7 +40,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 PREVIEW_CLIENT_ID = "filmsuite-image-preview"
-DEFAULT_URL = "ws://127.0.0.1:8188/ws?clientId=" + PREVIEW_CLIENT_ID
+# w39-p2-tester item 4: the one configured ComfyUI address (generation/comfy_endpoint.py, loaded by path).
+import importlib.util as _endpoint_util
+from pathlib import Path as _EndpointPath
+_endpoint_spec = _endpoint_util.spec_from_file_location("film_suite_comfy_endpoint", _EndpointPath(__file__).resolve().parents[1] / "generation" / "comfy_endpoint.py")
+_endpoint = _endpoint_util.module_from_spec(_endpoint_spec)
+_endpoint_spec.loader.exec_module(_endpoint)
+DEFAULT_URL = "ws://127.0.0.1:8188/ws?clientId=" + PREVIEW_CLIENT_ID  # the default address; the hub reads the configured one
 EVENT_PREVIEW_IMAGE = 1
 EVENT_PREVIEW_IMAGE_WITH_METADATA = 4
 FORMAT_MIME = {1: "image/jpeg", 2: "image/png"}
@@ -193,13 +199,13 @@ class PreviewHub:
 
     def __init__(
         self,
-        url: str = DEFAULT_URL,
+        url: str | None = None,
         *,
         connect: Callable[..., Any] | None = None,
         clock: Callable[[], float] = time.monotonic,
         backoff: tuple[float, ...] = BACKOFF_SECONDS,
     ) -> None:
-        self.url = url
+        self.url = url if url is not None else _endpoint.comfy_ws_url(PREVIEW_CLIENT_ID)
         self._connect = connect
         self._clock = clock
         self._backoff = backoff

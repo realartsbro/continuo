@@ -81,7 +81,13 @@ _PATH_LIKE_TEXT = re.compile(r"(?i)(?:^[a-z]:[\\/]?|[\\/]|(?:^|\s)\.{1,2}[\\/])"
 _HOST_PORT_TEXT = re.compile(
     r"(?i)^(?:[a-z][a-z0-9.-]*|(?:\d{1,3}\.){3}\d{1,3}):\d{1,5}(?:[/\?#].*)?$"
 )
-_ALLOWED_PUBLIC_TEXT = frozenset({"127.0.0.1:8188"})
+# w39-p2-tester item 4: the one configured ComfyUI address (generation/comfy_endpoint.py, loaded by path).
+import importlib.util as _endpoint_util
+from pathlib import Path as _EndpointPath
+_endpoint_spec = _endpoint_util.spec_from_file_location("film_suite_comfy_endpoint", _EndpointPath(__file__).resolve().parents[1] / "generation" / "comfy_endpoint.py")
+_endpoint = _endpoint_util.module_from_spec(_endpoint_spec)
+_endpoint_spec.loader.exec_module(_endpoint)
+_ALLOWED_PUBLIC_TEXT = frozenset({"127.0.0.1:8188"})  # plus any engine label (_endpoint.is_engine_label: this machine, any port, or FILM_SUITE_COMFY_URL)
 
 
 class GenerationDomainError(ValueError):
@@ -239,8 +245,8 @@ class ProviderRegistry:
         _require_text(label, "label")
         if endpoint_label is not None:
             _require_text(endpoint_label, "endpoint_label")
-            if endpoint_label != "127.0.0.1:8188":
-                raise ValueError("endpoint_label must be 127.0.0.1:8188")
+            if not _endpoint.is_engine_label(endpoint_label):
+                raise ValueError("endpoint_label must be this machine's or the configured ComfyUI address")
         _assert_public({"id": provider_id, "label": label, "endpoint_label": endpoint_label})
         if provider_id in self._providers:
             raise DuplicateRegistrationError(f"duplicate provider registration: {provider_id}")
@@ -332,8 +338,8 @@ class ProviderRegistry:
             _validate_public_text(provider_payload["id"], "provider.id")
             _validate_public_text(provider_payload["label"], "provider.label")
             if "endpoint_label" in provider_payload:
-                if provider_payload["endpoint_label"] != "127.0.0.1:8188":
-                    raise ValueError("provider.endpoint_label must be 127.0.0.1:8188")
+                if not _endpoint.is_engine_label(provider_payload["endpoint_label"]):
+                    raise ValueError("provider.endpoint_label must be this machine's or the configured ComfyUI address")
                 _validate_public_text(provider_payload["endpoint_label"], "provider.endpoint_label")
             _assert_public(provider_payload)
             providers.append(provider_payload)
@@ -391,7 +397,7 @@ def _validate_public_text(value: Any, field_name: str) -> None:
         hash(stripped)
     except TypeError as exc:
         raise ValueError(f"{field_name} must be hashable text") from exc
-    if stripped in _ALLOWED_PUBLIC_TEXT or (field_name == "catalog.schema" and stripped == CATALOG_SCHEMA):
+    if stripped in _ALLOWED_PUBLIC_TEXT or _endpoint.is_engine_label(stripped) or (field_name == "catalog.schema" and stripped == CATALOG_SCHEMA):
         return
     if (
         _FORBIDDEN_PUBLIC_TEXT.search(value)
@@ -842,7 +848,7 @@ def _register_local(registry: ProviderRegistry) -> None:
         },
         H3_MP.control("minimax-h3-t2v"),
     )
-    registry.register_provider("comfyui-local", "ComfyUI Local", endpoint_label="127.0.0.1:8188", location="local", icon="pc", display_label="Local", selector_kind="recipe")
+    registry.register_provider("comfyui-local", "ComfyUI Local", endpoint_label=_endpoint.current_label(), location="local", icon="pc", display_label="Local", selector_kind="recipe")
     registry.register_target(
         "comfyui-local",
         _target(

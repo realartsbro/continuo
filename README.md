@@ -86,9 +86,9 @@ you changed the scene or the cut since then, the edit is refused and nothing is 
 | Platform | Windows 11 | Tested on Windows 11. The code is written to run on Linux too, not yet tested; reports are welcome, see [Feedback](#feedback). macOS is on the roadmap. |
 | Hermes&nbsp;Agent | `>=0.22.7` | With the Hermes desktop app. |
 | ffmpeg | Required | For Cut, Deliver and Audio; tested with 7.1.1. Looked up in `FFMPEG_PATH`, then `PATH`, then `C:\ffmpeg\bin`. |
-| ComfyUI | For generation | Generates pictures, video, music and voice on your machine at `http://127.0.0.1:8188`. |
+| ComfyUI | For generation | Generates pictures, video, music and voice on your machine: Continuo asks `http://127.0.0.1:8188`, then `http://127.0.0.1:8000` (the ComfyUI desktop app). Another address: set `FILM_SUITE_COMFY_URL` (for example `http://127.0.0.1:8189`). |
 | GPU | For generation | Script, Cut, Audio analysis and Deliver run on the CPU, so a GPU is optional for them. Generation uses your GPU. |
-| Disk | 15&nbsp;MB&nbsp;+&nbsp;511&nbsp;MB | Measured: the plugin 15 MB; its Python packages 511 MB, set up by Hermes. Models need extra space, see [Models](#models-optional). |
+| Disk | 22&nbsp;MB&nbsp;+&nbsp;511&nbsp;MB | Measured: the plugin 22 MB; its Python packages 511 MB, set up by Hermes. Models need extra space, see [Models](#models-optional). |
 
 ### Steps
 
@@ -113,8 +113,8 @@ No GitHub login is needed. The plugin's id in Hermes is `film-suite`; Continuo i
 
 ### Your first film, no models needed
 
-The Sample film needs only ffmpeg. It holds three scenes, six drawn pictures, a music pad and a cut, all CC0 (free to
-reuse).
+The Sample film needs only ffmpeg. It holds three scenes, six pictures, music with a steady beat and a cut. The six
+pictures are AI-generated with Krea 2 Turbo; the script and the music are CC0 (free to reuse).
 
 1. On **Start**, choose **Sample film**. Continuo copies it into a new project folder,
    `Documents\Continuo\Sample film`, and opens it on **Cut**.
@@ -244,7 +244,7 @@ Not installed by this plugin.
 | Part | Needed for, where, measured size |
 |:---|:---|
 | ffmpeg | required for Cut, Deliver and Audio; found through FFMPEG_PATH, then PATH, then C:\ffmpeg\bin. Tested with ffmpeg 7.1.1 (gyan.dev full build, 0.44 GB measured). |
-| ComfyUI | optional; only for generating images, video, music and voice. Root: FILM_SUITE_COMFY_ROOT (default Documents\ComfyUI-Easy-Install\ComfyUI), server http://127.0.0.1:8188 (fixed: Continuo talks to a ComfyUI on this machine at this address only). The ComfyUI folder without models, custom nodes and outputs measured 0.27 GB; its Python environment, custom nodes and models need extra space (model sizes above). |
+| ComfyUI | optional; only for generating images, video, music and voice. Root: FILM_SUITE_COMFY_ROOT (default Documents\ComfyUI-Easy-Install\ComfyUI), server: FILM_SUITE_COMFY_URL when set (origin only: no credentials, path or query), otherwise this machine only, http://127.0.0.1:8188 then http://127.0.0.1:8000 (the first that answers). The ComfyUI folder without models, custom nodes and outputs measured 0.27 GB; its Python environment, custom nodes and models need extra space (model sizes above). |
 | optional engines | beat tracking (measured 4.3 GB with its torch environment), scene analysis (0.67 GB), song map (0.16 GB), speech detection (2.3 MB), inpainting. Not installed by this plugin; features that need one show it as unavailable. |
 
 ### Optional analysis engines
@@ -379,7 +379,7 @@ The internals by name:
 | "Preparing the Audio engine, or restart Hermes" or "Preparing picture import, or restart Hermes" | A Python package is unavailable in this process. Hermes may still be setting it up, or may need a restart after setup. Hermes can check with `continuo_dependencies`. |
 | The Sample film tile says "ffmpeg not found" | Install ffmpeg and put it on `PATH`, set `FFMPEG_PATH`, or place it in `C:\ffmpeg\bin`; then choose **Sample film** again. No half-made sample is left behind. |
 | A recent project is unavailable or its project file is missing | Restore `project.json` and the project folder from the original or a backup, or open another project folder. If the missing project was a Sample film, choose the Sample film tile to create a new copy. |
-| "ComfyUI is not running." | Start ComfyUI on this machine at `http://127.0.0.1:8188`. Continuo uses no other address. |
+| "ComfyUI is not running." | Start ComfyUI on this machine. Continuo asks `http://127.0.0.1:8188`, then `http://127.0.0.1:8000`; for another address set `FILM_SUITE_COMFY_URL`. |
 | A model is missing | Ask Hermes "Which model files am I missing for &lt;workflow&gt;?" (`continuo_models_missing`), which names each file with its folder, size, sha256 and pinned download link; put the file into that ComfyUI folder. |
 | An analysis shows as unavailable | It may need an optional engine. See [Optional analysis engines](#optional-analysis-engines). |
 

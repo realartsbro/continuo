@@ -2884,7 +2884,9 @@ class PathBoundary:
 
     def _check_exists(self, path: Path, *, directory: bool, operation: str) -> None:
         if not path.exists():
-            _raise("project_not_found" if operation == "open" else "project_unavailable", "path does not exist")
+            # w39-p2-tester2 item 4: a new project in a folder that does not exist says so (was "Project is unavailable");
+            # Continuo never creates the folder itself: folders are the artist's to choose.
+            _raise("project_not_found" if operation == "open" else "project_folder_missing", "path does not exist")
         if path.is_symlink():
             _raise("invalid_project", "symlink object is not allowed")
         if directory and not path.is_dir():
