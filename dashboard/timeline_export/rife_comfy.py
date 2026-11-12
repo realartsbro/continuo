@@ -44,7 +44,7 @@ TIMEOUT_S = 3600
 
 
 def _get(path: str, timeout: float = 30) -> Any:
-    with urllib.request.urlopen(_endpoint.comfy_origin() + path, timeout=timeout) as response:  # noqa: S310 (local ComfyUI only)
+    with _endpoint._opener.open(_endpoint.comfy_origin() + path, timeout=timeout) as response:  # noqa: S310 (local ComfyUI only; no redirect)
         body = response.read()
     return json.loads(body) if body[:1] in (b"{", b"[") else body
 
@@ -52,7 +52,7 @@ def _get(path: str, timeout: float = 30) -> Any:
 def _post(path: str, payload: dict[str, Any], timeout: float = 30) -> Any:
     request = urllib.request.Request(_endpoint.comfy_origin() + path, data=json.dumps(payload).encode("utf-8"),
                                      headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+    with _endpoint._opener.open(request, timeout=timeout) as response:  # noqa: S310 - no redirect
         body = response.read()
     return json.loads(body) if body[:1] in (b"{", b"[") else None
 

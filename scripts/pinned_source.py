@@ -14,6 +14,7 @@ everywhere.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 import subprocess
@@ -22,6 +23,23 @@ from pathlib import Path
 _SHA = re.compile(r"[0-9a-f]{40}")
 _GIT_CONFIG = ["-c", "core.autocrlf=false", "-c", "core.eol=lf", "-c", "core.symlinks=false",
                "-c", "advice.detachedHead=false", "-c", "init.defaultBranch=main"]
+
+
+def _load_engine_process():
+    """The plugin's own child-process helper (``dashboard/engine_process``), loaded by path: ``backend/film-suite/``
+    in the repository, the tree root in the catalog copy.  Every child of this script gets its minimal environment."""
+    here = Path(__file__).resolve().parent
+    for dashboard in (here.parent / "backend" / "film-suite" / "dashboard", here.parent / "dashboard"):
+        path = dashboard / "engine_process" / "__init__.py"
+        if path.is_file():
+            spec = importlib.util.spec_from_file_location("film_suite_engine_process", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    raise SystemExit("dashboard/engine_process is missing next to this script; reinstall the plugin")
+
+
+engine_process = _load_engine_process()
 
 
 class PinError(SystemExit):
@@ -38,9 +56,20 @@ def remote_for(name: str, url: str, source_root: Path | None) -> str:
     return str(local)
 
 
+_GIT_PROTOCOLS = ("https", "file")  # the pinned upstreams (https) and --source-root clones (a local folder)
+
+
+def _git_protocols() -> str:
+    """``GIT_ALLOW_PROTOCOL`` for the child: https and local folders only; a narrower limit the caller set is kept."""
+    requested = [p for p in (os.environ.get("GIT_ALLOW_PROTOCOL") or "").split(":") if p]
+    if requested and set(requested) <= set(_GIT_PROTOCOLS):
+        return ":".join(requested)
+    return ":".join(_GIT_PROTOCOLS)
+
+
 def _git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *_GIT_CONFIG, *args], cwd=cwd, capture_output=True, text=True,
-                          env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+                          env=engine_process.child_env({"GIT_TERMINAL_PROMPT": "0", "GIT_ALLOW_PROTOCOL": _git_protocols()}))
 
 
 def fetch_pinned(name: str, url: str, commit: str, dest: Path, paths: list[str]) -> str:

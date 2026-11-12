@@ -55,7 +55,7 @@ def sha256(path: Path) -> str:
 
 def run(cmd: list[str]) -> None:
     print("+", " ".join(cmd), flush=True)
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, env=engine_env.engine_process.child_env())
 
 
 def fetch_checkpoint(target: Path, source: str | None) -> None:
@@ -107,7 +107,7 @@ def main(argv: list[str]) -> int:
     ckpt = edir / "final0.ckpt"
     fetch_checkpoint(ckpt, args.checkpoint_from)
     probe = subprocess.run([py, "-c", "import beat_this, torch, sys; print(torch.__version__, torch.cuda.is_available(), sys.version.split()[0])"],
-                           capture_output=True, text=True, check=True).stdout.split()
+                           capture_output=True, text=True, check=True, env=engine_env.engine_process.engine_env()).stdout.split()
     record = {
         "schema": "studio.beat-engine/1",
         "python": py,
@@ -125,7 +125,8 @@ def main(argv: list[str]) -> int:
     if args.smoke:
         req = {"schema": "studio.beat-runner-request/1", "audio_path": args.smoke, "device": "cpu",
                "checkpoint": str(ckpt), "checkpoint_sha256": CHECKPOINT_SHA256}
-        out = subprocess.run([py, str(edir / "runner.py")], input=json.dumps(req), capture_output=True, text=True)
+        out = subprocess.run([py, str(edir / "runner.py")], input=json.dumps(req), capture_output=True, text=True,
+                             env=engine_env.engine_process.engine_env())
         if out.returncode != 0:
             print(out.stderr[-2000:], file=sys.stderr)
             return out.returncode

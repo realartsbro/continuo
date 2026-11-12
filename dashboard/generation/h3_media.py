@@ -346,7 +346,7 @@ def upload_temp(data: bytes, filename: str, *, opener: Callable[..., Any] | None
         _endpoint.comfy_origin() + "/upload/image", data=body, method="POST",
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    open_ = opener or urllib.request.urlopen
+    open_ = opener or _endpoint._opener.open  # comfy_endpoint._opener: never follows a redirect
     with open_(request, timeout=120) as response:
         raw = response.read(1 << 20)
     answer = json.loads(raw.decode("utf-8"))

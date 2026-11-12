@@ -236,7 +236,7 @@ class ComfyHTTP:
     def _json(self, method: str, path: str, body: bytes | None = None, headers: Mapping[str, str] | None = None) -> Any:
         import urllib.request
         request = urllib.request.Request(self.origin + path, data=body, method=method, headers=dict(headers or {}))
-        with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310 - fixed loopback origin
+        with _endpoint._opener.open(request, timeout=60) as response:  # noqa: S310 - configured origin, no redirect
             return json.loads(response.read(8 << 20).decode("utf-8"))
 
     def queue(self) -> dict[str, Any]:
@@ -268,7 +268,7 @@ class ComfyHTTP:
         import urllib.parse
         import urllib.request
         query = urllib.parse.urlencode({"filename": ref["filename"], "subfolder": ref.get("subfolder", ""), "type": ref.get("type", "temp")})
-        with urllib.request.urlopen(f"{self.origin}/view?{query}", timeout=120) as response:  # noqa: S310
+        with _endpoint._opener.open(f"{self.origin}/view?{query}", timeout=120) as response:  # noqa: S310 - no redirect
             return response.read(512 << 20)
 
 

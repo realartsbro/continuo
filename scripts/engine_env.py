@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import hashlib
+import importlib.util
 import os
 import re
 import shutil
@@ -51,12 +52,29 @@ _REQ = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s\\;]+)")
 _HASH = re.compile(r"--hash=sha256:[0-9a-f]{64}")
 
 
+def _load_engine_process():
+    """The plugin's own child-process helper (``dashboard/engine_process``), loaded by path: ``backend/film-suite/``
+    in the repository, the tree root in the catalog copy.  Every child of this script gets its minimal environment."""
+    here = Path(__file__).resolve().parent
+    for dashboard in (here.parent / "backend" / "film-suite" / "dashboard", here.parent / "dashboard"):
+        path = dashboard / "engine_process" / "__init__.py"
+        if path.is_file():
+            spec = importlib.util.spec_from_file_location("film_suite_engine_process", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    raise SystemExit("dashboard/engine_process is missing next to this script; reinstall the plugin")
+
+
+engine_process = _load_engine_process()
+
+
 class EnvError(SystemExit):
     """Refusal with a message the user can act on (SystemExit so an installer stops)."""
 
 
 def _run(argv: list) -> subprocess.CompletedProcess:
-    return subprocess.run([str(a) for a in argv], capture_output=True, text=True)
+    return subprocess.run([str(a) for a in argv], capture_output=True, text=True, env=engine_process.child_env())
 
 
 def _checked(runner: Runner, argv: list, what: str) -> str:

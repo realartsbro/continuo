@@ -763,7 +763,7 @@ async def media_thumb(request: MediaThumbRequest) -> Response:
         limit = MEDIA_THUMB_MAX_SIZE
     try:
         kind = MEDIA_EXTENSIONS.get(path.suffix.lower())
-        size = max(MEDIA_THUMB_MIN_SIZE, min(limit, int(request.size)))
+        size = max(MEDIA_THUMB_MIN_SIZE, min(2048 if request.reframe and kind == "image" and request.ref is None else limit, int(request.size)))  # w39-p4-fix: Crop / Pad bake
         if kind in ("video", "audio"):
             stat = path.stat()
             body = await asyncio.to_thread(_media_poster if kind == "video" else _media_wave_from_peaks, path, stat, size)
@@ -782,16 +782,16 @@ async def media_thumb(request: MediaThumbRequest) -> Response:
             return unavailable(404, "thumbnail unavailable")
         cache_key = (str(path), stat.st_mtime_ns, stat.st_size, size)
         with _MEDIA_THUMB_LOCK:
-            body = MEDIA_THUMB_CACHE.get(cache_key)
-            if body is not None:
+            if (body := MEDIA_THUMB_CACHE.get(cache_key)) is not None:
                 MEDIA_THUMB_CACHE.move_to_end(cache_key)
         if body is None:
             body = await asyncio.to_thread(_render_thumbnail, path, size)
-            with _MEDIA_THUMB_LOCK:
-                MEDIA_THUMB_CACHE[cache_key] = body
-                MEDIA_THUMB_CACHE.move_to_end(cache_key)
-                while len(MEDIA_THUMB_CACHE) > MEDIA_THUMB_CACHE_MAX_ENTRIES:
-                    MEDIA_THUMB_CACHE.popitem(last=False)
+            if size <= MEDIA_THUMB_MAX_SIZE:  # a reframe still is not held in memory
+                with _MEDIA_THUMB_LOCK:
+                    MEDIA_THUMB_CACHE[cache_key] = body
+                    MEDIA_THUMB_CACHE.move_to_end(cache_key)
+                    while len(MEDIA_THUMB_CACHE) > MEDIA_THUMB_CACHE_MAX_ENTRIES:
+                        MEDIA_THUMB_CACHE.popitem(last=False)
         if request.format == "data_url":
             encoded = base64.b64encode(body).decode("ascii")
             return JSONResponse({"data_url": f"data:image/jpeg;base64,{encoded}"}, headers={"Cache-Control": "private, max-age=300"})

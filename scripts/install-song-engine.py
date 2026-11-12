@@ -117,7 +117,7 @@ def sha256(path: Path) -> str:
 
 def run(cmd: list[str]) -> None:
     print("+", " ".join(cmd), flush=True)
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, env=engine_env.engine_process.child_env())
 
 
 def install_packages(uv: str, py: str, cpu_only: bool, runner=None) -> dict:
@@ -197,7 +197,7 @@ def main(argv: list[str]) -> int:
                                       "print(torch.__version__, torch.cuda.is_available(), sys.version.split()[0], "
                                       "m.version('transformers'), m.version('librosa'), m.version('onnxruntime'), m.version('muq'))"],
                            capture_output=True, text=True, check=True,
-                           env={**os.environ, "HF_HUB_OFFLINE": "1"}).stdout.split()
+                           env=engine_env.engine_process.engine_env({"HF_HUB_OFFLINE": "1"})).stdout.split()
     record = {
         "schema": SCHEMA,
         "python": py,
@@ -221,7 +221,8 @@ def main(argv: list[str]) -> int:
         req = {"schema": "studio.song-runner-request/1", "audio_path": args.smoke, "device": "cpu",
                "tasks": ["drums", "loudness", "events"],
                "weights": {"adtof": weights["adtof"]["files"]["adtof_frame_rnn_pytorch_weights.pth"]["path"]}}
-        out = subprocess.run([py, str(edir / "runner.py")], input=json.dumps(req), capture_output=True, text=True)
+        out = subprocess.run([py, str(edir / "runner.py")], input=json.dumps(req), capture_output=True, text=True,
+                             env=engine_env.engine_process.engine_env())
         if out.returncode != 0:
             print(out.stderr[-2000:], file=sys.stderr)
             return out.returncode

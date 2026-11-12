@@ -294,7 +294,7 @@ sentence, and the page you have open shows the result live.
 
 ## What this plugin does on your machine
 
-Everything Continuo does outside its own window is listed here: the install scan, the network, the programs it starts, background work, where it keeps data and the Hermes internals it uses.
+Everything Continuo does outside its own window is listed here: the install scan, the network, the programs it starts, background work and where it keeps data.
 
 ### Install scan
 
@@ -358,17 +358,7 @@ Only while something you started runs:
 
 ### Private Hermes access
 
-Hermes has no public plugin interface for the caller identity Continuo needs, so it uses Hermes internals:
-
-- **Hermes' own session check**, so Continuo can verify that a request to its image and film routes really comes from
-  your signed-in Hermes desktop app. Continuo never reads, holds or forwards the session token: it asks Hermes'
-  verifier for a yes or no. Hermes' tool calls reach the same routes in-process, and they work only after your desktop
-  app has been verified once. The desktop app does this automatically when Continuo opens.
-
-The internals by name:
-
-- `hermes_cli.web_server._has_valid_session_token (caller_scope.py)`
-- `hermes_cli.dashboard_auth.base.Session (caller_scope.py)`
+Continuo uses no private Hermes interface. Hermes signs in every request to Continuo's routes before Continuo sees it.
 
 ## Troubleshooting
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -28,6 +29,23 @@ REPO = Path(__file__).resolve().parents[1]
 RUNNER_SOURCE = (REPO / "backend" / "film-suite" / "dashboard" if (REPO / "backend" / "film-suite" / "dashboard").is_dir() else REPO / "dashboard") / "inpaint_core" / "lama_runner.py"
 ENGINE_SCHEMA = "studio.inpaint-engine/1"
 MODEL_SHA256 = "344c77bbcb158f17dd143070d1e789f38a66c04202311ae3a258ef66667a9ea9"
+
+
+def _load_engine_process():
+    """The plugin's own child-process helper (``dashboard/engine_process``), loaded by path: ``backend/film-suite/``
+    in the repository, the tree root in the catalog copy.  Every child of this script gets its minimal environment."""
+    here = Path(__file__).resolve().parent
+    for dashboard in (here.parent / "backend" / "film-suite" / "dashboard", here.parent / "dashboard"):
+        path = dashboard / "engine_process" / "__init__.py"
+        if path.is_file():
+            spec = importlib.util.spec_from_file_location("film_suite_engine_process", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    raise SystemExit("dashboard/engine_process is missing next to this script; reinstall the plugin")
+
+
+engine_process = _load_engine_process()
 
 
 def default_engine_dir() -> Path:
@@ -52,7 +70,7 @@ def venv_python(venv: Path) -> Path:
 
 def probe(py: Path) -> dict:
     code = "import json, torch, numpy, PIL; print(json.dumps({'torch': torch.__version__, 'numpy': numpy.__version__, 'pillow': PIL.__version__, 'cuda': torch.cuda.is_available()}))"
-    out = subprocess.run([str(py), "-c", code], capture_output=True, text=True, timeout=300)
+    out = subprocess.run([str(py), "-c", code], capture_output=True, text=True, timeout=300, env=engine_process.engine_env())
     if out.returncode != 0:
         raise SystemExit(f"the venv python cannot import torch/numpy/PIL: {out.stderr.strip()[-300:]}")
     return json.loads(out.stdout.strip().splitlines()[-1])

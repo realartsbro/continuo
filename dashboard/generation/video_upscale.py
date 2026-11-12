@@ -404,7 +404,7 @@ def upload_temp(data: bytes, name: str, *, origin: str | None = None, opener: An
     body = head.encode() + data + f"{crlf}--{boundary}--{crlf}".encode()
     request = urllib.request.Request(origin + "/upload/image", data=body, method="POST",
                                      headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-    with (opener or urllib.request.urlopen)(request, timeout=300) as response:
+    with (opener or _endpoint._opener.open)(request, timeout=300) as response:
         answer = json.loads(response.read(1 << 20).decode("utf-8"))
     if not isinstance(answer, dict) or answer.get("name") != filename or (answer.get("subfolder") or "") != "" or answer.get("type") != "temp":
         raise VideoUpscaleError("ComfyUI did not keep the take under its name", "unreachable")

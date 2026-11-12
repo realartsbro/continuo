@@ -119,3 +119,6 @@ class MediaThumbRequest(BaseModel):
     size: int = 256
     # "data_url": JSON {data_url} for the desktop's JSON-only ctx.rest bridge.
     format: Literal["jpeg", "data_url"] = "jpeg"
+    # Lane w39-p4-fix: a picture by path for a keyframe's Crop / Pad bake on the Video page: up to 2048 px (the renderer's
+    # MAX_REFRAME_EDGE) instead of the 384 px thumbnail cap; never scaled up, never held in the memory cache.
+    reframe: bool = False

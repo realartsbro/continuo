@@ -1276,13 +1276,13 @@ function compareXYSlope(a, b) {
   return result;
 }
 function eliminateHole(hole, outerNode) {
-  const bridge2 = findHoleBridge(hole, outerNode);
-  if (!bridge2) {
+  const bridge = findHoleBridge(hole, outerNode);
+  if (!bridge) {
     return outerNode;
   }
-  const bridgeReverse = splitPolygon(bridge2, hole);
+  const bridgeReverse = splitPolygon(bridge, hole);
   filterPoints(bridgeReverse, bridgeReverse.next);
-  return filterPoints(bridge2, bridge2.next);
+  return filterPoints(bridge, bridge.next);
 }
 function findHoleBridge(hole, outerNode) {
   let p = outerNode;
@@ -40440,14 +40440,14 @@ var init_dist2 = __esm({
         return false;
       if (view.state.readOnly)
         return true;
-      let files = event.dataTransfer.files;
-      if (files && files.length) {
-        let text2 = Array(files.length), read2 = 0;
+      let files2 = event.dataTransfer.files;
+      if (files2 && files2.length) {
+        let text2 = Array(files2.length), read2 = 0;
         let finishFile = () => {
-          if (++read2 == files.length)
+          if (++read2 == files2.length)
             dropText(view, event, text2.filter((s) => s != null).join(view.state.lineBreak), false);
         };
-        for (let i2 = 0; i2 < files.length; i2++) {
+        for (let i2 = 0; i2 < files2.length; i2++) {
           let reader = new FileReader();
           reader.onerror = finishFile;
           reader.onload = () => {
@@ -40455,7 +40455,7 @@ var init_dist2 = __esm({
               text2[i2] = reader.result;
             finishFile();
           };
-          reader.readAsText(files[i2]);
+          reader.readAsText(files2[i2]);
         }
         return true;
       } else {
@@ -51299,9 +51299,77 @@ var SUBMIT_KEYS = IS_MAC ? ["⌘", "↵"] : ["Ctrl", "↵"];
 var modChord = (rest2) => (IS_MAC ? "⌘" : "Ctrl+") + rest2;
 var modKeys = (rest2) => (IS_MAC ? "⌘ " : "Ctrl ") + rest2;
 
+// desktop/film-suite/src/shared/api/sdk-doors.js
+var os = null;
+var restDoor = null;
+var leafRest = (path, opts) => restDoor ? restDoor(path, opts) : Promise.reject(new Error("Not available in this version"));
+var files = null;
+var grants = [];
+var slashes = (value) => String(value || "").replace(/^file:\/\//i, "").replace(/\\/g, "/").replace(/\/+$/, "");
+var caseless = (value) => /^[a-z]:\//i.test(value) ? value.toLowerCase() : value;
+function refreshGrants() {
+  if (!files || typeof files.folders !== "function") return Promise.resolve(grants);
+  return Promise.resolve(files.folders()).then((list) => {
+    grants = Array.isArray(list) ? list : [];
+    return grants;
+  }).catch(() => grants);
+}
+function pickOpenFile({ filters, defaultPath, title } = {}) {
+  if (!os || typeof os.pickOpenPath !== "function") return Promise.resolve("");
+  const options = { ...filters ? { filters } : {}, ...defaultPath ? { defaultPath } : {}, ...title ? { title } : {} };
+  return Promise.resolve(os.pickOpenPath(options)).then((path) => typeof path === "string" ? path : "").catch(() => "");
+}
+var canRequestFolder = () => Boolean(files && typeof files.requestFolder === "function");
+async function requestFolder() {
+  if (!canRequestFolder()) return "";
+  try {
+    const result = await files.requestFolder();
+    if (!result || !result.ok || !result.folder || typeof result.folder.path !== "string") return "";
+    grants = [...grants.filter((row2) => row2.id !== result.folder.id), result.folder];
+    void refreshGrants();
+    return result.folder.path;
+  } catch {
+    return "";
+  }
+}
+function grantFor(path) {
+  const target = slashes(path);
+  const key = caseless(target);
+  let best = null;
+  for (const row2 of grants) {
+    const root = slashes(row2 && row2.path);
+    if (!root) continue;
+    const rootKey = caseless(root);
+    if (!key.startsWith(rootKey + "/")) continue;
+    if (!best || root.length > best.root.length) best = { id: row2.id, root, rel: target.slice(root.length + 1) };
+  }
+  return best;
+}
+var SOUND_MIME = { wav: "audio/wav", mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", flac: "audio/flac", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg" };
+async function readGrantedDataUrl(path) {
+  if (!files || typeof files.readDataUrl !== "function" || !path) return "";
+  const grant = grantFor(path) || (await refreshGrants(), grantFor(path));
+  if (!grant) return "";
+  try {
+    const result = await files.readDataUrl(grant.id, grant.rel);
+    const url = result && result.ok && typeof result.url === "string" ? result.url : "";
+    const ext = String(grant.rel).split(".").pop().toLowerCase();
+    return url.startsWith("data:application/octet-stream;") && SOUND_MIME[ext] ? url.replace("data:application/octet-stream;", `data:${SOUND_MIME[ext]};`) : url;
+  } catch {
+    return "";
+  }
+}
+var canRevealPath = () => Boolean(os && typeof os.revealPath === "function");
+function setSdkDoors(ctx) {
+  os = ctx && ctx.os || null;
+  restDoor = ctx && typeof ctx.rest === "function" ? (...a) => ctx.rest(...a) : null;
+  files = ctx && ctx.files || null;
+  void refreshGrants();
+}
+
 // desktop/film-suite/src/shared/util/paths/is-url.js
 var isUrl = (value) => /^https?:\/\//i.test(String(value || "").trim());
-var bridge = () => typeof window !== "undefined" && window.hermesDesktop || null;
+var desktopShell = () => canRevealPath();
 function cryptoRandomId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -51341,21 +51409,25 @@ function formatBytes(size) {
 function pathsFromDrop(event) {
   const transfer = event.dataTransfer;
   if (!transfer) return [];
-  const desktop = bridge();
-  const paths = [...transfer.files || []].map((file) => (desktop && desktop.getPathForFile ? desktop.getPathForFile(file) : "") || "").filter(Boolean);
-  if (paths.length) return paths;
   const text2 = (transfer.getData("text/uri-list") || transfer.getData("text/plain") || "").trim();
   return isUrl(text2) ? [text2] : [];
 }
+var droppedFiles = (event) => [...event && event.dataTransfer && event.dataTransfer.files || []];
+var DROP_NO_PATH = "Files dropped from outside Hermes cannot be placed here";
 var dragTypes = (event) => [...event.dataTransfer && event.dataTransfer.types || []];
-async function pickPaths({ filters, multiple = false, defaultPath, title, directories = false } = {}) {
-  const desktop = bridge();
-  if (!desktop || !desktop.selectPaths) return [];
-  try {
-    return await desktop.selectPaths({ filters, multiple, defaultPath, title, directories }) || [];
-  } catch {
-    return [];
+async function pickPaths({ filters, multiple = false, max = 20, defaultPath, title, directories = false } = {}) {
+  if (directories) {
+    const folder = await requestFolder();
+    return folder ? [folder] : [];
   }
+  const chosen = [];
+  const limit = multiple ? Math.max(1, Number(max) || 1) : 1;
+  while (chosen.length < limit) {
+    const picked = await pickOpenFile({ filters, defaultPath, title: multiple && chosen.length ? `${title || "Choose files"} · ${chosen.length} chosen` : title });
+    if (!picked || chosen.includes(picked)) break;
+    chosen.push(picked);
+  }
+  return chosen;
 }
 
 // desktop/film-suite/src/shared/api/jobs/normalize-status.js
@@ -51637,10 +51709,10 @@ function soundBlocker(target, sound2, media, check) {
   const ids = soundControlIds(target);
   if (!ids.length) return "";
   const clean3 = soundDraft(sound2);
-  const files = [...clean3.audios.map((item) => item.source), ...clean3.track ? [clean3.track.source] : []];
-  const remote = files.find(isUrl);
+  const files2 = [...clean3.audios.map((item) => item.source), ...clean3.track ? [clean3.track.source] : []];
+  const remote = files2.find(isUrl);
   if (remote) return `${basename(remote) || "A sound"} is a link; sound must be a file on this PC`;
-  const wrong = files.map(soundWrongKind).find(Boolean);
+  const wrong = files2.map(soundWrongKind).find(Boolean);
   if (wrong) return wrong;
   const pictures = ["reference_images", "reference_videos"].some((id) => Array.isArray(media && media[id]) && media[id].some(Boolean));
   if (clean3.audios.length && !pictures) return "Voice and music need a reference picture or clip";
@@ -51679,14 +51751,28 @@ var dimsCache = /* @__PURE__ */ new Map();
 async function imageSrc(source) {
   if (isUrl(source)) return source;
   if (thumbCache.has(source)) return thumbCache.get(source) || "";
-  const desktop = bridge();
-  if (!desktop || !desktop.readFileDataUrl) return "";
+  const url = await readGrantedDataUrl(source);
+  if (url) cacheThumb(source, url);
+  return url;
+}
+var PREVIEW_SIZE = 384;
+var previewContext = (roots) => ({ approved_roots: [...roots] });
+var setPreviewContext = (fn) => {
+  if (typeof fn === "function") previewContext = fn;
+};
+async function previewSrc(source) {
+  const full = await imageSrc(source);
+  if (full || isUrl(source) || !source) return full;
+  const key = "preview:" + PREVIEW_SIZE + ":" + source;
+  if (thumbCache.has(key)) return thumbCache.get(key) || "";
+  const folders = $shootMediaFolders.get();
+  const roots = folders && Array.isArray(folders.roots) ? folders.roots : [];
   try {
-    const url = await desktop.readFileDataUrl(source);
-    cacheThumb(source, url || "");
-    return url || "";
-  } catch (error) {
-    cacheThumb(source, "");
+    const payload = await leafRest("/media/thumb", { method: "POST", body: { path: source, ...previewContext(roots), size: PREVIEW_SIZE, format: "data_url" }, timeoutMs: 3e4 });
+    const url = payload && typeof payload.data_url === "string" && /^data:image\//.test(payload.data_url) ? payload.data_url : "";
+    if (url) cacheThumb(key, url);
+    return url;
+  } catch {
     return "";
   }
 }
@@ -51704,15 +51790,31 @@ function decodeImage(src) {
 }
 async function measureImage(source) {
   if (dimsCache.has(source)) return dimsCache.get(source);
-  const img = await decodeImage(await imageSrc(source));
+  const img = await decodeImage(await previewSrc(source));
   const dims = img && img.naturalWidth ? { w: img.naturalWidth, h: img.naturalHeight } : null;
-  dimsCache.set(source, dims);
+  if (dims) dimsCache.set(source, dims);
   return dims;
+}
+async function reframeSrc(source) {
+  const full = await imageSrc(source);
+  if (full || isUrl(source) || !source) return full;
+  const key = "reframe:" + MAX_REFRAME_EDGE + ":" + source;
+  if (thumbCache.has(key)) return thumbCache.get(key) || "";
+  const folders = $shootMediaFolders.get();
+  const roots = folders && Array.isArray(folders.roots) ? folders.roots : [];
+  try {
+    const payload = await leafRest("/media/thumb", { method: "POST", body: { path: source, ...previewContext(roots), size: MAX_REFRAME_EDGE, reframe: true, format: "data_url" }, timeoutMs: 6e4 });
+    const url = payload && typeof payload.data_url === "string" && /^data:image\//.test(payload.data_url) ? payload.data_url : "";
+    if (url) cacheThumb(key, url);
+    return url;
+  } catch {
+    return "";
+  }
 }
 async function reframeImage(source, fit4, ratio) {
   const target = RATIO_VALUES[ratio];
   if (!target || fit4 === "original") return "";
-  const img = await decodeImage(await imageSrc(source));
+  const img = await decodeImage(await reframeSrc(source));
   if (!img || !img.naturalWidth) return "";
   const w = img.naturalWidth;
   const h = img.naturalHeight;
@@ -51757,25 +51859,13 @@ function useThumbnail(source) {
       setSrc(hit2 || "");
       return;
     }
-    const desktop = bridge();
-    if (!desktop || !desktop.readFileDataUrl) {
-      setState("none");
-      setSrc("");
-      return;
-    }
     let live2 = true;
     setState("loading");
     setSrc("");
-    desktop.readFileDataUrl(value).then((url) => {
+    void previewSrc(value).then((url) => {
       if (!live2) return;
-      cacheThumb(value, url || "");
       setState(url ? "ready" : "none");
       setSrc(url || "");
-    }).catch(() => {
-      if (!live2) return;
-      cacheThumb(value, "");
-      setState("none");
-      setSrc("");
     });
     return () => {
       live2 = false;
@@ -51797,6 +51887,19 @@ function MediaThumb({ source, fallbackIcon, onPick, label: label2, className, im
     children: inner
   });
   return label2 ? jsx(Tip, { label: label2, children: box }) : box;
+}
+
+// desktop/film-suite/src/shared/util/paths/drop-stage.js
+var PICTURE_TYPE = /^image\/(png|jpeg|webp|tiff)$/;
+var PICTURE_NAME = /\.(png|jpe?g|webp|tiff?)$/i;
+var droppedPictures = (event) => droppedFiles(event).filter((file) => PICTURE_TYPE.test(file.type || "") || PICTURE_NAME.test(file.name || ""));
+var stager = null;
+var setDropStager = (fn) => {
+  stager = typeof fn === "function" ? fn : null;
+};
+function stageDropped(files2, ownerScope) {
+  if (!stager) return Promise.resolve({ paths: [], labels: {}, error: "Not available in this version" });
+  return stager(files2, ownerScope);
 }
 
 // desktop/film-suite/src/shared/util/media/by-frame.js
@@ -52217,8 +52320,16 @@ function CatalogMediaSlot({ wb, target, control }) {
         return;
       }
       const dropped = pathsFromDrop(event);
-      if (dropped.length) place2(max > 1 ? dropped : dropped.slice(0, 1));
-      else wb.note("No readable file in the drop", "warn");
+      if (dropped.length) {
+        place2(max > 1 ? dropped : dropped.slice(0, 1));
+        return;
+      }
+      const pictures = control.kind === "image" ? droppedPictures(event) : [];
+      if (pictures.length) {
+        void stageDropped(max > 1 ? pictures : pictures.slice(0, 1)).then(({ paths, error }) => paths.length ? place2(paths) : wb.note(error || "No readable file in the drop", "warn"));
+        return;
+      }
+      wb.note(droppedFiles(event).length ? DROP_NO_PATH : "No readable file in the drop", "warn");
     },
     children: [
       jsxs("div", { className: "fsh-slot-h", children: [
@@ -52564,6 +52675,7 @@ function requestContextQuery(roots, project = contextProject()) {
   const { approved_roots: list, project_ref: ref } = requestContext(roots, project);
   return list.map((root) => `&approved_roots=${encodeURIComponent(root)}`).join("") + (ref ? `&project_id=${encodeURIComponent(ref.project_id)}` : "");
 }
+setPreviewContext((roots) => requestContext(roots));
 
 // desktop/film-suite/src/media/control/media-control.js
 var CONTROL_SCHEMA = "studio.control-layers/1";
@@ -53784,9 +53896,9 @@ function varyDiffFields(cells) {
     const first = JSON.stringify(specs[0].spec[key]);
     if (specs.some((cell) => JSON.stringify(cell.spec[key]) !== first)) fields.push(VARY_FIELD_LABEL[key] || key);
   }
-  const files = /* @__PURE__ */ new Set();
-  for (const cell of specs) for (const lora of cell.spec.loras || []) files.add(lora.file);
-  for (const file of files) {
+  const files2 = /* @__PURE__ */ new Set();
+  for (const cell of specs) for (const lora of cell.spec.loras || []) files2.add(lora.file);
+  for (const file of files2) {
     const strengthOf = (cell) => ((cell.spec.loras || []).find((item) => item.file === file) || { strength: "absent" }).strength;
     const first = strengthOf(specs[0]);
     if (specs.some((cell) => strengthOf(cell) !== first)) fields.push(`${loraShortName(file)} strength`);
@@ -61678,6 +61790,11 @@ function useShootValidation(ctx) {
     return ctx.keyframes.filter((row2) => row2.source.trim() && row2.fit && row2.fit !== "original" && !isUrl(row2.source.trim())).map((row2) => ({ key: `${row2.source.trim()}|${row2.fit}|${ctx.aspectRatio}`, source: row2.source.trim(), fit: row2.fit }));
   }, [ctx.aspectRatio, ctx.keyframes, ctx.mode]);
   const reframePending = reframeJobs.some((job) => !(job.key in reframed));
+  const unframed = useMemo(() => {
+    const failed2 = new Set(reframeJobs.filter((job) => job.key in reframed && !reframed[job.key]).map((job) => job.key));
+    if (!failed2.size) return [];
+    return [...ctx.keyframes].sort((a, b) => Number(a.frame) - Number(b.frame)).map((row2, index) => ({ row: row2, index, key: `${row2.source.trim()}|${row2.fit}|${ctx.aspectRatio}` })).filter((item) => item.row.source.trim() && failed2.has(item.key));
+  }, [ctx.aspectRatio, ctx.keyframes, reframeJobs, reframed]);
   useEffect(() => {
     const missing = reframeJobs.filter((job) => !(job.key in reframed));
     if (!missing.length) return void 0;
@@ -61715,14 +61832,14 @@ function useShootValidation(ctx) {
       }
     }
     const mismatch = ctx.mode === "image_to_video" ? wrongKind(ctx.image, "image") : ctx.mode === "video_continuation" ? wrongKind(ctx.video, "video") : ctx.mode === "keyframes_to_video" ? ctx.keyframes.map((row2) => wrongKind(row2.source, "image")).find(Boolean) || "" : "";
-    const reason = !ctx.prompt.trim() ? "No prompt" : !durationOk ? `Duration must be blank for auto, or ${DURATION_MIN}–${durationCap} seconds.` : ctx.mode === "image_to_video" && !ctx.image.trim() ? "No opening frame." : ctx.mode === "video_continuation" && !ctx.video.trim() ? "No source clip." : ctx.mode === "keyframes_to_video" && !ctx.keyframes.some((row2) => row2.source.trim()) ? "No keyframe image." : autoLength ? `No duration — auto can return a ${DURATION_MIN}s clip and refuse anything pinned after it.` : reframePending ? "Reframing stills…" : mismatch ? mismatch : stranded ? (
+    const reason = !ctx.prompt.trim() ? "No prompt" : !durationOk ? `Duration must be blank for auto, or ${DURATION_MIN}–${durationCap} seconds.` : ctx.mode === "image_to_video" && !ctx.image.trim() ? "No opening frame." : ctx.mode === "video_continuation" && !ctx.video.trim() ? "No source clip." : ctx.mode === "keyframes_to_video" && !ctx.keyframes.some((row2) => row2.source.trim()) ? "No keyframe image." : autoLength ? `No duration — auto can return a ${DURATION_MIN}s clip and refuse anything pinned after it.` : reframePending ? "Reframing stills…" : unframed.length ? `Keyframe ${unframed[0].index + 1} cannot be ${unframed[0].row.fit === "fill" ? "cropped" : "padded"} to ${ctx.aspectRatio}: its picture could not be read.` : mismatch ? mismatch : stranded ? (
       // The track clamps an overshooting anchor to the right
       // edge, so this is often the only way to tell that a
       // keyframe sits one frame past the end.
       `${stranded} keyframe${stranded > 1 ? "s" : ""} past the ${Math.round(maxFrame / FPS)}s end — park or compress them.`
     ) : invalid2.size ? `Keyframe positions must be unique whole frames from 0 to ${maxFrame}.` : "";
     return { blocker: reason, invalidKeyframeIds: invalid2 };
-  }, [autoLength, durationCap, durationOk, ctx.image, ctx.keyframes, maxFrame, ctx.mode, ctx.prompt, reframePending, ctx.video]);
+  }, [autoLength, durationCap, durationOk, ctx.aspectRatio, ctx.image, ctx.keyframes, maxFrame, ctx.mode, ctx.prompt, reframePending, unframed, ctx.video]);
   useEffect(() => {
     const wanted = durationSeconds === null ? durationRaw || ctx.mode === "keyframes_to_video" ? DURATION_MIN : null : Math.min(durationCap, Math.max(DURATION_MIN, durationSeconds));
     if (wanted !== null && String(wanted) !== durationRaw) ctx.setDurationText(String(wanted));
@@ -61908,6 +62025,88 @@ function SizeFields({ width, height, min, max, step: step2, lock = false, disabl
     after
   ] });
 }
+
+// desktop/film-suite/src/image/import/import-api.js
+var IMPORT_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "tif", "tiff"];
+var IMPORT_MAX_BYTES = 64 * 1024 * 1024;
+var IMPORT_TYPES = /^image\/(png|jpeg|webp|tiff)$/;
+var importId = () => "imgop_" + Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+var isImportPath = (path) => IMPORT_EXTENSIONS.includes(String(path || "").split(/[?#]/)[0].split(".").pop().toLowerCase());
+function fileBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+    reader.onerror = () => reject(new Error("The picture could not be read"));
+    reader.readAsDataURL(file);
+  });
+}
+async function shootFolders(wake) {
+  if (shootMediaApi && $shootMediaFolders.get()) return shootMediaApi;
+  if (wake) wake();
+  for (let i2 = 0; i2 < 60 && !(shootMediaApi && $shootMediaFolders.get()); i2 += 1) await new Promise((r) => setTimeout(r, 100));
+  return shootMediaApi && $shootMediaFolders.get() ? shootMediaApi : null;
+}
+async function rootsFor(path, wake) {
+  const known = ($shootMediaFolders.get() || {}).roots || [];
+  if (known.some((root) => mediaPathInRoot(path, root))) return known;
+  const folder = parentPath(path);
+  const why = mediaRootLargeReason(folder, []);
+  if (!folder || /whole drive|home folder/.test(why)) throw new Error(`${basename(path)} is not inside a folder of its own (${why || "no folder"}))`);
+  const api = await shootFolders(wake);
+  if (!api) throw new Error("Media folders not ready");
+  const roots = ($shootMediaFolders.get() || {}).roots || [];
+  if (roots.some((root) => mediaPathInRoot(path, root))) return roots;
+  const added = await api.add([folder]);
+  if (!(added > 0)) throw new Error("Media folders could not be updated");
+  return [.../* @__PURE__ */ new Set([...roots, folder])];
+}
+async function postImport(ownerScope, body2) {
+  const payload = await rest("/projects/image-producer/import", {
+    method: "POST",
+    timeoutMs: 12e4,
+    body: { schema: "studio.image-import-request/1", owner_scope: ownerScope, operation_id: importId(), ...body2 }
+  });
+  if (!payload || payload.error || payload.state !== "published") throw new Error(payload && payload.error && payload.error.message || "The picture could not be imported");
+  return { jobId: payload.image_producer_job_id, width: payload.width, height: payload.height, label: payload.imported && payload.imported.file_name || "Picture" };
+}
+async function importPicture(ownerScope, { path = "", file = null, wake = null } = {}) {
+  if (path) {
+    if (!isImportPath(path)) throw new Error(`${basename(path)} is not a picture Continuo can open (PNG, JPEG, WebP or TIFF)`);
+    const roots = await rootsFor(path, wake);
+    return postImport(ownerScope, { path, ...requestContext(roots) });
+  }
+  if (!file) throw new Error("That drop carried no readable file");
+  if (file.type && !IMPORT_TYPES.test(file.type) && !isImportPath(file.name)) throw new Error(`${file.name || "The file"} is not a picture Continuo can open (PNG, JPEG, WebP or TIFF)`);
+  if (file.size > IMPORT_MAX_BYTES) throw new Error("The file is too large to import (over 64 MB)");
+  return postImport(ownerScope, { data_b64: await fileBase64(file), file_name: file.name || "Pasted picture" });
+}
+function openImported(picture) {
+  $mediaFeedStale.set($mediaFeedStale.get() + 1);
+  $imageOpenRequest.set({ item: { id: picture.jobId, kind: "image", module: "image", label: picture.label, prompt: picture.label, spec: null, kept: false, keptName: null, width: picture.width, height: picture.height }, n: Date.now() });
+}
+
+// desktop/film-suite/src/shoot/keyframes/dropped-picture.js
+async function stageDroppedPictures(files2, ownerScope = imageOwnerScope(contextProject())) {
+  const paths = [], labels = {};
+  let error = "";
+  for (const file of files2) {
+    try {
+      const picture = await importPicture(ownerScope, { file });
+      const staged = await stageOpeningFrame(ownerScope, picture.jobId);
+      if (staged.error) {
+        error = staged.error;
+        continue;
+      }
+      paths.push(staged.path);
+      labels[staged.path] = file.name || picture.label || "";
+    } catch (failure3) {
+      error = String(failure3 && failure3.message || failure3);
+    }
+  }
+  if (paths.length) $mediaFeedStale.set($mediaFeedStale.get() + 1);
+  return { paths, labels, error };
+}
+setDropStager(stageDroppedPictures);
 
 // desktop/film-suite/src/shoot/media-slots/fsh-bin-drag.js
 import { cn as cn7 } from "@hermes/plugin-sdk";
@@ -62210,7 +62409,15 @@ function FshMediaSlots({ wb, target, providerLabel, ownerScope, takeOf = null })
       }
       const dropped = pathsFromDrop(event);
       if (!dropped.length) {
-        wb.note("No readable file in the drop", "warn");
+        const pictures = droppedPictures(event);
+        const slot = pictures.length ? choose("image") : null;
+        if (!pictures.length || !slot) {
+          wb.note(droppedFiles(event).length ? DROP_NO_PATH : "No readable file in the drop", "warn");
+          return;
+        }
+        if (busy2) return;
+        setBusy(slot.id);
+        void stageDroppedPictures(catalogMediaMax(slot) > 1 ? pictures : pictures.slice(0, 1), ownerScope || void 0).then(({ paths: paths2, labels, error }) => paths2.length ? wb.placeCatalogMedia(slot.id, paths2, { label: labels[paths2[0]] || "" }) : wb.note(error || "No readable file in the drop", "warn")).finally(() => setBusy(""));
         return;
       }
       const control = choose(fsmKindOf(dropped[0]));
@@ -63019,8 +63226,21 @@ function AssetField({ id, label: label2, hint, kind, value, onChange, onNotice, 
     event.preventDefault();
     setOver(false);
     const [picked] = pathsFromDrop(event);
-    if (picked) accept(picked);
-    else onNotice("No readable file in the drop");
+    if (picked) {
+      accept(picked);
+      return;
+    }
+    const pictures = isVideo ? [] : droppedPictures(event).slice(0, 1);
+    if (pictures.length) {
+      void stageDroppedPictures(pictures).then(({ paths, labels, error }) => {
+        if (paths[0]) {
+          rememberAssetName(paths[0], labels[paths[0]]);
+          accept(paths[0]);
+        } else onNotice(error || "No readable file in the drop");
+      });
+      return;
+    }
+    onNotice(droppedFiles(event).length ? DROP_NO_PATH : "No readable file in the drop");
   };
   return jsxs23("div", {
     className: "flex flex-col gap-1.5",
@@ -63371,7 +63591,7 @@ function useShootActions(ctx) {
       ctx.setRecipeDropOver(false);
       const [picked] = pathsFromDrop(event);
       if (!picked) {
-        ctx.note("No readable file in the drop", "warn");
+        ctx.note(droppedFiles(event).length ? DROP_NO_PATH : "No readable file in the drop", "warn");
         return;
       }
       await restoreFromPath(picked);
@@ -63646,7 +63866,7 @@ function H3xControl({ control, value, values, setValue }) {
 }
 function H3xLoras({ control, value, setValue }) {
   const rows = Array.isArray(value) ? value : [];
-  const files = Array.isArray(control.files) ? control.files : [];
+  const files2 = Array.isArray(control.files) ? control.files : [];
   const max = Number(control.max) || 8;
   const put = (next) => setValue("loras", next.length ? next : void 0);
   return jsxs24("div", { className: "fsh-h3x-loras", "data-testid": "fsh-h3x-loras", children: [
@@ -63656,12 +63876,12 @@ function H3xLoras({ control, value, setValue }) {
         "aria-label": `LoRA ${index + 1}`,
         value: row2.file || "",
         onChange: (event) => put(rows.map((r, i2) => i2 === index ? { ...r, file: event.target.value } : r)),
-        children: [jsx29("option", { value: "", children: "No LoRA" }, "_"), ...files.map((file) => jsx29("option", { value: file, children: String(file).split("/").pop().replace(/\.safetensors$/, "") }, file))]
+        children: [jsx29("option", { value: "", children: "No LoRA" }, "_"), ...files2.map((file) => jsx29("option", { value: file, children: String(file).split("/").pop().replace(/\.safetensors$/, "") }, file))]
       }, "f"),
       jsx29("input", { type: "number", className: "fw-input fsh-h3x-str", "aria-label": `LoRA ${index + 1} strength`, min: 0, max: 2, step: 0.05, value: String(row2.strength ?? 1), onChange: (event) => put(rows.map((r, i2) => i2 === index ? { ...r, strength: Number(event.target.value) } : r)) }, "s"),
       jsx29(FwButton, { icon: "x", "aria-label": `Remove LoRA ${index + 1}`, title: "Remove this LoRA", onClick: () => put(rows.filter((_, i2) => i2 !== index)) }, "x")
     ] }, index)),
-    jsx29(FwButton, { icon: "plus", "data-testid": "fsh-h3x-lora-add", disabled: rows.length >= max || !files.length || control.state === "unavailable", title: !files.length ? "The engine lists no LoRA for this model" : control.state === "unavailable" ? control.reason || "Unavailable" : `Add a LoRA (at most ${max})`, onClick: () => put([...rows, { file: files[0], strength: 1 }]), children: "LoRA" }, "add")
+    jsx29(FwButton, { icon: "plus", "data-testid": "fsh-h3x-lora-add", disabled: rows.length >= max || !files2.length || control.state === "unavailable", title: !files2.length ? "The engine lists no LoRA for this model" : control.state === "unavailable" ? control.reason || "Unavailable" : `Add a LoRA (at most ${max})`, onClick: () => put([...rows, { file: files2[0], strength: 1 }]), children: "LoRA" }, "add")
   ] });
 }
 function FshShotSections({ wb, target, steps = [], chainActive = false }) {
@@ -66341,7 +66561,7 @@ function useShootMediaSlots(ctx) {
   );
   const addMediaRoots = useCallback(async (chosen = null) => {
     const confirmed = Array.isArray(chosen);
-    const picked = confirmed ? chosen : await pickPaths({ directories: true, multiple: true, title: "Add approved media folder(s)" });
+    const picked = confirmed ? chosen : await pickPaths({ directories: true, title: "Add approved media folder" });
     const clean3 = [...new Set(picked.filter((root) => typeof root === "string" && root.trim()))];
     const added = clean3.filter((root) => !ctx.approvedRoots.includes(root));
     if (!added.length) return 0;
@@ -66424,13 +66644,15 @@ function useShootMediaSlots(ctx) {
     const control = catalogMediaControls(ctx.selectedTarget).find((item) => item.id === id);
     if (!control) return;
     const multiple = catalogMediaMax(control) > 1;
+    const current2 = Array.isArray(ctx.catalogMedia[id]) ? ctx.catalogMedia[id].length : 0;
     const picked = await pickPaths({
       filters: [{ name: control.kind === "image" ? "Pictures" : control.kind === "video" ? "Clips" : "Sound", extensions: CATALOG_MEDIA_KINDS[control.kind] }],
       multiple,
+      max: Math.max(1, catalogMediaMax(control) - current2),
       title: `Choose ${multiple ? "files" : "a file"} for ${catalogControlLabel(ctx.selectedTarget, control)}`
     });
     if (picked && picked.length) await placeCatalogMedia(id, picked);
-  }, [placeCatalogMedia, ctx.selectedTarget]);
+  }, [placeCatalogMedia, ctx.catalogMedia, ctx.selectedTarget]);
   const removeMediaRoot = useCallback(
     async (root) => {
       if (!ctx.approvedRoots.includes(root)) return;
@@ -71544,14 +71766,14 @@ function addOps(model, sources, place2) {
   return { ops, label: label2.slice(0, 120), note };
 }
 async function registerFootage(sources, register) {
-  const files = sources.filter((s) => s.kind === "media" && !s.ref && s.path);
-  if (!files.length) return { sources, refused: [] };
-  const answer = await register(files.map((s) => s.path));
+  const files2 = sources.filter((s) => s.kind === "media" && !s.ref && s.path);
+  if (!files2.length) return { sources, refused: [] };
+  const answer = await register(files2.map((s) => s.path));
   const failed2 = new Map((answer && Array.isArray(answer.errors) ? answer.errors : []).map((e) => [e.index, e]));
   const got = answer && Array.isArray(answer.footage) ? answer.footage : [];
   let next = 0;
   const done = /* @__PURE__ */ new Map(), refused = [];
-  files.forEach((s, i2) => {
+  files2.forEach((s, i2) => {
     if (failed2.has(i2)) {
       refused.push({ source: s, message: failed2.get(i2).message || "The file could not be added." });
       return;
@@ -72081,7 +72303,7 @@ function mediaSettingRows(item) {
 }
 var mediaWhen = (item, now) => item.finishedAt ? relativeTime3(item.finishedAt, now) : item.keptAt ? `kept ${relativeTime3(item.keptAt, now)}` : "time not recorded";
 var localClipPath = (item) => {
-  if (!item || item.kind !== "video" || !bridge()) return "";
+  if (!item || item.kind !== "video" || !desktopShell()) return "";
   const jobs = Array.isArray(shootWorkState.jobs) ? shootWorkState.jobs : [];
   const hit2 = jobs.find((job) => job && job.id === item.id && job.savedPath);
   return hit2 ? hit2.savedPath : "";
@@ -72410,19 +72632,19 @@ function imageModelView(modelCatalog, state, profile) {
   const family = imageModelFamily(modelCatalog, IMAGE_PRESENTATION.family.id);
   const variant2 = imageModelVariant(modelCatalog, IMAGE_PRESENTATION.family.id, presetId);
   if (!family || !variant2) {
-    const files2 = Object.entries(local.files).map(([role, names]) => ({ role, items: names.map((name2) => ({ name: name2, present: null })) }));
+    const files3 = Object.entries(local.files).map(([role, names]) => ({ role, items: names.map((name2) => ({ name: name2, present: null })) }));
     const why = state === "loading" ? "Checking…" : state === "old" ? "Model files not checked: this Hermes version has no model list" : "Model files not checked: the model list could not be read";
     return {
       familyLabel: IMAGE_MODEL_FALLBACK.family.label,
       presetLabel: local.label,
       fileName: imageModelFileName(local.files.diffusion_model[0]),
-      files: files2,
+      files: files3,
       health: { state: state === "loading" ? "loading" : "unknown", text: state === "loading" ? "Checking…" : "Not checked", title: why },
       fromLayer: false
     };
   }
-  const files = Object.entries(variant2.files).map(([role, items]) => ({ role, items: Array.isArray(items) ? items.map((item) => ({ name: String(item.name), present: Boolean(item.present) })) : [] }));
-  const main = (files.find((entry2) => entry2.role === "diffusion_model") || files[0] || { items: [] }).items;
+  const files2 = Object.entries(variant2.files).map(([role, items]) => ({ role, items: Array.isArray(items) ? items.map((item) => ({ name: String(item.name), present: Boolean(item.present) })) : [] }));
+  const main = (files2.find((entry2) => entry2.role === "diffusion_model") || files2[0] || { items: [] }).items;
   const shownFile = (main.find((item) => item.present) || main[0] || { name: local.files.diffusion_model[0] }).name;
   const h = variant2.health;
   const missing = (Array.isArray(h.missing_files) ? h.missing_files : []).map((text2) => String(text2).split(" | ").join(" or "));
@@ -72437,7 +72659,7 @@ function imageModelView(modelCatalog, state, profile) {
   else if (h.state === "missing") health = { state: "missing", text: `Missing nodes: ${missingParts.join(", ")}`, title: `Missing nodes: ${missingParts.join(", ")}` };
   else health = { state: "unchecked", text: "Not checked", title: "Files present; nodes are checked when the image engine runs" };
   const presetLabel = (variant2.presets.find((item) => item.id === presetId) || variant2.presets[0] || { label: variant2.label }).label;
-  return { familyLabel: family.label, presetLabel, fileName: imageModelFileName(shownFile), files, health, fromLayer: true };
+  return { familyLabel: family.label, presetLabel, fileName: imageModelFileName(shownFile), files: files2, health, fromLayer: true };
 }
 function imageFamilyRows(modelCatalog) {
   if (!modelCatalog) return [];
@@ -72460,9 +72682,9 @@ function imageFamilyRows(modelCatalog) {
       const why = family.variants.map((variant2) => variant2.evidence && variant2.evidence.availability === "unavailable" ? variant2.evidence.reason : "").find(Boolean);
       reason = why || "Coming next: not in the Suite";
     }
-    const files = missing.length ? `Missing for ${missingFor.join(", ")}: ${missing.slice(0, 2).join(", ")}${missing.length > 2 ? ` +${missing.length - 2} more` : ""}` : family.variants.some((variant2) => variant2.health && variant2.health.state === "unchecked") ? "Files in place" : "Files ready";
+    const files2 = missing.length ? `Missing for ${missingFor.join(", ")}: ${missing.slice(0, 2).join(", ")}${missing.length > 2 ? ` +${missing.length - 2} more` : ""}` : family.variants.some((variant2) => variant2.health && variant2.health.state === "unchecked") ? "Files in place" : "Files ready";
     const note = runnable ? family.variants.map((variant2) => imageVariantRunnable(variant2) && variant2.evidence && variant2.evidence.state === "unproven" ? variant2.evidence.reason : "").find(Boolean) || "" : "";
-    return { id: family.id, label: family.label, kind: family.kind, runnable, reason, note, variants, files, missing, filesTitle: missing.length ? `Missing files: ${missing.join(", ")}` : files };
+    return { id: family.id, label: family.label, kind: family.kind, runnable, reason, note, variants, files: files2, missing, filesTitle: missing.length ? `Missing files: ${missing.join(", ")}` : files2 };
   });
 }
 
@@ -72587,7 +72809,7 @@ var modelPickerShown = () => PICKER_OPENERS.size > 0;
 // desktop/film-suite/src/image/components/fim-model-header.js
 import { cn as cn15 } from "@hermes/plugin-sdk";
 import { jsx as jsx40, jsxs as jsxs34 } from "react/jsx-runtime";
-function FimModelHeader({ modelCatalog, state, profile, onPreset, onRecheck, specV2 = null, specV2Off = false, files = null, choice = null, onChooseFile = null, imageTarget = null, liveFiles = null, onLoadFiles = null }) {
+function FimModelHeader({ modelCatalog, state, profile, onPreset, onRecheck, specV2 = null, specV2Off = false, files: files2 = null, choice = null, onChooseFile = null, imageTarget = null, liveFiles = null, onLoadFiles = null }) {
   const [open, setOpen] = useState("");
   const [query, setQuery2] = useState("");
   const [fileQuery, setFileQuery] = useState("");
@@ -72599,10 +72821,10 @@ function FimModelHeader({ modelCatalog, state, profile, onPreset, onRecheck, spe
   const view = selected ? { familyLabel: selectedFamily.label, presetLabel: selected.label, fileName: imageModelFileName((Object.values(selected.files)[0] || [])[0]?.name || ""), files: Object.entries(selected.files).map(([role, items]) => ({ role, items })), health: { state: imageTarget.health?.state || "loading", text: imageTarget.health?.state === "ready_static" ? "Static checks ready" : imageTarget.health?.state || "Checking…", title: selected.evidence?.reason || "Static checks do not prove inference" }, fromLayer: true } : imageModelView(modelCatalog, state, profile);
   if (selected) {
     specV2 = null;
-    files = null;
+    files2 = null;
   }
-  const chosenMain = files && files.diffusion_model ? imageModelFileName(files.diffusion_model) : view.fileName;
-  const chosenFull = files && files.diffusion_model ? String(files.diffusion_model) : `${view.fileName}.safetensors`;
+  const chosenMain = files2 && files2.diffusion_model ? imageModelFileName(files2.diffusion_model) : view.fileName;
+  const chosenFull = files2 && files2.diffusion_model ? String(files2.diffusion_model) : `${view.fileName}.safetensors`;
   const line = `${view.familyLabel} · ${view.presetLabel} · ${chosenMain}`;
   const defaults2 = specV2 ? (specV2.profiles[profile] || specV2.profiles.turbo || {}).files || {} : {};
   const fileRoles = specV2 ? Object.keys(defaults2) : [];
@@ -72722,7 +72944,7 @@ function FimModelHeader({ modelCatalog, state, profile, onPreset, onRecheck, spe
       ...fileRoles.map((role) => {
         const offered = Array.isArray(specV2.files[role]) ? specV2.files[role] : [];
         const known = new Set(offered.map((item) => item.name));
-        const current2 = files ? files[role] : defaults2[role];
+        const current2 = files2 ? files2[role] : defaults2[role];
         const extra = (live2 && Array.isArray(live2[role]) ? live2[role] : []).filter((item) => !known.has(item.name)).map((item) => ({ name: item.name, installed: true, custom: true }));
         const absent = current2 && !known.has(current2) && live2 && !extra.some((item) => item.name === current2) ? [{ name: current2, installed: false, custom: true }] : [];
         const all = [...offered, ...extra, ...absent].filter((item) => item.name === current2 || !fq || item.name.toLowerCase().includes(fq));
@@ -72828,7 +73050,7 @@ function useOpeningFrameAction(ownerScope, onOpened) {
   const [busyId, setBusyId] = useState("");
   const [issue, setIssue2] = useState(null);
   const busyRef = useRef(false);
-  const run = useCallback(async ({ jobId, label: label2, previewSrc }) => {
+  const run = useCallback(async ({ jobId, label: label2, previewSrc: previewSrc2 }) => {
     if (busyRef.current || !jobId || !ownerScope || !rest) return;
     busyRef.current = true;
     setBusyId(jobId);
@@ -72839,7 +73061,7 @@ function useOpeningFrameAction(ownerScope, onOpened) {
         setIssue2({ jobId, text: staged.error, restart: Boolean(staged.restart) });
         return;
       }
-      if (previewSrc && !thumbCache.get(staged.path)) cacheThumb(staged.path, previewSrc);
+      if (previewSrc2 && !thumbCache.get(staged.path)) cacheThumb(staged.path, previewSrc2);
       $shootOpeningFrameRequest.set({ path: staged.path, jobId, label: label2 || "", n: Date.now() });
       if (onOpened) onOpened();
     } finally {
@@ -87001,65 +87223,6 @@ var COMPARE_CSS = `
 .fsv-acts .fw-btn{background:rgb(8 8 10 / .78)}
 `;
 
-// desktop/film-suite/src/image/import/import-api.js
-var IMPORT_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "tif", "tiff"];
-var IMPORT_MAX_BYTES = 64 * 1024 * 1024;
-var IMPORT_TYPES = /^image\/(png|jpeg|webp|tiff)$/;
-var importId = () => "imgop_" + Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-var isImportPath = (path) => IMPORT_EXTENSIONS.includes(String(path || "").split(/[?#]/)[0].split(".").pop().toLowerCase());
-function fileBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
-    reader.onerror = () => reject(new Error("The picture could not be read"));
-    reader.readAsDataURL(file);
-  });
-}
-async function shootFolders(wake) {
-  if (shootMediaApi && $shootMediaFolders.get()) return shootMediaApi;
-  if (wake) wake();
-  for (let i2 = 0; i2 < 60 && !(shootMediaApi && $shootMediaFolders.get()); i2 += 1) await new Promise((r) => setTimeout(r, 100));
-  return shootMediaApi && $shootMediaFolders.get() ? shootMediaApi : null;
-}
-async function rootsFor(path, wake) {
-  const known = ($shootMediaFolders.get() || {}).roots || [];
-  if (known.some((root) => mediaPathInRoot(path, root))) return known;
-  const folder = parentPath(path);
-  const why = mediaRootLargeReason(folder, []);
-  if (!folder || /whole drive|home folder/.test(why)) throw new Error(`${basename(path)} is not inside a folder of its own (${why || "no folder"}))`);
-  const api = await shootFolders(wake);
-  if (!api) throw new Error("Media folders not ready");
-  const roots = ($shootMediaFolders.get() || {}).roots || [];
-  if (roots.some((root) => mediaPathInRoot(path, root))) return roots;
-  const added = await api.add([folder]);
-  if (!(added > 0)) throw new Error("Media folders could not be updated");
-  return [.../* @__PURE__ */ new Set([...roots, folder])];
-}
-async function postImport(ownerScope, body2) {
-  const payload = await rest("/projects/image-producer/import", {
-    method: "POST",
-    timeoutMs: 12e4,
-    body: { schema: "studio.image-import-request/1", owner_scope: ownerScope, operation_id: importId(), ...body2 }
-  });
-  if (!payload || payload.error || payload.state !== "published") throw new Error(payload && payload.error && payload.error.message || "The picture could not be imported");
-  return { jobId: payload.image_producer_job_id, width: payload.width, height: payload.height, label: payload.imported && payload.imported.file_name || "Picture" };
-}
-async function importPicture(ownerScope, { path = "", file = null, wake = null } = {}) {
-  if (path) {
-    if (!isImportPath(path)) throw new Error(`${basename(path)} is not a picture Continuo can open (PNG, JPEG, WebP or TIFF)`);
-    const roots = await rootsFor(path, wake);
-    return postImport(ownerScope, { path, ...requestContext(roots) });
-  }
-  if (!file) throw new Error("That drop carried no readable file");
-  if (file.type && !IMPORT_TYPES.test(file.type) && !isImportPath(file.name)) throw new Error(`${file.name || "The file"} is not a picture Continuo can open (PNG, JPEG, WebP or TIFF)`);
-  if (file.size > IMPORT_MAX_BYTES) throw new Error("The file is too large to import (over 64 MB)");
-  return postImport(ownerScope, { data_b64: await fileBase64(file), file_name: file.name || "Pasted picture" });
-}
-function openImported(picture) {
-  $mediaFeedStale.set($mediaFeedStale.get() + 1);
-  $imageOpenRequest.set({ item: { id: picture.jobId, kind: "image", module: "image", label: picture.label, prompt: picture.label, spec: null, kept: false, keptName: null, width: picture.width, height: picture.height }, n: Date.now() });
-}
-
 // desktop/film-suite/src/image/recent/recent-strip.js
 import { atom as atom17 } from "@hermes/plugin-sdk";
 var $recentCurrent = atom17("");
@@ -88581,8 +88744,8 @@ function useImageState(ctx) {
   }, [contextKey]);
   useEffect(() => {
     const spec = job && job.render_spec || opened && opened.render_spec || null;
-    const files = spec && spec.files && typeof spec.files === "object" ? Object.entries(spec.files) : [];
-    const outside = specV2 && files.some(([role, name2]) => !(specV2.files[role] || []).some((item) => item.name === name2));
+    const files2 = spec && spec.files && typeof spec.files === "object" ? Object.entries(spec.files) : [];
+    const outside = specV2 && files2.some(([role, name2]) => !(specV2.files[role] || []).some((item) => item.name === name2));
     if (outside && !liveFiles) loadLiveFiles(false);
   }, [job && job.render_spec, opened && opened.render_spec, Boolean(specV2)]);
   useEffect(() => {
@@ -92387,7 +92550,7 @@ function useImageCompare(ctx) {
     cmpLoad(ctx, a, put);
     cmpLoad(ctx, b, put);
   };
-  const bridge2 = {
+  const bridge = {
     snapshot: () => pair ? {
       a: pair.a.key,
       b: pair.b.key,
@@ -92431,7 +92594,7 @@ function useImageCompare(ctx) {
       return { ok: true, applied: { a: s.pair ? s.pair.a.key : null, b: s.pair ? s.pair.b.key : null, mode: s.mode, linked: s.linked, wipe: s.wipe }, note: p.a ? `comparing ${s.pair ? (s.pair.a.label || "A") + " and " + (s.pair.b.label || "B") : "A and B"}` : null };
     }
   };
-  return { open, cmp, view, bar, key, bridge: bridge2, openPair };
+  return { open, cmp, view, bar, key, bridge, openPair };
 }
 
 // desktop/film-suite/src/image/compare/use-image-survey.js
@@ -92582,7 +92745,7 @@ function useImageSurvey(ctx) {
   const view = open ? jsx83(SurveyView, { sv, gridRef }, "survey") : null;
   const stateRef = useRef(null);
   stateRef.current = { items, active };
-  const bridge2 = {
+  const bridge = {
     snapshot: () => open ? { ids: items.map((item) => item.key), active, differs: diff.recorded ? diff.fields : null, labels: labels.map((l, i2) => [String(i2 + 1), ...l.parts].join(" · ")), loading: items.some((item) => !cmpReady(item)) } : null,
     apply: async (p) => {
       if (p.close) {
@@ -92619,7 +92782,7 @@ function useImageSurvey(ctx) {
       return { ok: true, applied: { opened: id }, note: "opened the picture" };
     }
   };
-  return { open, view, key, bridge: bridge2, start, close };
+  return { open, view, key, bridge, start, close };
 }
 
 // desktop/film-suite/src/image/compare/use-compare-surface.js
@@ -95589,8 +95752,8 @@ function mediaCounts({ items = [], inCut = () => false, jobs = [], server = null
   const local = Object.fromEntries(COUNT_BINS.map((b) => [b, JOB_COUNT_BINS.includes(b) ? 0 : list.filter((item) => inCountBin(item, b, cutOf, showRejected)).length]));
   const bins = { ...local };
   if (server && !complete) {
-    const files = list.filter((item) => item.source === "file");
-    const n = (b) => files.filter((item) => inCountBin(item, b, cutOf, showRejected)).length;
+    const files2 = list.filter((item) => item.source === "file");
+    const n = (b) => files2.filter((item) => inCountBin(item, b, cutOf, showRejected)).length;
     bins.all = server.all + (showRejected ? server.rejected : 0) + n("all");
     bins.kept = server.kept + n("kept");
     bins.imported = server.imported + n("imported");
@@ -95614,7 +95777,7 @@ function mediaCounts({ items = [], inCut = () => false, jobs = [], server = null
 }
 
 // desktop/film-suite/src/media/column/media-stills.js
-var PICTURE_NAME = /^(.+)\.(png|jpe?g|webp|tiff?|bmp|exr|heic|avif)$/i;
+var PICTURE_NAME2 = /^(.+)\.(png|jpe?g|webp|tiff?|bmp|exr|heic|avif)$/i;
 var CLIP_NAME = /^(.+)\.(mp4|mov|m4v|mkv|webm|avi|mxf)$/i;
 var nameOf = (item) => {
   if (!item) return "";
@@ -95635,7 +95798,7 @@ function stillsOfClips(items) {
   const out = /* @__PURE__ */ new Map();
   if (!clips.size) return out;
   for (const item of items) if (item && item.kind === "image") {
-    const s = stemOf(item, PICTURE_NAME);
+    const s = stemOf(item, PICTURE_NAME2);
     if (s && clips.has(s)) out.set(item.id, clips.get(s));
   }
   return out;
@@ -95815,8 +95978,8 @@ function useCutRefs(project, visible) {
       const out = await rest("/projects/timeline/refs", { method: "POST", body: { project_ref: { project_id: projectId }, resolve: true }, timeoutMs: 3e4 });
       const refs = out && Array.isArray(out.refs) ? out.refs.map((r) => r && r.ref).filter((ref) => typeof ref === "string") : [];
       const sources = out && Array.isArray(out.sources) ? out.sources.filter((f2) => f2 && refs.includes(f2.ref)) : [];
-      const files = sources.map((f2) => [f2.ref, cutItemOf(f2)]).filter(([, item]) => item && item.source === "file");
-      return { refs, items: sources.map(cutItemOf).filter(Boolean), files };
+      const files2 = sources.map((f2) => [f2.ref, cutItemOf(f2)]).filter(([, item]) => item && item.source === "file");
+      return { refs, items: sources.map(cutItemOf).filter(Boolean), files: files2 };
     },
     refetchInterval: every == null ? false : every,
     enabled: Boolean(rest && projectId)
@@ -96140,7 +96303,7 @@ function useMediaColumn({ ownerScope, feed, page, project, jobs = [], narrow, on
   const picked = sounds && openSong && selected ? byId2(selected) : null;
   const current2 = !sounds || !openSong ? "" : picked && soundPath(picked) === openSong ? picked.id : (base2.find((item) => soundPath(item) === openSong) || {}).id || "";
   const runningCount = running.filter((job) => job.state === "running" || job.state === "queued").length;
-  const bridge2 = { visible, bin, types: types2, query: view.query, sort: view.sort, min_rating: view.minRating, count: count3, total: binCounts[bin], selected: selected && ids.includes(selected) ? publicId(byId2(selected)) : null };
+  const bridge = { visible, bin, types: types2, query: view.query, sort: view.sort, min_rating: view.minRating, count: count3, total: binCounts[bin], selected: selected && ids.includes(selected) ? publicId(byId2(selected)) : null };
   return {
     // w39-face 8 (GEM-212): the feed is still on its first read (no answer, no error): the column draws skeletons.
     loading: Boolean(feed.query && !feed.query.data && !feed.query.isError),
@@ -96185,7 +96348,7 @@ function useMediaColumn({ ownerScope, feed, page, project, jobs = [], narrow, on
     setSelected,
     openLarge,
     enlarge,
-    bridge: bridge2,
+    bridge,
     inImage,
     inBin,
     rejectedOn,
@@ -96232,8 +96395,8 @@ function useFileDrop({ ownerScope, wake = null, onImported = null }) {
   }, [over]);
   const run = async (event) => {
     const desktopPaths = pathsFromDrop(event).filter((path) => !/^https?:/i.test(path));
-    const files = [...event.dataTransfer && event.dataTransfer.files || []];
-    const jobs = desktopPaths.length ? desktopPaths.map((path) => ({ path, name: basename(path) })) : files.map((file) => ({ file, name: file.name || "file" }));
+    const files2 = [...event.dataTransfer && event.dataTransfer.files || []];
+    const jobs = desktopPaths.length ? desktopPaths.map((path) => ({ path, name: basename(path) })) : files2.map((file) => ({ file, name: file.name || "file" }));
     const ok4 = [], skipped = [], failed2 = [];
     for (const job of jobs) {
       const picture = job.path ? isImportPath(job.path) : IMAGE_TYPE.test(job.file.type || "") || isImportPath(job.name);
@@ -99829,18 +99992,31 @@ function scriptBridgeBase(project, query) {
     scenes: sceneRows(data).slice(0, 2e3).map((row2) => ({ id: row2.id, number: row2.number.slice(0, 16), heading: row2.heading.slice(0, 400), ...actOf.get(row2.id) ? { act: actOf.get(row2.id).slice(0, 120) } : {}, ...row2.omitted ? { omitted: true } : {} }))
   };
 }
-function base64Text(dataUrl) {
-  const raw = atob(String(dataUrl).split(",")[1] || "");
-  const bytes = Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
-  return new TextDecoder("utf-8").decode(bytes);
+var SCRIPT_EXTENSIONS = ["fountain", "fdx", "spmd", "txt"];
+function chooseScriptFile() {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = SCRIPT_EXTENSIONS.map((ext) => "." + ext).join(",");
+    input.setAttribute("data-testid", "script-import-file");
+    input.style.display = "none";
+    let settled = false;
+    const done = (file) => {
+      if (settled) return;
+      settled = true;
+      input.remove();
+      resolve(file || null);
+    };
+    input.addEventListener("change", () => done(input.files && input.files[0]));
+    input.addEventListener("cancel", () => done(null));
+    document.body.appendChild(input);
+    input.click();
+  });
 }
-async function readTextFile(path) {
-  const desktop = typeof window !== "undefined" ? window.hermesDesktop : null;
-  const read2 = desktop && (desktop.readFileDataUrlForAttach || desktop.readFileDataUrl);
-  if (!read2) throw new Error("Files cannot be read here.");
-  const url = await read2(path);
-  if (!url) throw new Error("The file could not be read.");
-  return base64Text(url);
+async function readTextFile(file) {
+  const text2 = await file.text();
+  if (typeof text2 !== "string") throw new Error("The file could not be read.");
+  return text2;
 }
 function ScriptPage({ project, query, onOpenProject = null, visible = true }) {
   useScriptLive();
@@ -99873,12 +100049,12 @@ function ScriptPage({ project, query, onOpenProject = null, visible = true }) {
     body: { project_ref: ref, expected_revision: revision, by: "artist", entries: [{ key: "Title", value: (project && project.name ? project.name : "Untitled").slice(0, 200) }] }
   }));
   const importScript = async () => {
-    const [path] = await pickPaths({ title: "Import script", filters: [{ name: "Screenplay", extensions: ["fountain", "fdx", "spmd", "txt"] }] });
-    if (!path) return;
-    const format = /\.fdx$/i.test(path) ? "fdx" : "fountain";
-    const name2 = String(path).split(/[\\/]/).pop().slice(0, 120);
+    const file = await chooseScriptFile();
+    if (!file) return;
+    const format = /\.fdx$/i.test(file.name) ? "fdx" : "fountain";
+    const name2 = String(file.name).split(/[\\/]/).pop().slice(0, 120);
     await run("import", async () => {
-      const text2 = await readTextFile(path);
+      const text2 = await readTextFile(file);
       return rest("/projects/script/import", { method: "POST", timeoutMs: 6e4, body: { project_ref: ref, expected_revision: revision, by: "artist", format, text: text2, name: name2 } });
     });
   };
@@ -100373,7 +100549,7 @@ function useLocalPicture(file) {
     let live2 = true;
     setSrc(null);
     if (!path) return void 0;
-    void imageSrc(path).then((url) => {
+    void previewSrc(path).then((url) => {
       if (live2) setSrc(url || "");
     });
     return () => {
@@ -100728,10 +100904,10 @@ function posterItem(cut2) {
   if (!p || p.kind !== "take" && p.kind !== "picture") return null;
   return { id: p.ref, kind: p.kind === "take" ? "video" : "image", label: cut2.name };
 }
-function filePosterOf(cut2, files) {
+function filePosterOf(cut2, files2) {
   const p = cut2.poster;
-  if (!p || p.kind !== "media" || !files) return null;
-  return files.get(p.ref) || null;
+  if (!p || p.kind !== "media" || !files2) return null;
+  return files2.get(p.ref) || null;
 }
 function useKeepInside(ref, at2) {
   const [pos2, setPos] = useState(at2);
@@ -100818,9 +100994,9 @@ function ConfirmDelete({ at: at2, cut: cut2, onYes, onClose }) {
     ] }, "b")
   ] });
 }
-function CutTile({ cut: cut2, cuts, ownerScope, files, selected, onSelect, onRun, renaming, onRename, onMenu, showNames }) {
+function CutTile({ cut: cut2, cuts, ownerScope, files: files2, selected, onSelect, onRun, renaming, onRename, onMenu, showNames }) {
   const poster = posterItem(cut2);
-  const filePoster = poster ? null : filePosterOf(cut2, files);
+  const filePoster = poster ? null : filePosterOf(cut2, files2);
   const nested = cut2.nested_in.length > 0;
   const title = `${cut2.name}${cut2.active ? " · Open in Cut" : ""} · ${lengthText(cut2)} · ${formatText(cut2)}${nested ? " · inside " + cut2.nested_in.map((id) => (cuts.find((c) => c.id === id) || {}).name || id).join(", ") : ""}`;
   const onKeyDown = (e) => {
@@ -100919,7 +101095,7 @@ function RenameField({ cut: cut2, onRename }) {
     }
   });
 }
-function CutsGroup({ project, ownerScope, on, query = "", showNames = true, files = null, onNote }) {
+function CutsGroup({ project, ownerScope, on, query = "", showNames = true, files: files2 = null, onNote }) {
   const data = useProjectCuts(project, on);
   const [selected, setSelected] = useState("");
   const [menu, setMenu] = useState(null);
@@ -100997,7 +101173,7 @@ function CutsGroup({ project, ownerScope, on, query = "", showNames = true, file
       cut: cut2,
       cuts: data.cuts,
       ownerScope,
-      files,
+      files: files2,
       selected: selected === cut2.id,
       onSelect: setSelected,
       onRun: run,
@@ -103120,7 +103296,7 @@ function useLocalSrc(path, kind) {
       setSrc(mediaStreamUrl(path));
       return void 0;
     }
-    void imageSrc(path).then((url) => {
+    void previewSrc(path).then((url) => {
       if (live2) setSrc(url || "");
     });
     return () => {
@@ -103504,7 +103680,7 @@ function FilmSuiteMedia({ col, ownerScope, feed, jobs = [], focus, backLabel, sc
   const offlineRoots = useOfflineRoots(col.project, roots.join("\n"), folders && folders.assets);
   const listedRoots = folders && Array.isArray(folders.listed) ? folders.listed : null;
   const rawAssets = folders && Array.isArray(folders.assets) ? folders.assets : null;
-  const files = useMemo(() => listedRoots && rawAssets ? rawAssets.map(mediaFileOf).sort((x, y) => Number(y.modified || 0) - Number(x.modified || 0)) : [], [rawAssets, listedRoots]);
+  const files2 = useMemo(() => listedRoots && rawAssets ? rawAssets.map(mediaFileOf).sort((x, y) => Number(y.modified || 0) - Number(x.modified || 0)) : [], [rawAssets, listedRoots]);
   const [fileLimit, setFileLimit] = useState(MEDIA_FILE_PAGE);
   useEffect(() => {
     setFileLimit(MEDIA_FILE_PAGE);
@@ -103513,9 +103689,9 @@ function FilmSuiteMedia({ col, ownerScope, feed, jobs = [], focus, backLabel, sc
   const fileTerms = String(col.view.query || "").toLowerCase().split(/\s+/).filter(Boolean);
   const fileOldest = col.view.sort === "oldest";
   const keptFiles = useMemo(() => {
-    const kept = files.filter((file) => fileMatches(file, fileView, marks2) && types2.includes(file.kind) && (!shownRoot || underRoot(file.path, shownRoot)) && hasLayer(control, file, layerFilter) && fileTerms.every((t2) => String(file.label || "").toLowerCase().includes(t2)));
+    const kept = files2.filter((file) => fileMatches(file, fileView, marks2) && types2.includes(file.kind) && (!shownRoot || underRoot(file.path, shownRoot)) && hasLayer(control, file, layerFilter) && fileTerms.every((t2) => String(file.label || "").toLowerCase().includes(t2)));
     return fileOldest ? [...kept].reverse() : kept;
-  }, [files, fileView, marks2, control, layerFilter, fileTerms.join(" "), fileOldest, shownRoot, types2.join(",")]);
+  }, [files2, fileView, marks2, control, layerFilter, fileTerms.join(" "), fileOldest, shownRoot, types2.join(",")]);
   const shownFiles = keptFiles.length > fileLimit ? keptFiles.slice(0, fileLimit) : keptFiles;
   const playing = useSoundPlaying();
   useEffect(() => () => stopSound(), []);
@@ -103531,8 +103707,7 @@ function FilmSuiteMedia({ col, ownerScope, feed, jobs = [], focus, backLabel, sc
   const runAdd = async (chosen) => {
     const api = shootMediaApi;
     if (!api) return;
-    const desktop = bridge();
-    if (!chosen && (!desktop || !desktop.selectPaths)) {
+    if (!chosen && !canRequestFolder()) {
       setAddNote("The folder picker needs the Hermes desktop app.");
       return;
     }
@@ -103618,8 +103793,8 @@ function FilmSuiteMedia({ col, ownerScope, feed, jobs = [], focus, backLabel, sc
     } else setFilter("all");
   };
   const probes = useValue27($mediaProbes);
-  const selectedFileAny = files.find((file) => file.id === fileId) || null;
-  const hasSound = files.some((file) => file.kind === "audio");
+  const selectedFileAny = files2.find((file) => file.id === fileId) || null;
+  const hasSound = files2.some((file) => file.kind === "audio");
   const showFiles = () => {
     const api = shootMediaApi;
     if (api && roots.length && !listing) void api.refresh();
@@ -103632,13 +103807,13 @@ function FilmSuiteMedia({ col, ownerScope, feed, jobs = [], focus, backLabel, sc
     if (api && api.cancel) api.cancel();
   };
   useEffect(() => {
-    if (fileId && !files.some((file) => file.id === fileId)) setFileId(null);
-  }, [files]);
+    if (fileId && !files2.some((file) => file.id === fileId)) setFileId(null);
+  }, [files2]);
   const onFileAction = (action, file) => {
     if (onFile) onFile(action, file);
   };
   const openFileLarge = (file, trigger) => {
-    if (onOpenFile) onOpenFile(file.id, files, trigger || (typeof document !== "undefined" ? document.activeElement : null));
+    if (onOpenFile) onOpenFile(file.id, files2, trigger || (typeof document !== "undefined" ? document.activeElement : null));
   };
   const removeRoot = async (root) => {
     setConfirmRoot(null);
@@ -103651,7 +103826,7 @@ function FilmSuiteMedia({ col, ownerScope, feed, jobs = [], focus, backLabel, sc
   const byId2 = (id) => items.find((item) => item.id === id) || null;
   const selected = byId2(selectedId) || (picked.length === 1 ? byId2(picked[0]) : null);
   const pickedItems = picked.map(byId2).filter(Boolean);
-  const fileById = (id) => files.find((file) => file.id === id) || null;
+  const fileById = (id) => files2.find((file) => file.id === id) || null;
   const pickedImages = pickedItems.filter((item) => item.kind === "image");
   const unkeptPicked = pickedImages.filter((item) => !item.kept);
   const unavailable = Object.entries(sources).filter(([, value]) => value !== "ok").map(([key]) => JOB_MODULE_LABEL[key] || key);
@@ -104049,7 +104224,7 @@ modified ${humanWhen(Number(file.modified) * 1e3, now)}${sound2 ? "\n" + (file.p
     } else {
       const total = keptFiles.length;
       const capped = total > shownFiles.length;
-      const placeFiles = shownRoot ? files.filter((file) => underRoot(file.path, shownRoot)) : files;
+      const placeFiles = shownRoot ? files2.filter((file) => underRoot(file.path, shownRoot)) : files2;
       const narrowed = keptFiles.length !== placeFiles.length;
       const summary = folders.summary && typeof folders.summary === "object" ? folders.summary : null;
       const rootSum = summary && shownRoot && Array.isArray(summary.per_root) ? summary.per_root.find((entry2) => entry2 && entry2.root === shownRoot) : null;
@@ -104128,7 +104303,7 @@ modified ${humanWhen(Number(file.modified) * 1e3, now)}${sound2 ? "\n" + (file.p
     }
   };
   const colFiles = new Map((col.items || []).filter((item) => item.source === "file").map((item) => [item.id, item]));
-  const countItems = colFiles.size || !listedRoots ? col.items || items : [...col.items || items, ...files.map((file) => {
+  const countItems = colFiles.size || !listedRoots ? col.items || items : [...col.items || items, ...files2.map((file) => {
     const mark = file.kind === "audio" ? soundMarkItem(file, marks2) : null;
     return { ...file, source: "file", kept: Boolean(mark && mark.kept), rejected: Boolean(mark && mark.rejected) };
   })];
@@ -104142,8 +104317,8 @@ modified ${humanWhen(Number(file.modified) * 1e3, now)}${sound2 ? "\n" + (file.p
     bin,
     types: types2
   });
-  const folderCounts = Object.fromEntries(roots.map((root) => [root, files.filter((file) => underRoot(file.path, root)).length]));
-  const binFiles = filesMode || JOB_BINS.includes(bin) ? [] : files.filter((file) => {
+  const folderCounts = Object.fromEntries(roots.map((root) => [root, files2.filter((file) => underRoot(file.path, root)).length]));
+  const binFiles = filesMode || JOB_BINS.includes(bin) ? [] : files2.filter((file) => {
     if (!types2.includes(file.kind) || !hasLayer(control, file, layerFilter) || !fileTerms.every((t2) => String(file.label || "").toLowerCase().includes(t2))) return false;
     const known = colFiles.get(file.id);
     const mark = file.kind === "audio" ? soundMarkItem(file, marks2) : null;
@@ -104171,7 +104346,7 @@ modified ${humanWhen(Number(file.modified) * 1e3, now)}${sound2 ? "\n" + (file.p
   };
   const emptyBody = () => {
     if (feed.query.isError && !feed.query.data) return jsx123("p", { className: "fsp-m-hint is-error", role: "alert", "data-testid": "media-empty", children: "The media list could not be read. It retries on its own." }, "e");
-    const filtered = items.length || jobTiles.length || files.length;
+    const filtered = items.length || jobTiles.length || files2.length;
     return jsx123(EmptyWell, { testid: "media-empty", icon: filtered ? "search" : "image", action: !feed.query.data ? null : filtered ? { label: "Show all", title: "All media, every type, any rating", testid: "media-show-all", run: () => {
       setFilter("all");
       setFileId(null);
@@ -104299,7 +104474,7 @@ modified ${humanWhen(Number(file.modified) * 1e3, now)}${sound2 ? "\n" + (file.p
           // w39-face 9: Remove folder… from the sidebar asks with the folder bar's own confirm wherever the artist is.
           confirmRoot && !(filesMode && folders) ? jsx123(MediaFolderConfirm, { root: confirmRoot, onRemove: (root) => void removeRoot(root), onCancel: () => setConfirmRoot(null) }, "fold-confirm") : null,
           filesMode && folders ? jsx123(MediaFolderBar, { folders: { ...folders, roots: shownRoot ? [shownRoot, ...roots.filter((root) => root !== shownRoot && isOffline(offlineRoots, root))] : [] }, now, confirmRoot, onAskRemove: (root) => setConfirmRoot((current2) => current2 === root ? null : root), onRemove: (root) => void removeRoot(root), onCancel: () => setConfirmRoot(null), offline: offlineRoots }, "folders") : null,
-          filesMode && folders && folders.error && !listing && !onlyOfflineErrors(folders.error, offlineRoots) ? jsxs103("div", { className: "fsp-m-hint is-error fsp-m-note", role: "alert", "data-testid": "media-files-error", children: [`Your folders could not be read completely. ${files.length ? "The files that could be read are shown." : "No file could be read."} `, jsx123(FailureDetails, { message: folders.error, testid: "media-files-error-details" }, "d")] }, "ferr") : null,
+          filesMode && folders && folders.error && !listing && !onlyOfflineErrors(folders.error, offlineRoots) ? jsxs103("div", { className: "fsp-m-hint is-error fsp-m-note", role: "alert", "data-testid": "media-files-error", children: [`Your folders could not be read completely. ${files2.length ? "The files that could be read are shown." : "No file could be read."} `, jsx123(FailureDetails, { message: folders.error, testid: "media-files-error-details" }, "d")] }, "ferr") : null,
           unavailable.length && !filesMode ? jsx123("p", { className: "fsp-m-hint fsp-m-note", children: `${unavailable.join(" and ")} media ${unavailable.length === 1 ? "is" : "are"} unavailable right now.` }, "un") : null,
           issue ? jsx123("p", { className: "fsp-m-hint is-error fsp-m-note", role: "alert", children: issue }, "issue") : null,
           picked.length && !filesMode && !cutPick ? jsxs103("div", { className: "fsp-m-selbar", "data-testid": "media-selbar", children: [
@@ -112601,7 +112776,7 @@ function RenderSettings({ model, settings, set, reset, name: name2, check, range
   const now = useNow2();
   const rule = name2 ? "" : rulePackageName(check, now);
   const pending = !name2 && !rule && (!check || check.state === "running");
-  const files = writesFiles(settings, model, name2 || rule, subtitles);
+  const files2 = writesFiles(settings, model, name2 || rule, subtitles);
   const project = (useValue29($shootContext) || {}).project || null;
   const projectOut = useProjectOutput(project);
   const where = settings.folder || projectOutputText(projectOut, project && project.name) || "output";
@@ -112614,7 +112789,7 @@ function RenderSettings({ model, settings, set, reset, name: name2, check, range
   const locationCell = refusedWhy ? jsxs114("div", { className: "tld-loc", children: [location, jsx134(ProjectOutputRefusal, { reason: refusedWhy, onChoose: () => void chooseProjectOutput(project), testid: "tl-deliver-folder-refused" }, "why")] }) : location;
   const video = [
     row("Format", jsx134(GroupSelect, { label: "Format", testid: "tl-deliver-format", value: settings.format, options: FORMATS, onChange: (v) => set({ format: v }) }), "fmt"),
-    film ? row("Codec", jsx134(GroupSelect, { label: "Codec", testid: "tl-deliver-codec", value: settings.format === "mov" ? settings.master : "h264", options: CODECS[settings.format], disabled: settings.format === "mp4", title: settings.format === "mp4" ? "Codec · MP4 renders H.264" : void 0, onChange: (v) => set({ master: v }) }), "codec") : row("Media", locked(`${files.find((x) => x.startsWith("media/")).replace(/^media\/ \((.*)\)$/, "$1")} · picture only`, "Video-only copies of the takes in media/", "tl-deliver-media"), "media"),
+    film ? row("Codec", jsx134(GroupSelect, { label: "Codec", testid: "tl-deliver-codec", value: settings.format === "mov" ? settings.master : "h264", options: CODECS[settings.format], disabled: settings.format === "mp4", title: settings.format === "mp4" ? "Codec · MP4 renders H.264" : void 0, onChange: (v) => set({ master: v }) }), "codec") : row("Media", locked(`${files2.find((x) => x.startsWith("media/")).replace(/^media\/ \((.*)\)$/, "$1")} · picture only`, "Video-only copies of the takes in media/", "tl-deliver-media"), "media"),
     film && settings.format === "mp4" ? row("Quality", jsx134(GroupSelect, { label: "Quality", testid: "tl-deliver-quality", value: settings.quality, options: QUALITIES, onChange: (v) => set({ quality: v }) }), "q") : null,
     row("Resolution", locked(`${model.format.width} × ${model.format.height} · timeline`, "From the timeline (Cut › Format)", "tl-deliver-res"), "res"),
     row("Frame rate", locked(`${fps} fps · timeline`, "From the timeline (Cut › Format)", "tl-deliver-fps-rate"), "fps"),
@@ -112640,15 +112815,15 @@ function RenderSettings({ model, settings, set, reset, name: name2, check, range
     row("True peak", jsx134(FwNumber, { label: "True-peak ceiling dBTP", testid: "tl-deliver-ceiling", value: settings.ceiling, min: -12, max: 0, step: 0.5, onCommit: (v) => set({ ceiling: v }) }), "tp", { off: !film }),
     row("Codec", locked(film ? settings.format === "mov" ? "PCM 24-bit · 48 kHz" : "AAC 256 kb/s · 48 kHz" : "None in media/", "From the format", "tl-deliver-acodec"), "ac")
   ];
-  const fileTab = jsx134("ul", { className: "tld-files", "data-testid": "tl-deliver-files", "aria-label": "Files", children: files.map((x) => jsx134("li", { className: "tld-val", title: x, children: x }, x)) });
+  const fileTab = jsx134("ul", { className: "tld-files", "data-testid": "tl-deliver-files", "aria-label": "Files", children: files2.map((x) => jsx134("li", { className: "tld-val", title: x, children: x }, x)) });
   const tab2 = settings.tab || "video";
   const full = !compact || expanded;
   const [openCheck, setOpenCheck] = useState(true);
   const [openWrites, setOpenWrites] = useState(false);
   const warnN = check && check.state === "done" ? checkWarnings(check, settings, model, range) : 0;
   const checkValue = !check || check.state === "running" ? "checking" : check.state === "error" ? "not checked" : blocked ? "blocked" : warnN ? `${warnN} ${warnN === 1 ? "warning" : "warnings"}` : "ready";
-  const shownFiles = files.filter((x) => !x.startsWith("media/") || !film);
-  const nDirs = files.filter((x) => /\/(\s|$)/.test(x)).length, nFiles = files.length - nDirs;
+  const shownFiles = files2.filter((x) => !x.startsWith("media/") || !film);
+  const nDirs = files2.filter((x) => /\/(\s|$)/.test(x)).length, nFiles = files2.length - nDirs;
   const checkSec = jsx134(FwSection, { id: "check", icon: "info", title: "Check before render", value: checkValue, valueTestid: "tl-deliver-check-value", open: openCheck, onToggle: () => setOpenCheck((o) => !o), testid: "tl-deliver-check-sec", className: blocked ? "is-block" : warnN ? "is-warn" : "", children: jsx134(CheckList, { check, settings, model, onLocate, compact, range, onPictureRange }) }, "check");
   const writesSec = !compact ? jsx134(FwSection, { id: "writes", icon: "folder", title: "Writes", value: `${nFiles} ${nFiles === 1 ? "file" : "files"}${nDirs ? ` · ${nDirs} ${nDirs === 1 ? "folder" : "folders"}` : ""}`, valueTestid: "tl-deliver-writes-value", open: openWrites, onToggle: () => setOpenWrites((o) => !o), testid: "tl-deliver-writes-sec", children: (
     // w17-pcut (CUT-107/115, owner 04.11., Tafel 4c Files/Into): one row per written file, its name shortened in the
@@ -112659,7 +112834,7 @@ function RenderSettings({ model, settings, set, reset, name: name2, check, range
         className: "tld-wfiles",
         "data-testid": "tl-deliver-wfiles",
         "aria-label": "Files",
-        title: pending ? void 0 : files.join("\n"),
+        title: pending ? void 0 : files2.join("\n"),
         // while the check runs, as many blank rows as the list will have: Writes keeps its height (P9Cut, PRJ-017)
         children: pending ? shownFiles.map((_, n) => jsx134("li", { className: "tld-val tld-wfile", children: " " }, "p" + n)) : shownFiles.map((f3) => jsx134("li", { className: "tld-val tld-mid tld-wfile", "data-testid": "tl-deliver-wfile", title: `${into}/${f3}`, children: midCut(f3, f3) }, f3))
       }, "f"),
@@ -112858,8 +113033,8 @@ function loudnessText(audio) {
   return `${before}${dbText2(l.after.integrated_lufs)} LUFS · ${dbText2(l.after.true_peak_dbtp)} dBTP${lra}`;
 }
 function soundFiles(result) {
-  const files = result && result.files ? result.files : {};
-  return ["audio:mix", "audio:dialogue", "audio:music", "audio:effects"].filter((k) => typeof files[k] === "string").map((k) => files[k]);
+  const files2 = result && result.files ? result.files : {};
+  return ["audio:mix", "audio:dialogue", "audio:music", "audio:effects"].filter((k) => typeof files2[k] === "string").map((k) => files2[k]);
 }
 function verifyText(result, kind = "film") {
   const v = result && result.verification;
@@ -117797,12 +117972,10 @@ function MusicTimeline({
   }, [proxyPath]);
   useEffect(() => {
     const fallback = dataFallbackAttemptRef.current === proxyPath || !proxyPath || transport.errorCode !== "media_invalid" && transport.errorCode !== "media_error" ? null : proxyPath;
-    const desktop = typeof bridge === "function" ? bridge() : null;
-    const readDataUrl = desktop?.readFileDataUrlForAttach || desktop?.readFileDataUrl;
-    if (!fallback || typeof readDataUrl !== "function") return void 0;
+    if (!fallback) return void 0;
     dataFallbackAttemptRef.current = proxyPath;
     let live2 = true;
-    void readDataUrl(fallback).then((dataUrl) => {
+    void readGrantedDataUrl(fallback).then((dataUrl) => {
       if (live2 && typeof dataUrl === "string" && dataUrl.startsWith("data:audio/")) setDataPlaybackSrc(dataUrl);
     }).catch(() => void 0);
     return () => {
@@ -120139,7 +120312,7 @@ function AudioCreate({ visible = true, project: given = null, lead = null }) {
     setDropOver(false);
     const paths = pathsFromDrop(event).filter((p) => SOUND_EXT.includes(String(p).split(".").pop().toLowerCase()));
     if (!paths.length) {
-      setNote("No sound file (wav, mp3, flac, ogg, m4a)");
+      setNote(droppedFiles(event).length && !pathsFromDrop(event).length ? DROP_NO_PATH : "No sound file (wav, mp3, flac, ogg, m4a)");
       return;
     }
     void addRecordings(paths);
@@ -122661,7 +122834,7 @@ function KeyframeEditor({
       haptic8("selection");
     }
   };
-  const browseMany = async () => absorbPaths(await pickPaths({ filters: IMAGE_FILTERS, multiple: true, title: "Choose keyframe pictures" }));
+  const browseMany = async () => absorbPaths(await pickPaths({ filters: IMAGE_FILTERS, multiple: true, max: MAX_KEYFRAMES, title: "Choose keyframe pictures" }));
   const browseAt = async (frame) => {
     const picked = await pickOne("Choose a keyframe picture");
     if (picked) absorbPaths([picked], { frame });
@@ -122734,11 +122907,22 @@ function KeyframeEditor({
         return;
       }
       const picked = pathsFromDrop(event);
-      if (!picked.length) {
-        refuse4("No readable file", frame);
+      if (picked.length) {
+        absorbPaths(picked, onto ? { onto } : { frame });
         return;
       }
-      absorbPaths(picked, onto ? { onto } : { frame });
+      const pictures = droppedPictures(event);
+      if (!pictures.length) {
+        refuse4(droppedFiles(event).length ? "Only pictures" : "No readable file", frame);
+        return;
+      }
+      if (!ownerScope || busy2) return;
+      setBusy(true);
+      void stageDroppedPictures(pictures, ownerScope).then(({ paths, labels, error }) => {
+        for (const path of paths) rememberAssetName(path, labels[path]);
+        if (paths.length) absorbPaths(paths, onto ? { onto } : { frame });
+        else refuse4(error || "No readable file", frame);
+      }).finally(() => setBusy(false));
     } finally {
       dropAt.current = null;
     }
@@ -123522,7 +123706,7 @@ function JobCard({ job, now, stale, onCheck, busy: busy2, onEdit, onCancel, canc
     formatBytes(job.bytes),
     stale ? "auto-checks paused" : ""
   ].filter(Boolean);
-  const playable = Boolean(job.savedPath) && failedSrc !== job.savedPath && Boolean(bridge());
+  const playable = Boolean(job.savedPath) && failedSrc !== job.savedPath && Boolean(desktopShell());
   const reveal = () => {
     void revealPath(job.savedPath);
   };
@@ -123710,7 +123894,7 @@ function MediaAssetCard({ asset, grid, onUseImage, onKeyframe, onContinuation, o
   useEffect(() => {
     let live2 = true;
     if (asset.kind !== "image") return void 0;
-    void imageSrc(asset.path).then((url) => {
+    void previewSrc(asset.path).then((url) => {
       if (live2) setThumb(url);
     });
     return () => {
@@ -123885,7 +124069,7 @@ function MediaPreview({ asset, onClose }) {
   useEffect(() => {
     let live2 = true;
     if (asset.kind === "image") {
-      void imageSrc(asset.path).then((url) => {
+      void previewSrc(asset.path).then((url) => {
         if (live2) setImage(url);
       });
     }
@@ -126269,8 +126453,8 @@ function FshModelFiles({ target }) {
   const roles = variant2 && variant2.files && typeof variant2.files === "object" ? Object.entries(variant2.files) : [];
   return jsxs146("span", { className: "fsh-mfiles", children: [
     jsx167(FwButton, { icon: "layers", variant: "ghost", "data-testid": "fsh-model-files", "aria-label": "Model files", "aria-expanded": open, title: "Model files", onClick: () => setOpen(!open) }, "b"),
-    open ? jsx167("div", { className: "fsh-mfiles-pop", role: "dialog", "aria-label": "Model files", "data-testid": "fsh-model-files-pop", children: !answer ? jsx167("p", { className: "fw-faint", children: "Loading…" }) : answer.error || !variant2 ? jsx167("p", { className: "fw-faint", children: "Model files are unavailable." }) : jsx167("dl", { className: "fw-meta", children: roles.flatMap(([role, files]) => {
-      const list = Array.isArray(files) ? files : [];
+    open ? jsx167("div", { className: "fsh-mfiles-pop", role: "dialog", "aria-label": "Model files", "data-testid": "fsh-model-files-pop", children: !answer ? jsx167("p", { className: "fw-faint", children: "Loading…" }) : answer.error || !variant2 ? jsx167("p", { className: "fw-faint", children: "Model files are unavailable." }) : jsx167("dl", { className: "fw-meta", children: roles.flatMap(([role, files2]) => {
+      const list = Array.isArray(files2) ? files2 : [];
       const present = list.filter((file) => file && file.present);
       const text2 = present.length ? present.map((file) => file.name).join(", ") : `Missing (${list.length} known)`;
       return [jsx167("dt", { children: role.replace(/_/g, " ") }, role + "t"), jsx167("dd", { title: list.map((file) => `${file.name}${file.present ? "" : " · missing"}`).join("\n"), "data-present": present.length ? "true" : "false", children: text2 }, role + "d")];
@@ -127471,7 +127655,7 @@ function FshSoundSection({ wb, target }) {
       setOver("");
       const paths = pathsFromDrop(event);
       if (!paths.length) {
-        wb.note("No readable file in the drop", "warn");
+        wb.note(droppedFiles(event).length ? DROP_NO_PATH : "No readable file in the drop", "warn");
         return;
       }
       void place2(paths);
@@ -127933,7 +128117,7 @@ function FilmSuiteShootView({ wb, suite }) {
   const stageJob = stage && stage.kind === "job" ? stage.job : null;
   const modelFps = Math.round(Number(wb.selectedTarget && wb.selectedTarget.output && wb.selectedTarget.output.fps) || 24);
   const shotCtx = useValue40($shootShotContext);
-  const canPlay = Boolean(stageJob && stageJob.savedPath && bridge()) && videoFailed !== stageJob.savedPath;
+  const canPlay = Boolean(stageJob && stageJob.savedPath && desktopShell()) && videoFailed !== stageJob.savedPath;
   const posterSrc = useFshPoster(ownerScope, stageJob && stageJob.savedPath ? stageJob.id : "");
   const shownTakes = takes.slice(0, FSH_TAKES_LIMIT);
   const layout2 = "none";
@@ -128221,7 +128405,7 @@ function FilmSuiteShootView({ wb, suite }) {
     }
     return jsx173("div", { className: "fim-rbox fsh-box", "data-testid": "fsh-box", "data-state": state, children: jsxs152("div", { className: "fsh-media", children: [
       jsx173(FshPoster, { ownerScope, id: stageJob.id, alt: stagePrompt }, "p"),
-      jsx173("span", { className: "fsh-note", "data-testid": "fsh-noplay", children: bridge() ? "The clip file could not be opened here. Show it in its folder instead." : "Playback needs the Hermes desktop app." }, "n")
+      jsx173("span", { className: "fsh-note", "data-testid": "fsh-noplay", children: desktopShell() ? "The clip file could not be opened here. Show it in its folder instead." : "Playback needs the Hermes desktop app." }, "n")
     ] }) });
   })();
   const stageActions = stageJob ? [
@@ -130136,12 +130320,12 @@ function FilmSuiteWorkspace({ startOpen, chooser, decision, windowId }) {
     setModule("shoot");
     setShootEditor(Date.now());
   }, [setModule]);
-  const openFileLarge = useCallback((id, files, trigger) => {
-    if (module === "timeline" && openFileInCut((files || []).find((f2) => f2 && f2.id === id))) {
+  const openFileLarge = useCallback((id, files2, trigger) => {
+    if (module === "timeline" && openFileInCut((files2 || []).find((f2) => f2 && f2.id === id))) {
       setScreen("module");
       return;
     }
-    setLightbox({ id, files, returnTo: trigger || null, n: Date.now() });
+    setLightbox({ id, files: files2, returnTo: trigger || null, n: Date.now() });
   }, [module]);
   const wakeShoot = useCallback(() => setMounted((current2) => current2.shoot ? current2 : { ...current2, shoot: true }), []);
   useEffect(() => {
@@ -130439,7 +130623,6 @@ import { PALETTE_AREA as PALETTE_AREA3, ROUTES_AREA, SIDEBAR_NAV_AREA, host as h
 import { jsx as jsx179 } from "react/jsx-runtime";
 var rest = null;
 var store = null;
-var os = null;
 var contributeFn = null;
 var appActionFn = null;
 function contribute(list) {
@@ -130448,7 +130631,6 @@ function contribute(list) {
   return typeof off === "function" ? off : () => {
   };
 }
-var canRevealPath = () => Boolean(os && typeof os.revealPath === "function");
 function revealPath(path) {
   if (!path || !canRevealPath()) return Promise.resolve(false);
   return Promise.resolve(os.revealPath(path)).catch(() => false);
@@ -130462,7 +130644,7 @@ var runtime_default = {
     rest = ctx.rest;
     Promise.resolve().then(() => rest("/projects/image-producer/session", { method: "POST" })).catch(() => {
     });
-    os = ctx.os || null;
+    setSdkDoors(ctx);
     contributeFn = typeof ctx.registerMany === "function" ? (list) => ctx.registerMany(list) : null;
     appActionFn = typeof ctx.runAction === "function" ? (id) => ctx.runAction(id) : null;
     migratePluginStorage();

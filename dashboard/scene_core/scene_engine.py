@@ -73,7 +73,7 @@ def locate() -> dict[str, Any] | None:
 
 def comfy_queue_state() -> str:
     try:
-        with urllib.request.urlopen(_endpoint.comfy_origin() + "/queue", timeout=1.5) as response:  # noqa: S310 - configured ComfyUI address
+        with _endpoint._opener.open(_endpoint.comfy_origin() + "/queue", timeout=1.5) as response:  # noqa: S310 - configured ComfyUI address, no redirect
             body = json.loads(response.read().decode("utf-8"))
     except Exception:  # noqa: BLE001 - unknown means "do not assume idle"
         return "unreachable"

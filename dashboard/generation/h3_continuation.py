@@ -423,7 +423,7 @@ def upload_output(data: bytes, filename: str, *, opener: Callable[..., Any] | No
     body, boundary = _multipart({"type": "output", "subfolder": STAGED, "overwrite": "true"}, filename, data)
     request = urllib.request.Request(_endpoint.comfy_origin() + "/upload/image", data=body, method="POST",
                                      headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-    with (opener or urllib.request.urlopen)(request, timeout=300) as response:
+    with (opener or _endpoint._opener.open)(request, timeout=300) as response:
         answer = json.loads(response.read(1 << 20).decode("utf-8"))
     if not isinstance(answer, dict) or answer.get("name") != filename or answer.get("type") != "output" \
             or answer.get("subfolder") != STAGED:
@@ -457,7 +457,7 @@ def release_staged(paths: list[str], *, opener: Callable[..., Any] | None = None
         request = urllib.request.Request(_endpoint.comfy_origin() + "/obvpm/h3/delete_take", data=body, method="POST",
                                          headers={"Content-Type": "application/json"})
         try:
-            with (opener or urllib.request.urlopen)(request, timeout=30) as response:
+            with (opener or _endpoint._opener.open)(request, timeout=30) as response:
                 answer = json.loads(response.read(1 << 16).decode("utf-8"))
         except Exception:  # noqa: BLE001 - a staged copy that is already gone is fine
             continue

@@ -90,7 +90,7 @@ def sha256(path: Path) -> str:
 
 def run(cmd: list[str]) -> None:
     print("+", " ".join(cmd), flush=True)
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, env=engine_env.engine_process.child_env())
 
 
 def install_packages(uv: str, py: str, cpu_only: bool, runner=None) -> dict:
@@ -188,7 +188,7 @@ def main(argv: list[str]) -> int:
     copy_vendor(edir, edir / "src")
     shutil.copyfile(CORE / "scene_runner.py", edir / "runner.py")
     probe = subprocess.run([py, "-c", "import torch, torchvision, transformers, sys; print(torch.__version__, torch.cuda.is_available(), sys.version.split()[0], transformers.__version__)"],
-                           capture_output=True, text=True, check=True).stdout.split()
+                           capture_output=True, text=True, check=True, env=engine_env.engine_process.engine_env()).stdout.split()
     record = {
         "schema": "studio.scene-engine/1",
         "python": py,
@@ -212,7 +212,8 @@ def main(argv: list[str]) -> int:
     if args.smoke:
         req = {"schema": "studio.scene-runner-request/1", "video_path": args.smoke, "device": "cpu", "parts": ["motion", "cuts"],
                "weights": record["weights"], "weights_sha256": record["weights_sha256"], "comfy_root": record["comfy_root"]}
-        out = subprocess.run([py, str(edir / "runner.py")], input=json.dumps(req), capture_output=True, text=True)
+        out = subprocess.run([py, str(edir / "runner.py")], input=json.dumps(req), capture_output=True, text=True,
+                             env=engine_env.engine_process.engine_env())
         if out.returncode != 0:
             print(out.stderr[-2000:], file=sys.stderr)
             return out.returncode
