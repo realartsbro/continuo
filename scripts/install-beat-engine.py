@@ -32,7 +32,8 @@ RUNNER_SRC = (ROOT / "backend" / "film-suite" / "dashboard" if (ROOT / "backend"
 _env_spec = importlib.util.spec_from_file_location("film_suite_engine_env", Path(__file__).resolve().parent / "engine_env.py")
 engine_env = importlib.util.module_from_spec(_env_spec)
 _env_spec.loader.exec_module(engine_env)
-# Packages: ONLY the hash lock scripts/engine-locks/beat-this.txt (CUDA) or .cpu.txt (--cpu-only), compiled from
+# Packages: ONLY the hash lock engine_env.lock_path picks: scripts/engine-locks/beat-this.txt (CUDA), .cpu.txt
+# (--cpu-only), .macos.txt (macOS) or .linux.txt (CUDA on Linux, plus torch's CUDA runtime wheels), compiled from
 # the live venv the measurements ran on (scripts/engine_env.py lock).  Change it only with a new measurement.
 ENGINE = "beat-this"
 PYTHON = engine_env.read_lock(engine_env.lock_path(ENGINE))[0]["python"]  # the exact interpreter of the lock

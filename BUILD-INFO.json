@@ -15,10 +15,10 @@
     "tests",
     "README.md"
   ],
-  "files": 498,
+  "files": 501,
   "license": "MIT",
   "requires_hermes": ">=0.22.7",
   "schema": "film-suite.catalog-build/1",
-  "source_commit": "a11a5475804bdb39167c535ba5872afdbb5173dd",
+  "source_commit": "7bb95918b1f51fdf2e0d2329073647ecc63f15e5",
   "tools": 212
 }

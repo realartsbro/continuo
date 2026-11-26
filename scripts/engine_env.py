@@ -2,6 +2,7 @@
 
     python scripts/engine_env.py lock <engine-dir> <engine> [--out-dir scripts/engine-locks] [--exclude-newer ISO]
     python scripts/engine_env.py verify <engine-dir> <lock>
+    python scripts/engine_env.py linux-lock <engine> [--out-dir scripts/engine-locks]
 
 The measured quality of an analysis engine (song, scene, beat) holds only for the exact package set
 that produced it.  So each engine has ONE lock per torch flavour in ``scripts/engine-locks``:
@@ -10,6 +11,8 @@ that produced it.  So each engine has ONE lock per torch flavour in ``scripts/en
                           of its ``--hash=sha256:`` lines (``uv pip compile --generate-hashes``)
     <engine>.cpu.txt      the same versions with the torch family's local tag ``+cpu``
     <engine>.macos.txt    macOS on Apple Silicon: the same versions, the torch family without a local tag
+    <engine>.linux.txt    Linux x86_64 with CUDA: the same versions plus the CUDA runtime wheels that torch
+                          ``+cu128`` requires only on Linux (nvidia-*, cuda-*, triton)
     <engine>.freeze.txt   the ``uv pip freeze`` of the live venv the locks were compiled from
 
 The lock header carries what the install depends on (``# key: value``): engine, python, uv,
@@ -40,12 +43,15 @@ LOCK_DIR = ROOT / "scripts" / "engine-locks"
 ENGINES = ("song-analysis", "scene-analysis", "beat-this")
 PYPI = "https://pypi.org/simple"
 TORCH_INDEX = {"cuda": "https://download.pytorch.org/whl/cu128", "cpu": "https://download.pytorch.org/whl/cpu",
-               "macos": "https://download.pytorch.org/whl/cpu"}
+               "macos": "https://download.pytorch.org/whl/cpu", "linux": "https://download.pytorch.org/whl/cu128"}
 INDEX_STRATEGY = "unsafe-best-match"  # as the installers have always resolved: torch from the PyTorch index
 PLATFORM = "x86_64-pc-windows-msvc"
 # macOS on Apple Silicon (PR #2 by @ShawnCRMer): the same versions, the torch family without a local tag (the macOS
 # wheels carry Metal / MPS); one lock, MPS or CPU is chosen at run time.
-PLATFORMS = {"cuda": PLATFORM, "cpu": PLATFORM, "macos": "aarch64-apple-darwin"}
+PLATFORMS = {"cuda": PLATFORM, "cpu": PLATFORM, "macos": "aarch64-apple-darwin", "linux": "x86_64-unknown-linux-gnu"}
+# Linux only: torch +cu128 depends on its CUDA runtime as separate wheels (on Windows they ship inside torch).
+# A Linux lock is the CUDA set plus exactly these; any other difference is still refused.
+LINUX_RUNTIME = re.compile(r"^(nvidia-[a-z0-9-]+|cuda-[a-z0-9-]+|triton)$")
 TORCH_FAMILY = ("torch", "torchaudio", "torchvision")
 HEADER_KEYS = ("engine", "python", "uv", "index-url", "extra-index-url", "index-strategy", "exclude-newer",
                "platform", "source", "exceptions")
@@ -160,14 +166,20 @@ def uv_version(uv: str = "uv", runner: Runner = _run) -> str:
 
 
 # ---------------------------------------------------------------- lock files
-def lock_path(engine: str, cpu_only: bool = False, lock_dir: Path = LOCK_DIR, *, macos: bool | None = None) -> Path:
-    """The lock for this machine: ``<engine>.macos.txt`` on macOS (``cpu_only`` does not apply there), else
-    ``<engine>.cpu.txt`` / ``<engine>.txt``.  ``macos`` None = this machine (``sys.platform``, read per call)."""
+def lock_path(engine: str, cpu_only: bool = False, lock_dir: Path = LOCK_DIR, *, macos: bool | None = None,
+              linux: bool | None = None) -> Path:
+    """The lock for this machine: ``<engine>.macos.txt`` on macOS (``cpu_only`` does not apply there),
+    ``<engine>.linux.txt`` for CUDA on Linux, else ``<engine>.cpu.txt`` / ``<engine>.txt``.  ``macos`` and
+    ``linux`` None = this machine (``sys.platform``, read per call)."""
     if engine not in ENGINES:
         raise EnvError(f"unknown engine {engine!r} (one of {', '.join(ENGINES)})")
     if sys.platform == "darwin" if macos is None else macos:
         return Path(lock_dir) / f"{engine}.macos.txt"
-    return Path(lock_dir) / (f"{engine}.cpu.txt" if cpu_only else f"{engine}.txt")
+    if cpu_only:
+        return Path(lock_dir) / f"{engine}.cpu.txt"
+    if sys.platform.startswith("linux") if linux is None else linux:
+        return Path(lock_dir) / f"{engine}.linux.txt"
+    return Path(lock_dir) / f"{engine}.txt"
 
 
 def read_lock(path: Path) -> tuple[dict, dict]:
@@ -239,7 +251,8 @@ def compile_lock(engine: str, pins: dict, exceptions: list, out: Path, *, flavou
         "engine": engine, "python": python, "uv": uv_ver, "index-url": PYPI, "extra-index-url": TORCH_INDEX[flavour],
         "index-strategy": INDEX_STRATEGY, "exclude-newer": exclude_newer, "platform": PLATFORMS[flavour],
         "source": f"live venv freeze ({engine}.freeze.txt)" + {"cpu": "; torch family +cu128 -> +cpu",
-                                                               "macos": "; torch family +cu128 -> no local tag"}.get(flavour, ""),
+                                                               "macos": "; torch family +cu128 -> no local tag",
+                                                               "linux": "; plus torch's Linux CUDA runtime wheels"}.get(flavour, ""),
         "exceptions": "; ".join(exceptions) if exceptions else "none",
     }
     lines = ["# Film Suite engine lock: install ONLY with scripts/engine_env.py install_argv (--require-hashes).",
@@ -248,6 +261,8 @@ def compile_lock(engine: str, pins: dict, exceptions: list, out: Path, *, flavou
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n" + body.replace("\r\n", "\n"), encoding="utf-8", newline="\n")
     got = lock_pins(out)
+    if flavour == "linux":  # the Linux CUDA runtime is the one allowed addition
+        got = {n: v for n, v in got.items() if n in pins or not LINUX_RUNTIME.match(n)}
     if got != pins:
         diff = sorted(set(got.items()) ^ set(pins.items()))
         raise EnvError(f"{out.name}: the compiled lock is not the frozen set: {diff[:8]}")
@@ -256,7 +271,7 @@ def compile_lock(engine: str, pins: dict, exceptions: list, out: Path, *, flavou
 
 def write_locks(engine: str, engine_dir: Path, *, exclude_newer: str | None = None, lock_dir: Path = LOCK_DIR,
                 uv: str = "uv", runner: Runner = _run) -> list[Path]:
-    """Freeze the live venv (read-only) and write the freeze, the CUDA lock, the CPU twin and the macOS twin."""
+    """Freeze the live venv (read-only) and write the freeze, the CUDA lock, the CPU, macOS and Linux twins."""
     py = venv_python(Path(engine_dir) / "venv")
     pins, exceptions = live_freeze(py, uv, runner)
     pyver, uvver = python_version(py, runner), uv_version(uv, runner)
@@ -268,11 +283,23 @@ def write_locks(engine: str, engine_dir: Path, *, exclude_newer: str | None = No
                       + "\n".join(freeze_lines(pins) + [f"# exception: {e}" for e in exceptions]) + "\n",
                       encoding="utf-8", newline="\n")
     out = [freeze]
-    for flavour, set_ in (("cuda", pins), ("cpu", cpu_twin(pins)), ("macos", macos_twin(pins))):
-        out.append(compile_lock(engine, set_, exceptions, lock_path(engine, flavour == "cpu", lock_dir, macos=flavour == "macos"),
+    for flavour, set_ in (("cuda", pins), ("cpu", cpu_twin(pins)), ("macos", macos_twin(pins)), ("linux", pins)):
+        out.append(compile_lock(engine, set_, exceptions, lock_path(engine, flavour == "cpu", lock_dir,
+                                                                    macos=flavour == "macos", linux=flavour == "linux"),
                                 flavour=flavour,
                                 python=pyver, uv_ver=uvver, exclude_newer=stamp, uv=uv, runner=runner))
     return out
+
+
+def write_linux_lock(engine: str, *, lock_dir: Path = LOCK_DIR, uv: str = "uv", runner: Runner = _run) -> Path:
+    """Write ``<engine>.linux.txt`` from the committed CUDA lock: its pins, python and exclude-newer.  The header
+    names the uv that compiled THIS lock, not the one of the CUDA lock."""
+    cuda = lock_path(engine, False, lock_dir, macos=False, linux=False)
+    header, _reqs = read_lock(cuda)
+    exceptions = [] if header["exceptions"] == "none" else header["exceptions"].split("; ")
+    return compile_lock(engine, lock_pins(cuda), exceptions, lock_path(engine, False, lock_dir, macos=False, linux=True),
+                        flavour="linux", python=header["python"], uv_ver=uv_version(uv, runner),
+                        exclude_newer=header["exclude-newer"], uv=uv, runner=runner)
 
 
 # ---------------------------------------------------------------- install + receipt
@@ -355,8 +382,14 @@ def main(argv: list[str], runner: Runner = _run) -> int:
     lk.add_argument("engine", choices=ENGINES)
     lk.add_argument("--out-dir", type=Path, default=LOCK_DIR)
     lk.add_argument("--exclude-newer", default=None, help="ISO-8601 UTC cut-off (default: now)")
+    ll = sub.add_parser("linux-lock", help="write <engine>.linux.txt from the committed CUDA lock")
+    ll.add_argument("engine", choices=ENGINES)
+    ll.add_argument("--out-dir", type=Path, default=LOCK_DIR)
     args = ap.parse_args(argv)
     uv = shutil.which("uv") or "uv"
+    if args.cmd == "linux-lock":
+        print("wrote", write_linux_lock(args.engine, lock_dir=args.out_dir, uv=uv, runner=runner))
+        return 0
     if args.cmd == "verify":
         code, lines = verify(args.engine_dir, args.lock, uv, runner)
         print("\n".join(lines))

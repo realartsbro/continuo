@@ -52,7 +52,8 @@ engine_models = importlib.util.module_from_spec(_models_spec)
 _models_spec.loader.exec_module(engine_models)
 RUNNER_SRC = (ROOT / "backend" / "film-suite" / "dashboard" if (ROOT / "backend" / "film-suite" / "dashboard").is_dir() else ROOT / "dashboard") / "music_core" / "song_map_runner.py"
 SCHEMA = "studio.song-engine/1"
-# Packages: ONLY the hash lock scripts/engine-locks/song-analysis.txt (CUDA) or .cpu.txt (--cpu-only), compiled from
+# Packages: ONLY the hash lock engine_env.lock_path picks: scripts/engine-locks/song-analysis.txt (CUDA), .cpu.txt
+# (--cpu-only), .macos.txt (macOS) or .linux.txt (CUDA on Linux, plus torch's CUDA runtime wheels), compiled from
 # the live venv the measurements ran on (scripts/engine_env.py lock).  Change it only with a new measurement.
 ENGINE = "song-analysis"
 PYTHON = engine_env.read_lock(engine_env.lock_path(ENGINE))[0]["python"]  # the exact interpreter of the lock
