@@ -1,6 +1,6 @@
 """The Qwen prompt-enhancer guard, shared by the area-edit route and the catalog targets (no imports, no I/O).
 
-Enhancer guard (p11-imgb, owner's live proof 31.10.): the enhancer's rewrite (cleaned by RegexReplace 516)
+Enhancer guard (p11-imgb, maintainer live proof): the enhancer's rewrite (cleaned by RegexReplace 516)
 is sometimes token soup ("a a the a the ...", 6 of 29 runs, all Restyle; the seed is fixed, so a given
 picture + text collapses every time) or grounding JSON ("bbox_2d"). With the enhancer on, the compiled
 graph gains two NATIVE nodes (the pinned graph and its sha stay unchanged): RegexMatch (re.search,

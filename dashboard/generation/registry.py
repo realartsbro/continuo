@@ -757,8 +757,7 @@ def _reference_descriptor() -> dict[str, Any]:
     return {"capabilities": {"generated_audio": True, "cancel": False}, "cancel_notice": "GMI Cloud cannot stop a take once it has started", "eta_label": "about 3-6 min", "control_metadata": metadata}
 
 
-# Lane p5-vid (VID-020, charter Video decision 2; artist 27.10.: "auf flux3(video) und wan koennen wir vorerst
-# verzichten, weil lokal unser fokus ist, bezahlen wollen wir nichts"): the paid video targets FLUX 3 (Nous Portal)
+# Lane p5-vid (VID-020, charter Video decision 2; maintainer review): the paid video targets FLUX 3 (Nous Portal)
 # and Wan 3.0 (GMI Cloud) are neither offered nor accepted. A module constant on purpose: no env var, no setting,
 # no tool reaches it; bringing a paid target back is a new decision of the artist. The provider code stays.
 PAID_VIDEO_TARGETS_OFFERED = False

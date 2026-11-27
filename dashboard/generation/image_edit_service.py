@@ -232,7 +232,7 @@ def soft_mask(mask: Any, crop: list[int], work: list[int] | tuple[int, int], spe
     return work_mask, full
 
 
-# w23-img (IMG-129, owner decision 06.11.): small objects at the selection edge stay in the picture (a small object at
+# w23-img (IMG-129, maintainer decision): small objects at the selection edge stay in the picture (a small object at
 # the harbour oval's bottom edge was repainted by every w22 render, ~50 of 255 mean change). An object is a compact
 # blob that stands out from its row (|luminance - the row's running median over 30 % of the selection width| > 24),
 # at most a quarter of the selection's width and height, in the band from 10 % above the selection's bottom to the end
@@ -288,7 +288,7 @@ def edge_objects(source: Any, mask: Any, spec: Mapping[str, Any]) -> Any:
         if area < EDGE_OBJECT_MIN_PX or bw > EDGE_OBJECT_MAX_REL * sw or bh > EDGE_OBJECT_MAX_REL * sh or box[0].start == 0:
             continue
         if int((blob & inside[box]).sum()) * 2 > area:
-            continue  # mostly inside the selection: the artist selected it (owner rule 06.11.)
+            continue  # mostly inside the selection: the artist selected it (maintainer rule)
         keep[box] |= blob
     if not keep.any():
         return None
@@ -543,7 +543,7 @@ def _color_match(patch: Any, reference: Any, keep: Any) -> Any:
 # shifted tone. Wave 10 ramped the paste in over 4 % of the crop INSIDE a hard selection; that cross-faded the
 # OLD picture back in (live 111 / wave 10: a floating mast top and a dot above the new ship at Replace 100 %)
 # and left a tone arc at a soft ellipse in a smooth sky (step 2.38 vs the picture's own 0.86). Charter image,
-# owner decision 11 (31.10.): after the colour match the output is joined in the gradient domain: a
+# owner decision 11: after the colour match the output is joined in the gradient domain: a
 # correction that is harmonic inside the selection and equals (picture - matched output) on the one-pixel
 # ring just OUTSIDE it (a membrane / Poisson seamless clone with the output's own gradients). The composite
 # meets the picture at the edge with no step and keeps the model's detail inside; alpha stays the mask, so
@@ -551,7 +551,7 @@ def _color_match(patch: Any, reference: Any, keep: Any) -> Any:
 MEMBRANE_COARSE_MIN = 24     # the pyramid stops when the shorter side is at most this
 MEMBRANE_ITERS_COARSE = 200  # Jacobi sweeps on the coarsest level
 MEMBRANE_ITERS_FINE = 24     # Jacobi sweeps per finer level (each starts from the upsampled coarse answer)
-# Local membrane (owner decision 11, refined 31.10. after p11-img's real runs): the ring difference is split
+# Local membrane (owner decision 11, refined after p11-img's real runs): the ring difference is split
 # into a TONE part, clipped to the ring median +/- MEMBRANE_TONE_CLIP per channel and joined over the whole
 # area, and a LOCAL residual (diff - tone) joined the same way but faded linearly to 0 within
 # MEMBRANE_LOCAL_PX of the edge. Without the split one outlier on the ring (a dark quay or the new hull
@@ -642,7 +642,7 @@ def unmasked_hash(rgb: Any, mask: Any) -> str:
     return hashlib.sha256(np.ascontiguousarray(rgb[keep]).tobytes()).hexdigest()
 
 
-# w24-edit (owner acceptance finding 07.11. 10:40): Restyle inside a mask (Sky) is pasted like Photoshop's Sky
+# w24-edit (maintainer acceptance finding): Restyle inside a mask (Sky) is pasted like Photoshop's Sky
 # Replacement: through the matte, with the output REGISTERED to the picture and the edge DECONTAMINATED. Measured on the
 # owner's run (Qwen 2.1 Restyle 70 %, seed 11): the model redraws the whole crop shifted 9-15 px (its own reframing, a
 # little more to the right edge), so the new sky beside the mast carried the model's own mast and sails (a ghost mast,

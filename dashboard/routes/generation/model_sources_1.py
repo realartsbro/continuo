@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-# --- Model sources (lane w5-backend item 5; artist decision 23.10.: weights never in the repo) ---------
+# --- Model sources (lane w5-backend item 5; maintainer decision: weights never in the repo) ---------
 #
 # workflows/model-sources.json names, per workflow, every model file it loads and, per file, where it
 # comes from: url (Hugging Face resolve/<commit sha>/..., pinned, never main), bytes, sha256 (of the local

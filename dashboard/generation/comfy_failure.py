@@ -13,7 +13,7 @@ from typing import Any
 
 OUT_OF_MEMORY = "out_of_memory"
 # w28-fix item 3 (IMG-220): "hostbuf_file_reader_read failed" is ComfyUI's dynamic-VRAM weight prefetch running out of
-# pinned host memory (owner's window 08.11.: P-H3-Image beside a 26 GB model already loaded, 10 GB RAM free; /free fixed it).
+# pinned host memory (maintainer window: P-H3-Image beside a 26 GB model already loaded, 10 GB RAM free; /free fixed it).
 _MEMORY = re.compile(r"out ?of ?memory|not enough memory|outofmemory|failed to allocate|cannot allocate|defaultcpuallocator|hostbuf_file_reader", re.I)
 
 

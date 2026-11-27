@@ -100,7 +100,7 @@ ASPECT_RATIOS = {
 # (1344x768 at 16:9), sizes in steps of 32. Native is the official node's adapt_canvas
 # (ComfyUI/comfy_extras/nodes_minimax_h3.py:32-34,54-67, copied below as _adapt_canvas); Draft is the same rule with
 # the short edge scaled to the Draft area. Saved shots, chains and recipes still carry the old values 0.5 / 1.0:
-# they are read as Draft / Native (owner 31.10.: a mapping on read, never a refusal).
+# they are read as Draft / Native (maintainer review: a mapping on read, never a refusal).
 # One list (lane p13-vid VID-005): the numbers come from h3_megapixels (official aliases + stored values).
 MEGAPIXELS = tuple(H3_MP.OFFICIAL_ALIASES)
 SIZE_TIERS = {value: H3_MP.any_tier(value) for value in MEGAPIXELS}

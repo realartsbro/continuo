@@ -703,7 +703,7 @@ def _view_result(store: Any, window_id: str, action_id: str, ack: dict[str, Any]
     }
 
 
-# Lane w27-rows item 3 (P2 IMG-213; owner's window 08.11.: a picture Hermes started with continuo_image_action generate
+# Lane w27-rows item 3 (P2 IMG-213; maintainer window: a picture Hermes started with continuo_image_action generate
 # was listed by "artist"). A bridge action carries its origin: this tool IS Hermes. The page sends the submit (its
 # route call has no agent marker, so the submit noted "artist" first); the acknowledged action names the job it
 # started, and that note replaces the page's one in the same job-authors table /jobs/list reads (job_authors_1.py),
@@ -1247,7 +1247,7 @@ def _handle_suite_action(args: dict[str, Any], **_kwargs: Any) -> str:
         followed = None
         if requested:
             named = [row for row in fresh if row["window_id"] == requested]
-            # Lane w24-rest (owner 07.11. 09:47): the page reconnected under a new window id by itself (a renderer reload
+            # Lane w24-rest (maintainer review): the page reconnected under a new window id by itself (a renderer reload
             # mints a new id) and the action on the old id answered "No connected Continuo page". A gone id with exactly
             # ONE connected page targets that page and the answer names it (followed_from); two or more stay ambiguous.
             if not named and len(fresh) == 1:

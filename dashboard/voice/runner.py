@@ -1,7 +1,7 @@
 """Speak one line N times: the take runner (lane fs-voice).
 
 Each take is one ledger row of the Shoot job store (generation/job_store.py),
-exactly as out/fs-msnd-SPEC-generated-sound.md asks, so Media lists it as a
+so Media lists it as a
 sound (kind audio) and its recipe sidecar is the take's recipe link:
 
 1. ``create_or_get_job`` (state queued, ``save_to`` = <project folder>/Voice/<line>/<name>.flac,

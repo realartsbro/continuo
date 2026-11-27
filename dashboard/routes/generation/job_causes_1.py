@@ -144,7 +144,7 @@ def _job_refusals_for_scope(project_id: str | None, limit: int) -> list[dict[str
         finally:
             connection.close()
     return [{
-        # w24-rest (owner 06.11.): refused before sending is not a failed run: state refused, never counted as failed.
+        # w24-rest (maintainer review): refused before sending is not a failed run: state refused, never counted as failed.
         "module": "shoot", "job_id": job_id, "state": "refused", "raw_state": "refused", "label": label or "",
         "target_id": target_id, "created_at": float(at), "started_at": None, "finished_at": float(at), "error": cause,
         "reason_code": _job_reason_code(code),

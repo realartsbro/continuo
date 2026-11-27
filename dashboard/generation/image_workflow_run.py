@@ -14,7 +14,7 @@ adapter; this module adds, without touching any pinned manifest or graph:
 
 Per target the LoRA support is ``rendered`` (offered: rendered for real with a matching LoRA,
 see LORA_EVIDENCE), ``wired`` (offered: the graph takes a chain, no render record yet; lane w39-face 6,
-the artist's decision "Alle Models akzeptieren theoretisch LoRAs") or ``unsupported`` (refused
+maintainer decision) or ``unsupported`` (refused
 with the reason).  A request without LoRAs keeps the exact
 historical request bytes (no ``loras`` key), so every persisted job validates unchanged.
 """
@@ -236,7 +236,7 @@ def member_controls(controls: Mapping[str, Any], seed_default: int, index: int) 
 SIDE_LIMIT_PX: dict[str, int] = {"ideogram4-create-v1": 2048}
 
 
-# w46-c (IMG-228): with a reference picture MiniMax-H3-Image turns soft above about 4 MP (the artist's renders of 13 Nov);
+# w46-c (IMG-228): with a reference picture MiniMax-H3-Image turns soft above about 4 MP (measured on renders);
 # the page's Megapixels line and the submit warning read this one fact. Never a cap: nothing is lowered or refused.
 SOFT_WITH_REFERENCES_MP = 4.0
 SOFT_WITH_REFERENCES: frozenset[str] = frozenset({"minimax-h3-image-create-v1"})

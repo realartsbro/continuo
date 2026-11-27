@@ -624,7 +624,7 @@ SNAP_AFTER_S = 0.3
 
 
 def vocal_onsets(vocals: str | None) -> list[float]:
-    """Where singing starts in the vocal stem (owner's measurement, cache/scratch/intb/vocon2.py): the 20 ms RMS rises
+    """Where singing starts in the vocal stem (measured): the 20 ms RMS rises
     above max - 28 dB after >= 0.12 s below max - 36 dB.  [] when the stem cannot be read."""
     try:
         import numpy as np

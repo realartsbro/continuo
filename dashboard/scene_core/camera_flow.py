@@ -1,6 +1,6 @@
 """Camera transfer, measured (lane w9-chain item 4): studio.camera-flow/1.
 
-The measure is fs-cam's camflow (cache/scratch/fs/cam/camflow.py), ported with its definitions: features are
+The measure is the fs-cam camflow, ported with its definitions: features are
 tracked between frames i and i+STEP (STEP = 2; Shi-Tomasi corners, pyramidal Lucas-Kanade with a forward-backward
 check < 1 px), a similarity transform about the frame centre is fitted with RANSAC (reprojection 2 px) and
 accumulated over the clip on a 640 px wide grey proxy:

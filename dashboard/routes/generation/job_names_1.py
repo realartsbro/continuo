@@ -43,7 +43,7 @@ def _job_workflow_labels() -> dict[str, str]:
         if target_id in labels:
             continue  # the registry names its own targets (each workflow its own label)
         labels[target_id] = named[0][0] + " · " + named[0][1] if len(named) == 1 else (named[0][0] if len(family_names) == 1 else target_id)
-    # Lane w27-rows item 2 (P1 IMG-216; owner's window 08.11.: a P-H3-Image Create job read "p-h3-image-lora-t2i-v1"):
+    # Lane w27-rows item 2 (P1 IMG-216; maintainer window: a P-H3-Image Create job read "p-h3-image-lora-t2i-v1"):
     # an Image workflow the model catalog offers through its workflow descriptor (no suite target) is named by its
     # family, as the Image page's Model field names it: the family's one Create variant is the family alone
     # ("P-H3-Image", "FLUX.2 Klein"), any other variant family + variant ("P-H3-Image Edit", "Krea 2 Identity Edit V2").

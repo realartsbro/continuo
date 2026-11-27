@@ -53,7 +53,7 @@ def _gap(frames: int, rate: Fraction) -> dict[str, Any]:
 def native_path(path: Path) -> str:
     """``C:/a b/c.mp4``: the absolute path with forward slashes, no URL scheme, no percent-encoding.
     DaVinci Resolve 21.0.3 refuses an OTIO whose target_url is ``file:///C:/...`` (import returns
-    None) and imports the plain path (out/fs-tlx2/EXPORT-PROOF-RESOLVE.md, OTIO rows)."""
+    None) and imports the plain path."""
     text = str(Path(path).resolve()).replace("\\", "/")
     return text[4:] if text.startswith("//?/") else text
 

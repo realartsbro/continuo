@@ -36,7 +36,7 @@ PAGES = ("start", "script", "music", "image", "shoot", "timeline", "deliver")
 # The approved names the bar prints for the internal ids (Shoot -> Video, Music -> Audio, Timeline -> Cut).
 PAGE_LABELS = {"start": "Start", "script": "Script", "music": "Audio", "image": "Image", "shoot": "Video", "timeline": "Cut", "deliver": "Deliver"}
 # open_project / no_project (FRM-028): the Start screen's Recent tile and Loose work, the same handlers as their clicks.
-# New project and Open folder need the artist's own folder pick and have no action (consent rule, 31.07.).
+# New project and Open folder need the artist's own folder pick and have no action (consent rule).
 ACTIONS = frozenset({"open_page", "media_filter", "media_select", "media_toggle", "open_project", "no_project"})
 # lane w17-pcut (CUT-121): the Cut page's docked inspector, hidden or shown like its ✕ / Ctrl+[ / bar button.
 ACTIONS = ACTIONS | frozenset({"cut_inspector"})

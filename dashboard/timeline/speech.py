@@ -1,7 +1,7 @@
 """Speech regions of a sound file for dialogue ducking (lane fs-duck).
 
-The detector is Silero VAD 6.2 (MIT, ONNX, CPU through onnxruntime), chosen by measurement
-(``out/fs-duck-DESIGN.md``): on German dialogue over real effects it reaches F1 0.944 and
+The detector is Silero VAD 6.2 (MIT, ONNX, CPU through onnxruntime), chosen by measurement:
+on German dialogue over real effects it reaches F1 0.944 and
 triggers on effects alone in 0.22 % of frames, against 57 % for the 200-3500 Hz band energy key.
 It is installed beside Beat This! in ``<LOCALAPPDATA>/hermes/film-suite/engines/silero-vad``
 (``silero_vad.onnx`` + ``engine.json`` with its sha256); ``FILM_SUITE_SPEECH_ENGINE_DIR`` overrides.

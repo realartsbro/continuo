@@ -862,7 +862,7 @@ def load_evidence(path: Path | None = None) -> dict[str, Any]:
     return {"schema": EVIDENCE_SCHEMA, "variants": variants, "edit_targets": edits}
 
 
-# w39-p2-open (the artist, 11 Nov: "es gibt keinen Grund ihn davor zu schuetzen"): a wired model without a render
+# w39-p2-open (maintainer review): a wired model without a render
 # record is offered; this fact is only its tooltip (and the agent's reason), never a refusal.
 UNRENDERED = "No render through the Suite on record"
 

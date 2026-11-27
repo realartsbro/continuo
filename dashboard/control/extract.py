@@ -2,7 +2,7 @@
 
 One source (a finished take, a published picture, or a file of the approved folders) gives up to five
 layers: pose, depth, edges, line art and camera move. The extractors are the ones measured in
-out/fs-ctrl-CHOICE.md:
+our own comparison:
 
 * pose   SDPose + RT-DETR (ComfyUI core nodes, template settings), drawn frames + keypoint JSON;
 * depth  Depth Anything V2 Large (comfyui_controlnet_aux), then levelled per frame on static pixels;
@@ -764,7 +764,7 @@ def handoff(item: Mapping[str, Any], use: str) -> dict[str, Any]:
 
     ``motion_guide``: the References target's control_video slot takes the layer clip by its path.
     ``camera``: the camera sentence goes into the prompt's camera part.
-    ``image_control``: a picture layer for Image's control input (spec out/fs-ctrl-SPEC-image-control.md)."""
+    ``image_control``: a picture layer for Image's control input."""
     layer = item.get("layer")
     if use == "motion_guide":
         if item.get("kind") != "video" or layer not in ("pose", "depth", "edges", "lineart"):

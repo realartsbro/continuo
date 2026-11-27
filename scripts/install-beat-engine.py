@@ -11,7 +11,7 @@ Creates ``%LOCALAPPDATA%/hermes/film-suite/engines/beat-this/``:
 
 Idempotent: re-running keeps a verified checkpoint and re-installs from the hash lock
 (scripts/engine-locks/beat-this.txt, --require-hashes): the exact stack the fs-beat measurement
-ran on (out/fs-beat/DECODER.md); change it only with a new measurement.  Remove the directory to uninstall; the Music tab then falls back
+ran on; change it only with a new measurement.  Remove the directory to uninstall; the Music tab then falls back
 to the librosa analyzer and says so.
 """
 from __future__ import annotations

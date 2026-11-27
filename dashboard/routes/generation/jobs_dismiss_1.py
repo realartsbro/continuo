@@ -71,7 +71,7 @@ def _jobs_dismissed_add(owner_scope: str, job_ids: list[str]) -> list[str]:
         return kept
 
 
-# Lane w25-imgfix item 2 (IMG-212, the artist's window: "1 failed" in red for a day, a Krea run that died with the
+# Lane w25-imgfix item 2 (IMG-212, seen live: "1 failed" in red for a day, a Krea run that died with the
 # previous Hermes process pinned on top across restarts). Reference: Resolve's render queue and Media Encoder's queue
 # mark a job of a session that ended as interrupted once, in its place by time; a new session starts with no red
 # count. A failed row that settled before this backend process started is ``interrupted``: listed (still Dismiss /

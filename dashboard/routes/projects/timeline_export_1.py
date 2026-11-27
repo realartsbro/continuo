@@ -391,7 +391,7 @@ async def projects_timeline_export(request: TimelineExportRequest) -> Any:
         state = jobs.start(key, request.kind, work, label=label, project_id=request.project_ref.project_id,
                            request=stored, settings=_timeline_export_settings(request))
         _TIMELINE_EXPORT_STATE.setdefault("keys", {})[state["job_id"]] = key
-        # Lane w27-rows (IMG-213 scope, owner 08.11. 09:22: tlexp jobs Hermes started read by "artist"): the new export
+        # Lane w27-rows (IMG-213 scope, maintainer review: tlexp jobs Hermes started read by "artist"): the new export
         # job's author is the caller, noted like a Shoot / Image job (job_authors_1.py; agent tool = "hermes").
         _job_authors_note([state["job_id"]])
         if request.wait_ms and state["state"] in {"waiting", "running"}:

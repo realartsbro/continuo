@@ -226,7 +226,7 @@ def insert_enhancer_guard(compiled: dict[str, Any], switch_node: str) -> None:
 # graphs and their sha stay unchanged, like node 910): 940 VAEEncode(the uploaded crop), 941 SetLatentNoiseMask(940,
 # LoadImage output 1 = the soft mask the Suite put into the crop's alpha), 943 DifferentialDiffusion on the model
 # (soft edge: each pixel denoises as far as its mask value). ComfyUI nodes.py 1567-1579 and
-# comfy_extras/nodes_differential_diffusion.py; owner prototype 31.10. (graph ids 941/942 are his).
+# comfy_extras/nodes_differential_diffusion.py; maintainer prototype (graph ids 941/942).
 LATENT_ENCODE_NODE_ID = "940"
 LATENT_MASK_NODE_ID = "941"
 LATENT_SPLIT_NODE_ID = "942"

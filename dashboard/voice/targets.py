@@ -1,6 +1,6 @@
 """Voice targets: one pinned ComfyUI graph + manifest per (engine, operation).
 
-Contract: out/fs-voice-prep/VOICE-CONTRACT.md.  A voice target is data only:
+A voice target is data only:
 
 * ``workflows/<target>/workflow-api.json`` is the pinned graph; ``manifest.json``
   (schema ``studio.voice-workflow/1``) names its sha256, the JSON pointers the

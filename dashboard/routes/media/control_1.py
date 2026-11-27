@@ -6,7 +6,7 @@ from __future__ import annotations
 # Pose, depth, edges, line art and camera move derived from one source of the scope: a finished
 # take (studio:...), a published picture (imgjob_...), or a file of the approved folders (path +
 # approved_roots). The work lives in dashboard/control (extract.py, camera.py: the measured choice
-# of out/fs-ctrl-CHOICE.md); this file is the HTTP face:
+# of extractors); this file is the HTTP face:
 #
 #   POST /media/control/extract  start one extraction (answers at once from the cache; else a job)
 #   POST /media/control/status   read / long-poll a job (wait_ms)

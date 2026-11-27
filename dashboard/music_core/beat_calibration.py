@@ -1,9 +1,6 @@
 """Calibrated thresholds for honest tempo / meter status (lane fs-beat, 2026-10-20).
 
-Every constant carries the measurement it was chosen from.  Raw rows, scripts and the
-full write-up: ``film-suite-fanout/out/fs-beat/DECODER.md`` (scratch ``fs/beat``:
-``calib.py``, ``meter.py``, ``ours_calib.py``, ``tempo_status_rows.json``,
-``meter_status_rows.json``, ``ours_calib.jsonl``).  Change a value only with a new
+Every constant carries the measurement it was chosen from.  Change a value only with a new
 measurement on held-out data, and update the numbers here in the same commit.
 """
 

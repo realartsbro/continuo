@@ -49937,7 +49937,7 @@ var init_review = __esm({
       }
     });
     reviewTheme = EditorView.baseTheme({
-      // The board's measured look (bench-kit/d1/variants.cjs .d1-ins / .d1-del): green 22 %, current 38 % + a 1 px ring.
+      // The board's measured look: green 22 %, current 38 % + a 1 px ring.
       ".sp-rev-ins": { background: "color-mix(in srgb, var(--sp-rev-ok) 22%, transparent)", borderRadius: "var(--fw-r1)", boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone" },
       ".sp-rev-ins.is-cur": { background: "color-mix(in srgb, var(--sp-rev-ok) 38%, transparent)", boxShadow: "0 0 0 1px color-mix(in srgb, var(--sp-rev-ok) 70%, transparent)" },
       ".sp-rev-del": { color: "color-mix(in srgb, var(--sp-rev-no) 80%, var(--sp-ink, currentColor))", textDecoration: "line-through", textDecorationColor: "var(--sp-rev-no)", marginRight: "1ch", userSelect: "none", cursor: "default" },
@@ -53264,7 +53264,7 @@ var FW_ICONS = {
   // Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT); all other copyright (c) Lucide Contributors 2022.
   "place": '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
   "focus-text": '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8h8"/><path d="M7 12h10"/><path d="M7 16h6"/>',
-  // Owner 28.10. (SCR-068): the scene-list toggle, the mirror of panel-r.
+  // Maintainer review (SCR-068): the scene-list toggle, the mirror of panel-r.
   "panel-l": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
   // Lane p5e-cut (cut decision 12): Fit to beats as a command icon (a clip snapped onto beat ticks).
   "fit-beats": '<rect x="4" y="4.5" width="12" height="7" rx="1"/><path d="M4 15v5M8 17v3M12 15v5M16 17v3M20 15v5"/>',
@@ -55806,7 +55806,7 @@ var MUSIC_MARKER_CSS = `
 /* w17-ainspb item 3 (Tafel 2 D2.s2a marksList): the inspector's Markers section body. A quiet list: name | time on the
    label column, the row at the playhead grey (Hermes look A), no boxes, no heading; the list scrolls inside its room. */
 .mmk{display:flex;flex-direction:column;gap:8px;min-width:0}
-/* w18-aedit2 item 3 (owner review: "12 sections" over 9 visible rows, no sign of more): the list shows every row it counts
+/* w18-aedit2 item 3 ("12 sections" over 9 visible rows, no sign of more): the list shows every row it counts
    and scrolls with the inspector (Logic's Marker List grows with its pane), never clipped inside a fixed room. */
 .mmk-list{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
 .mmk-row{display:grid;grid-template-columns:68px minmax(0,1fr);gap:8px;align-items:center;width:100%;min-height:var(--fw-ctl-h-sm);padding:0 4px;border:0;border-radius:var(--fw-r1,3px);background:transparent;color:var(--fw-t1);font:inherit;font-size:var(--fw-fs,.75rem);text-align:left;font-variant-numeric:tabular-nums;cursor:pointer}
@@ -59786,7 +59786,7 @@ function MusicProPanel({
         jsxs17("span", { className: "mpro-facts select-text", "data-testid": "mpro-facts", children: [
           // R-17: one truthful status. When tempo & meter could not be read for editing, the fact says "detected" here and the toolbar offers one "Read tempo again".
           timeOnly ? jsx22("span", { "data-testid": "mpro-length", title: "Length of the song", children: formatMusicTime(duration, true) }, "len") : null,
-          // p12-aud item 4 (AUD-019; charter audio owner decision 1 "every value once"): on the Audio page (timing) the tempo
+          // p12-aud item 4 (AUD-019; charter audio maintainer decision 1): on the Audio page (timing) the tempo
           // and the key are read once, in the header; the toolbar keeps only what the header does not say.
           timeOnly || timing ? null : jsx22("span", { title: tempoTitle, "data-testid": "mpro-tempo", children: tempo?.bpm == null ? "Tempo —" : `${timing?.unavailable ? "Tempo: detected " : ""}${musicBpmText(tempo.bpm)}` }, "tempo"),
           // p13-aud item 3 (AUD-061): on the Audio page the header's "120? BPM" is the one mark; no word without a number.
@@ -59809,7 +59809,7 @@ function MusicProPanel({
         energyRows.length ? jsxs17("label", { className: "fw-check mpro-check", title: "Energy curve under the waveform", children: [jsx22("input", { type: "checkbox", "data-testid": "mpro-energy-toggle", checked: layers.energy !== false, onChange: () => timing?.onLayers?.({ ...layers, energy: layers.energy === false }) }, "i"), jsx22("span", { children: "Energy" }, "t")] }, "en") : null,
         // One "ask again" action: when tempo & meter could not be read it reads them again, otherwise it re-runs the analysis.
         timing?.unavailable ? jsx22("button", { type: "button", className: "fim-btn mpro-btn", "data-testid": "fmu-map-retry", title: "Read tempo and meter again", onClick: timing.onRetry, children: "Read tempo again" }, "rt") : source && !timeOnly && !analyseRunning ? jsx22("button", { type: "button", className: "fim-btn mpro-btn", "data-testid": "mpro-analyse", disabled: busy2, title: "Analyse the track again", onClick: onAnalyse, children: busy2 ? "Analysing…" : "Re-analyse" }, "an") : null,
-        // p13b-aud item 2 (owner decision 01.11.): the select names the engine whose analysis is shown; another engine
+        // p13b-aud item 2 (maintainer decision): the select names the engine whose analysis is shown; another engine
         // shows its stored result without analysing, or Analyse when it has none.
         source && !timeOnly && !analyseRunning && onShowEngine && engines.length > 1 ? jsx22("select", { className: "fw-select", "data-testid": "mpro-engine-shown", "aria-label": "Beat engine shown", title: "Analysis shown", value: engine, disabled: busy2, onChange: (event) => onShowEngine(event.target.value), children: engines.map((e) => jsx22("option", { value: e.id, disabled: e.installed === false, children: e.label }, e.id)) }, "es") : null
       ] }),
@@ -70845,7 +70845,7 @@ var JOB_STATES = Object.freeze({
   uncollected: Object.freeze({ word: "Done · not loaded", glyph: "done-open", tone: "accent" }),
   failed: Object.freeze({ word: "Failed", glyph: "failed", tone: "error" }),
   cancelled: Object.freeze({ word: "Cancelled", glyph: "cancelled", tone: "quiet" }),
-  // w24-rest (owner 06.11.): a request refused before it was sent is not a job that failed: quiet, never counted.
+  // w24-rest (maintainer review): a request refused before it was sent is not a job that failed: quiet, never counted.
   refused: Object.freeze({ word: "Refused", glyph: "refused", tone: "quiet" }),
   approval: Object.freeze({ word: "Needs your OK", glyph: "approval", tone: "accent" })
 });
@@ -71928,7 +71928,7 @@ function buildTimelineModel(state, sources = []) {
     // Lane w14-cut item 3 (CUT-023; Resolve's timeline header counts every clip of the timeline, sound included):
     // picture clips + sound clips (the song on its music-role track among them) + a song on the M1 lane.
     itemCount: allClips.length + tracks.filter((t2) => t2.role === "sound").reduce((n, t2) => n + t2.items.length, 0) + (music2 && !music2.empty && !music2.onTrack ? 1 : 0),
-    // w17-pcut (CUT-124, owner 04.11.): sound clips on A1-A3 apart from the song (a song on its music track is the song).
+    // w17-pcut (CUT-124, maintainer review): sound clips on A1-A3 apart from the song (a song on its music track is the song).
     soundCount: tracks.filter((t2) => t2.role === "sound").reduce((n, t2) => n + t2.items.filter((x) => !(music2 && music2.onTrack && x.id === music2.onTrack)).length, 0)
   };
 }
@@ -94747,7 +94747,7 @@ function FilmSuiteImageModule({ visible, onOpenLarge, onOpenMedia, onOpenJobs, o
           ] : [
             // WP3 T1: the runs-on chip shared with Shoot; Image renders locally, so it shows nothing.
             jsx87(RunsOnChip, { testid: "fim-meta-line", local: true }, "meta"),
-            // w35-ui GEM-220 (artist 09.11.): no "Local · about N s" line; the footer is Generate × N like the other pages'.
+            // w35-ui GEM-220 (maintainer review): no "Local · about N s" line; the footer is Generate × N like the other pages'.
             jsx87("span", { className: "fim-why fw-why", id: "fim-generate-why", "data-testid": "fim-generate-why", role: "status", title: whyShown || void 0, children: whyShown }, "why"),
             // E1: Generate stays Generate; during a run it queues the next one.
             // The run on the stage has its own Stop (Esc); Jobs cancels any run.
@@ -94798,7 +94798,7 @@ function FilmSuiteImageModule({ visible, onOpenLarge, onOpenMedia, onOpenJobs, o
           jsx87("span", { className: "fw-grow" }, "g"),
           editOn ? null : viewCompare,
           view === "result" && !compare2 && !showGrid || editOn ? jsx87(ImageZoomGroup, { on: Boolean(stagePicture), zoom, scale, zoomText, zoomMenu, zoomBtnRef, zoomBy, zoomFit, zoomActual, openZoomMenu, setZoomMenu, step: NAV_STEP }, "zoom") : null
-          // w35-ui GEM-218 (artist 09.11.): no command-search button in the stage bar; Ctrl+K opens Hermes' palette.
+          // w35-ui GEM-218 (maintainer review): no command-search button in the stage bar; Ctrl+K opens Hermes' palette.
         ] }, "bar"), editBar]
       }, "barwrap"),
       // ---- canvas ----
@@ -96924,7 +96924,7 @@ var SCRIPT_WRITE_CSS = `
 .fss2-strip-cell{position:relative;flex:none;display:block;padding:0;border:0;background:transparent;color:var(--ui-text-primary);font:inherit;font-size:var(--fw-fs-meta,.6875rem);cursor:pointer}
 .fss2-strip-cell:focus-visible{outline:2px solid var(--dt-ring,var(--ui-accent));outline-offset:1px}
 .fss2-strip-frame{display:block;width:100%;height:var(--fss2-strip-h);overflow:hidden;background:var(--fw-track);border-radius:0;box-sizing:border-box}
-/* Owner 28.10. (decision 13 revised, SCR-067): a cell without picture is a filled neutral tile in the track tone; dashed marks only a drop target. */
+/* Maintainer review (decision 13 revised, SCR-067): a cell without picture is a filled neutral tile in the track tone; dashed marks only a drop target. */
 .fss2-strip-cell.is-empty .fss2-strip-frame{background:var(--fw-track)}
 .fss2-strip-cell:hover{background:var(--fw-hover)}
 .fss2-strip-cell.is-on{background:var(--fw-row-sel);box-shadow:inset 0 -2px 0 var(--fw-tab-line)}
@@ -96987,7 +96987,7 @@ var SCRIPT_WRITE_CSS = `
 .fss2-line-who{font-size:var(--fw-fs-meta,.6875rem);font-weight:600;color:var(--ui-text-secondary)}
 .fss2-hrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center;min-height:var(--fss2-row);color:var(--ui-text-primary)}
 .fss2-who{font-size:var(--fw-fs-meta,.6875rem);color:var(--ui-text-secondary)}
-/* Owner 28.10. (SCR-068, board E21): the document title is set apart from the page name by tone (secondary, regular weight). */
+/* Maintainer review (SCR-068, board E21): the document title is set apart from the page name by tone (secondary, regular weight). */
 .fss2-title{font-weight:400;color:var(--ui-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .fss2-note{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .fss2-gap{flex:1 1 auto}
@@ -100268,7 +100268,7 @@ function ScriptWrite({ project, projectRef, query, title, titleSource = "", visi
       jsxs88("span", { className: "fss2-lead", children: [
         jsx107("span", { className: "fss2-page-name", "data-testid": "script-page-name", children: "Script" }, "pn"),
         jsx107("span", { className: "fss2-title", "data-testid": "script-title", "data-user-text": "1", title: title || "Untitled", children: title ? titleRuns(titleSource || title) : "Untitled" }, "t"),
-        // w35-ui GEM-214 (artist 09.11.): no page count in the header ("too much info here"); the scene list counts scenes,
+        // w35-ui GEM-214 (maintainer review): no page count in the header ("too much info here"); the scene list counts scenes,
         // each scene row its length, Hermes reads derived.pages. Write / Board stay where they are (a board decision).
         note ? jsx107("span", { className: "fss2-count fss2-note", "data-testid": "script-export-note", title: "In the project folder: exports/script", children: note }, "note") : null
       ] }, "lead"),
@@ -102170,7 +102170,7 @@ function MediaColumn({ col, ownerScope, jobs, wake, onImported, script = null, a
         jsxs95("header", { className: "fmc-head", children: [
           jsx114("h2", { className: "fmc-title", children: "Media" }, "t"),
           jsx114("span", { className: "fmc-grow" }, "g"),
-          // GEM-217 (approved 09.11.) as changed by the artist 11.11. (lane w39-p2-chrome, his marks 1 and 2: the hide button
+          // GEM-217 (approved) as changed by maintainer review (lane w39-p2-chrome, notes 1 and 2: the hide button
           // "wandert ganz nach unten", the library opened from two places): the head is Media · Filter (search, show, type,
           // rating, sort, view in ONE menu). Show/hide is ONE toggle and the library ONE button, both in the bottom bar
           // (frame-bar.js), never moving; G still opens the library. The drawer (the column OVER the page) keeps its Close (Esc).
@@ -102203,7 +102203,7 @@ function MediaColumn({ col, ownerScope, jobs, wake, onImported, script = null, a
       jsx114("div", { className: "fmc-body", ref: gridRef, "data-testid": "media-col-grid", children: [
         // Lane w23-bins (CUT-180): the project's cuts head the column (Resolve's Timelines bin), when videos are shown.
         jsx114(CutsGroup, { project: col.project, ownerScope, on: col.visible && col.hasCut && col.types.includes("video") && (v.bin === "all" || v.bin === "cut"), query: v.query, showNames: v.showNames, files: col.cutFiles, onNote: setNote }, "cuts"),
-        // w39-face 8 (GEM-212, artist: "Media lädt langsam … schöne Loadingstates"): while the feed reads the first time
+        // w39-face 8 (GEM-212, maintainer review): while the feed reads the first time
         // the column draws its day head and tiles as skeletons at their final size (the library's LibrarySkeleton is the
         // model), so nothing moves when the pictures arrive. No sentence, no spinner.
         col.shown.length || col.running.length || col.loading ? [
@@ -102334,7 +102334,7 @@ var MEDIA_COLUMN_CSS = `${JOB_NAME_CSS}
 .fmc-fail{display:flex;align-items:center;justify-content:space-between;gap:4px;min-height:var(--fw-ctl-h-sm);font-size:var(--fw-fs-meta);color:color-mix(in srgb,var(--fw-err) 55%,var(--ui-text-primary))}
 .fmc-fail-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fmc-retry{min-height:var(--fw-ctl-h-sm);padding:0 6px}
-/* w39-p2-chrome (the artist's mark 3, "eine unschöne Kante"): the foot is as tall as the page's bottom status row (.fw-cap,
+/* w39-p2-chrome (maintainer note 3): the foot is as tall as the page's bottom status row (.fw-cap,
    44 px), so its top line, its text and the row's line and text meet across the divider (content box = one control line,
    --fw-ctl-h 28 px, the caption row's: 1 + 7 + 28 + 8 = 44; no raw height, design-ratchet); text on the head title's 10 px inset. */
 .fmc-foot{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:7px 8px 8px 10px;box-sizing:content-box;min-height:var(--fw-ctl-h);line-height:var(--fw-ctl-h);border-top:1px solid var(--fw-line)}
@@ -113561,7 +113561,7 @@ function RenderSettings({ model, settings, set, reset, name: name2, check, range
   const nDirs = files2.filter((x) => /\/(\s|$)/.test(x)).length, nFiles = files2.length - nDirs;
   const checkSec = jsx136(FwSection, { id: "check", icon: "info", title: "Check before render", value: checkValue, valueTestid: "tl-deliver-check-value", open: openCheck, onToggle: () => setOpenCheck((o) => !o), testid: "tl-deliver-check-sec", className: blocked ? "is-block" : warnN ? "is-warn" : "", children: jsx136(CheckList, { check, settings, model, onLocate, compact, range, onPictureRange }) }, "check");
   const writesSec = !compact ? jsx136(FwSection, { id: "writes", icon: "folder", title: "Writes", value: `${nFiles} ${nFiles === 1 ? "file" : "files"}${nDirs ? ` · ${nDirs} ${nDirs === 1 ? "folder" : "folders"}` : ""}`, valueTestid: "tl-deliver-writes-value", open: openWrites, onToggle: () => setOpenWrites((o) => !o), testid: "tl-deliver-writes-sec", children: (
-    // w17-pcut (CUT-107/115, owner 04.11., Tafel 4c Files/Into): one row per written file, its name shortened in the
+    // w17-pcut (CUT-107/115, maintainer review, Tafel 4c Files/Into): one row per written file, its name shortened in the
     // MIDDLE (number, stamp and extension stay); below it once "into <folder>", the folder shortened at its START;
     // the full path in each tooltip. Nothing is cut hard at the artist's 195 px column, at 840 or at 1600.
     jsxs116("div", { className: "tld-writes", "data-testid": "tl-deliver-writes", children: [
@@ -114443,7 +114443,7 @@ function DeliverPage({ project, doc: doc2, model: activeModel, marks: marks2, ed
     }, "s"),
     // w33-design GEM-201 point 2: Undo / Redo on Deliver too (the cut's edit history), directly after the cut's name.
     jsx139(UndoRedoPair, { undo: { can: Boolean(edit && edit.canUndo), run: () => void edit.undo(), testid: "tl-deliver-undo" }, redo: { can: Boolean(edit && edit.canRedo), run: () => void edit.redo(), testid: "tl-deliver-redo" } }, "u")
-    // w35-ui GEM-225 (artist 09.11.): no "24 fps · 1280 × 720 · 7 clips + song" here; Render settings name the size and
+    // w35-ui GEM-225 (maintainer review): no "24 fps · 1280 × 720 · 7 clips + song" here; Render settings name the size and
     // rate (Resolution / Frame rate rows), the Cut inspector the counts.
   ] }, "head");
   const viewer = jsx139("div", { className: "tldp-viewer", children: jsx139(TimelineMonitor, { model, transport, posters, project, musicUrl: model.music && model.music.streamUrl && model.music.enabled !== false ? model.music.streamUrl : "", label: "", nothing: false }) }, "viewer");
@@ -114488,7 +114488,7 @@ function DeliverPage({ project, doc: doc2, model: activeModel, marks: marks2, ed
     clipSound: false,
     soundPeaks: soundPeaks2.map,
     readOnly: true,
-    // Lane w24-rest (owner 07.11., replaces p12-cutb answer 3): the strip keeps the WHOLE cut in view for either render
+    // Lane w24-rest (maintainer review, replaces p12-cutb answer 3): the strip keeps the WHOLE cut in view for either render
     // range, so the dimmed outside of IN–OUT reads (Resolve's Deliver timeline greys the rest, it never zooms).
     fitRange: [0, Math.max(1, model.length)],
     children: jsx139("div", { className: "tldp-shadebox", children: jsx139(RangeShade, { viewRef, range, model, version: viewVersion }) }, "sh")
@@ -114665,7 +114665,7 @@ var TOOLROW_CSS = `
 .tlv .tlv-tool{display:inline-grid;place-items:center;flex:none;box-sizing:border-box;width:var(--fw-ctl-h,1.75rem);height:var(--fw-ctl-h,1.75rem);padding:0;border:1px solid transparent;border-radius:var(--fw-r1);background:transparent;color:var(--fw-t2);font:inherit;cursor:pointer}
 .tlv .tlv-tool:hover:not([aria-disabled=true]){background:var(--fw-s3);color:var(--fw-t1)}
 .tlv .tlv-tool[aria-pressed=true],.tlv .tlv-tool[aria-pressed=true]:hover,.tlv .tlv-tool[aria-expanded=true]{${SEL}}
-/* w24-rest (owner 06.11.: Snap / Linked / Beats on read barely apart from off on dark): a pressed on/off toggle also carries a
+/* w24-rest (maintainer review: Snap / Linked / Beats on read barely apart from off on dark): a pressed on/off toggle also carries a
    2 px underline in the text colour (look A: neutral, never accent), so its state reads at a glance like Resolve's lit toggles. */
 .tlv .tlv-tool[data-kind=check]{position:relative}
 .tlv .tlv-tool[data-kind=check][aria-pressed=false]:not(:hover){color:var(--fw-t3)}
@@ -116459,7 +116459,7 @@ function FilmSuiteTimelineModule({ visible = true, project = null, ownerScope = 
             jsx145("button", { type: "button", className: "fw-tlbtn", "aria-pressed": !srcShown, "data-viewer": "timeline", title: "Show the cut (Esc)", onClick: () => setViewer("timeline"), children: "Timeline" }, "t"),
             jsx145("button", { type: "button", className: "fw-tlbtn", "aria-pressed": srcShown, "data-viewer": "source", "aria-disabled": source ? void 0 : "true", title: source ? `Source: ${source.clip.label} (F opens the clip under the playhead)` : "Source · No clip open (F opens the clip under the playhead)", onClick: () => source && setViewer("source"), children: "Source" }, "s")
           ] }, "seg"),
-          // w35-ui GEM-225 (artist 09.11.): the timeline view names nothing here; rate and counts are the Inspector's
+          // w35-ui GEM-225 (maintainer review): the timeline view names nothing here; rate and counts are the Inspector's
           // (Format, head). The Source view still names its clip (no other place says which clip the Source shows).
           srcShown ? jsx145("span", { className: "tlv-vinfo", "data-testid": "tl-viewer-info", children: `${source.clip.label} · ${source.clip.kind === "take" ? "take" : source.clip.still ? "picture" : "clip"} · ${Math.round(source.clip.sourceRate.num / source.clip.sourceRate.den * 1e3) / 1e3} fps` }, "i") : null,
           // Lane p12-cut (GEM-045, charter cut decision 3): a picture clip at another rate is named once, with both rates;
@@ -117105,7 +117105,7 @@ var MPRO_CSS = `
 .mpro-ev{flex:0 0 auto;display:flex;align-items:center;min-height:32px;border-bottom:1px solid var(--fw-line)}
 .mpro-ev:last-child{border-bottom:0}
 .mpro-ev.is-active{background:var(--fw-row-sel)}
-/* p0-fix item 3 (artist 26.10. A2): the current event = the neutral row fill, no accent tint, no accent bar, no rounded clip */
+/* p0-fix item 3 (maintainer review A2): the current event = the neutral row fill, no accent tint, no accent bar, no rounded clip */
 .mpro-ev.is-current{background:var(--fw-row-sel);box-shadow:none}
 .mpro-ev-main:hover{background:var(--fw-hover,var(--fw-row-sel))}
 .mpro-tag{flex:0 0 auto;padding:0 8px;border-radius:2px;background:color-mix(in srgb,var(--mp-sec) 30%,transparent);border:1px solid var(--mp-sec);color:var(--ui-text-primary);font-size:var(--fw-fs,.75rem);line-height:18px;white-space:nowrap}

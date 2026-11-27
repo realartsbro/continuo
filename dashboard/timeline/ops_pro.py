@@ -41,7 +41,7 @@ from typing import Any
 from .schema import (ALIGNMENTS, FITS, MAX_SPEED, SAMPLINGS, TRANSITION_KINDS, clip_source_frames, fail,
                      frozen, handles, reversed_clip, sound_follows, transition_split)
 
-# Measured (out/fs-tlpro INTERP): flow beats blend and nearest on 6 of 6 real takes at 50 %.
+# Measured: flow beats blend and nearest on 6 of 6 real takes at 50 %.
 DEFAULT_SAMPLING = "flow"
 STATE_OPS: tuple[str, ...] = ("duplicate_timeline",)
 

@@ -182,7 +182,7 @@ def _image_runs_folded(listed: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 head["state"] = "queued"
             elif "failed" in states:
                 # Lane w24-rest (GEM-056): a settled run with a failed member is a failed run (run.failed says how many),
-                # never "done"; its reason is the first failed member's (the artist's window: "done", run.failed 1, no reason).
+                # never "done"; its reason is the first failed member's (seen live: "done", run.failed 1, no reason).
                 head["state"] = "failed"
             elif all(state == "cancelled" for state in states):
                 head["state"] = "cancelled"
@@ -218,7 +218,7 @@ def _video_jobs_for_scope(project_id: str | None, limit: int) -> list[dict[str, 
             prompt = None
         raw = record.state
         reason_code = record.reason_code if raw in ("failed", "moderated") else None
-        # Lane p12-shl (GEM-053, owner 31.10.): a finished take whose published file is gone is Failed output_missing,
+        # Lane p12-shl (GEM-053, maintainer review): a finished take whose published file is gone is Failed output_missing,
         # never Done. One stat per finished row with an output path; never a hash, never a read.
         if raw == "ready" and isinstance(getattr(record, "published_path", None), str) and record.published_path:
             try:

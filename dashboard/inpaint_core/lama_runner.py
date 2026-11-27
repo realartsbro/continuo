@@ -2,8 +2,8 @@
 
 Copied by ``scripts/install-lama-engine.py`` to ``<engine dir>/runner.py`` and run with the engine's own python
 (a torch venv; never the Hermes venv, never ComfyUI's python).  The model is the original big-lama TorchScript
-read in place and loaded with ``torch.jit.load`` (the owner measured spandrel 0.4.2 returning broken colours for
-this file: inside error 0.62 vs ~0.01 with torch.jit; bench-kit/w12-proto/run_jit.py).
+read in place and loaded with ``torch.jit.load`` (spandrel 0.4.2 returned broken colours for
+this file: inside error 0.62 vs ~0.01 with torch.jit).
 
 Request  (studio.inpaint-runner-request/1): {"model": path, "device": "cuda"|"cpu", "image_png_b64", "mask_png_b64"}
           image RGB, mask L (> 127 = fill), same size.

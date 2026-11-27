@@ -40,7 +40,7 @@ OPERATIONS = OPERATIONS_WIRED + OPERATIONS_DECLARED
 # Area edits whose result is tone-matched to the picture and pasted through an inner ramp at a hard
 # selection edge (image_edit_service.stitch seam). Not Outpaint (own band), Relight (re-tones on purpose), Box.
 SEAM_OPERATIONS = ("fill", "replace", "remove")
-# w24-edit (owner acceptance finding 07.11. 10:40, Photoshop Sky Replacement / Lightroom Select Sky): Restyle re-tones on
+# w24-edit (maintainer acceptance finding, Photoshop Sky Replacement / Lightroom Select Sky): Restyle re-tones on
 # purpose, like Relight. It is pasted through its matte (image_edit_service.stitch ``matte``): no colour match back to
 # the old picture (that turned a violet sky amber) and no membrane (that pulled the subject's colours into the new sky
 # as a halo); the output is registered to the picture and the edge band next to the kept subject is decontaminated.
@@ -89,10 +89,10 @@ def sky_settings(value: Any, operation: str) -> dict[str, Any] | None:
 # p13-img (IMG-129): the selection reaches the model as the sampler's latent noise mask (ComfyUI
 # SetLatentNoiseMask + DifferentialDiffusion; none of the three families has a mask input of its own), grown and
 # feathered at the WORK size, and the paste uses the same soft mask. Values = the owner's prototype approved by the
-# artist on 01.11. (Replace: grow 20 px + Gaussian blur 14 px at 1024, denoise 1.0; whole boat in the water at seeds
+# artist (Replace: grow 20 px + Gaussian blur 14 px at 1024, denoise 1.0; whole boat in the water at seeds
 # 111 and 7). Krita feathers by ~10 % of the selection diagonal; we keep the approved board's numbers.
 LATENT_MASK_TARGETS = ("qwen-image-2.1-edit-pe-v3", "flux3-klein-sd-edit-v1", "flux2-klein-9b-kv-edit-v1")
-# Remove (IMG-131/133, owner decision 01.11.): the crop is pre-filled by the owned LaMa engine (selection grown
+# Remove (IMG-131/133, maintainer decision): the crop is pre-filled by the owned LaMa engine (selection grown
 # ``prefill_grow_px`` at crop size, inpaint_core/lama_engine), then the edit model refines the FILLED crop through the
 # latent mask (grow 10 + blur 8 at work size) at denoise 0.5 with a background-only instruction. Owner prototype
 # 31.10. (FLUX.2 Klein): box-edge jump 0.63-0.67 against 2.9 at install 112; 70 % invented objects, 50 % best.
@@ -104,7 +104,7 @@ LATENT_MASK_TARGETS = ("qwen-image-2.1-edit-pe-v3", "flux3-klein-sd-edit-v1", "f
 # ADOBE add-objects 00:28 / create-reflections 00:31): the hull below the line, its waterline and its reflection. The
 # fixed 20 + 14 px (about 10 + 7 px in the picture) cut the new object at a tight oval or a rectangle (case C).
 LATENT_MASK_SPECS = {
-    # w24-edit (owner decision 06.11., Photoshop Generative Fill: the selection is the region): Replace edits exactly
+    # w24-edit (maintainer decision, Photoshop Generative Fill: the selection is the region): Replace edits exactly
     # the selection with the scaled soft edge and no room below; a reflection is its own selection (backlog IMG-211).
     # ``keep_edge_objects`` keeps small objects at the selection edge that lie mostly outside it.
     "replace": {"mode": "scaled", "feather_rel": 0.10, "feather_min_px": 32, "feather_max_short_rel": 0.25,
@@ -140,7 +140,7 @@ REMOVE_BACKGROUND_INSTRUCTION = ("The background continues seamlessly: the same 
 STRENGTH_EXPONENT = 0.2
 STRENGTH_CURVE = "pow_0.2"
 STRENGTH_CURVES = {"qwen-image-2.1-edit-pe-v3": STRENGTH_CURVE}
-# w24-edit2 (IMG-130, owner decision 3: "70 % changes nothing on Qwen"): pow_0.2 sent denoise 0.931..1.0 for 70-100 %,
+# w24-edit2 (IMG-130, maintainer decision 3): pow_0.2 sent denoise 0.931..1.0 for 70-100 %,
 # and ComfyUI's KSampler runs int(steps / denoise) sigmas and keeps the last ``steps`` (samplers.py set_steps), so
 # 70-100 % were the same 12 sigmas (byte-identical renders). Strength now names where on the model's OWN sigma schedule
 # the sampler starts: ``start`` = the fraction of the schedule skipped (0 = the whole schedule, as at 100 %; 1 = none:
@@ -589,7 +589,7 @@ def normalize_request(raw: Mapping[str, Any]) -> dict[str, Any]:
     label = (family_entry(family, variant) or {}).get("label", family)
     if not capability.get("available"):
         raise EditRequestError("edit_not_available", f"{operation.replace('_', ' ').capitalize()} is not available for {label}: {capability.get('reason')}")
-    # w24-edit2 (owner rule "keine Bevormundung", decision 4): a cell the matrix measured bad is offered and runs; its
+    # w24-edit2 (maintainer rule, decision 4): a cell the matrix measured bad is offered and runs; its
     # measured reason travels with the edit as a warning for the hand (tooltip) and Hermes (the answer), never a refusal.
     measured = [f"model_warning: {label}: {capability['warning']}"] if capability.get("warning") else []
     if capability.get("unrendered"):  # w39-p2-open: offered and run; the fact travels with the edit
@@ -872,10 +872,10 @@ def instruction(intent: Mapping[str, Any], where: str, target_id: str | None = N
                 "colour and lighting. Keep everything else in the picture exactly the same.")
     # Fill and Remove send the crop with the masked area painted grey (see
     # image_edit_service.prepare): the grey says where, so no location phrase.
-    # p11-img (owner's wording, 31.10.): the light of the new content matches the scene (live 111 / wave 10:
+    # p11-img (maintainer rule): the light of the new content matches the scene (live 111 / wave 10:
     # new boats lit frontally in a backlit harbour) and nothing of the old object stays (IMG-120). Fill keeps
     # its text: by the owner's rule (same seed, paste fixed) the new Fill text read better but made ghost leak
-    # 2.33 -> 3.53 and the edge step 6.93 -> 8.81 worse on the real run (bench-kit/after-w11, case B).
+    # 2.33 -> 3.53 and the edge step 6.93 -> 8.81 worse on the real run.
     if op == "fill":
         if target_id in FILL_INSIDE_TARGETS:
             return f"Fill the grey area with {prompt}, {FILL_INSIDE}. Keep everything else in the picture exactly the same."

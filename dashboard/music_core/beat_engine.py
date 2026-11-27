@@ -5,7 +5,7 @@ meter with honest status.
 No torch here: torch lives only in the engine's own uv venv (created by
 ``scripts/install-beat-engine.py``).  The runner process exits after each job, so the GPU
 memory it held is released by the OS; ``nvidia-smi`` memory.used is recorded before and
-after in the job record.  Decision and numbers: ``out/fs-beat/DECODER.md``.
+after in the job record.
 """
 
 from __future__ import annotations

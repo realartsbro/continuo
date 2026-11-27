@@ -810,7 +810,7 @@ _PULSE_SCORE_FLOOR = 0.21
 # Score at/above which pulse-presence alone maps to full confidence.
 #
 # Re-measured after the _build_phase_pool fix changed the absolute scale of
-# comb scores broadly: on the artist's contest track ("AUDACITY3", a
+# comb scores broadly: on a reference track (a
 # confirmed 4/4 track with human-validated ground truth), the winning
 # octave-family candidate's raw comb score is 0.844 with only a modest
 # 0.145 margin over its runner-up (a real, if secondary, triplet-partial
@@ -1202,7 +1202,7 @@ def _estimate_section_count(
     merely from the single-video-frame-scale noise floor.
 
     `thresh_mult` was re-measured against human-validated ground truth on
-    the artist's own contest track ("AUDACITY3"), which has 8 confirmed
+    a reference track, which has 8 confirmed
     section changes (0:00, 0:47, 1:08, 1:19, 2:05, 2:39, 4:23, 4:41) but
     was undercounting at 5 under the original 1.3-sigma bar: several of its
     real, confirmed transitions have a *raw* novelty spike that the
@@ -1980,7 +1980,7 @@ def analysis_engine_choice(analysis: dict[str, Any]) -> str:
 
 
 def stored_engine_analysis(path: str | Path, engine: str, sha256: str | None = None) -> dict[str, Any] | None:
-    """Lane p13b-aud item 2 (owner decision 01.11.): the stored analysis of THIS engine, or None. Never computes and
+    """Lane p13b-aud item 2 (maintainer decision): the stored analysis of THIS engine, or None. Never computes and
     never answers the other engine's result under this engine's name."""
     if engine not in ENGINE_CHOICES:
         raise ValueError(f"unknown engine {engine!r}")

@@ -7,7 +7,7 @@ from __future__ import annotations
 # Drama 3 clip; one graph + manifest each, keep_model_loaded pinned false).  The project's voices,
 # characters, lines and the page's take choices live in voice/store.py (studio.voice-project/1).
 # A generated take is one row of the Shoot ledger published as a FLAC in the project's output folder
-# (Voice/<line>/...), with its recipe sidecar: Media lists it as a sound (out/fs-msnd-SPEC).
+# (Voice/<line>/...), with its recipe sidecar: Media lists it as a sound.
 # Generation is local only and needs the artist's (or Hermes's on the artist's ask) explicit
 # request; each take reads GET /queue before its submit and only ever appends.  Every route here
 # is an agent tool (agent_tools.ROUTE_TOOLS) with the same answer the page reads.

@@ -1,6 +1,6 @@
 """MiniMax-H3-Image (the official model, not PrunaAI's P-H3-Image): the Image Create target ``minimax-h3-image-create-v1``.
 
-The pinned graph is the artist's proven recipe (his renders of 13 Nov 2026 on ComfyUI 0.45.0): 6 steps on the simple
+The pinned graph is a proven recipe (renders on ComfyUI 0.45.0): 6 steps on the simple
 schedule, split after step 3 (``SplitSigmas``): er_sde with the seed's noise, then LCM with its noise falling from 0.95
 to 0.90 (``SamplerLCM`` s_noise / s_noise_end, no new noise), CFG 1 against a zeroed negative. Width and height go
 straight into ``MiniMaxH3ImageConditioning`` (ResolutionSelector stops at 16 MP and has no 2.39:1).

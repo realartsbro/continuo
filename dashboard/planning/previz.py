@@ -575,7 +575,7 @@ def block(current: dict[str, Any], scene_heading: str, people: list[dict[str, An
     total = len(s["figures"]) + len(new)
     for i, p in enumerate(new, start=len(s["figures"])):
         s["figures"].append(_figure({"name": p["name"], "element": p.get("element"), "version": p.get("version"), "pos": _fig_pos(i, total), "yaw": 0, "pose": "stand"}))
-    # w23-pvlook2 item 4 (owner read: "both figures face the lens: a blocked two-hander faces each other"): the figures
+    # w23-pvlook2 item 4 (maintainer review): the figures
     # this block places turn toward the others (their centre), cheated 30 degrees toward the room's front (+z) so the
     # cameras there still see three-quarter faces (the usual stage cheat); figures the artist placed keep their turn.
     placed = {id(f) for f in s["figures"][len(s["figures"]) - len(new):]}
@@ -672,7 +672,7 @@ def block(current: dict[str, Any], scene_heading: str, people: list[dict[str, An
             h = ty - dist * 0.55 * math.tan(math.atan((36 / (16 / 9)) / 2 / float(d.get("lens") or 35)))
         close_level = target is not None and d.get("size") in ("ECU", "CU", "MCU") and d.get("angle") in (None, "eye")
         if framed is not None and d.get("size") in HEADROOM and (d.get("angle") in ("high", "low", "ground") or close_level):
-            # w23-pvlook2 item 6 (owner read: "the Low angle barely reads"): a tilted camera aims so the head keeps the
+            # w23-pvlook2 item 6 (maintainer review): a tilted camera aims so the head keeps the
             # size's headroom (as the page's aimAt), so a Low looks up at the figure instead of at its chest
             top = _TOP.get(target.get("pose") or "stand", _TOP["stand"])
             vh = math.atan((36 / (16 / 9)) / 2 / float(d.get("lens") or 35))
@@ -684,7 +684,7 @@ def block(current: dict[str, Any], scene_heading: str, people: list[dict[str, An
                     h = min(0.9, h + 0.02)
             up = math.atan2(top - h, dist) - hr
             ty = h + math.tan(up) * dist
-        # w23-pvlook2 item 4 (owner read: "Ines vanishes from the 1.3 MS"): a medium single on one figure of several
+        # w23-pvlook2 item 4 (maintainer review): a medium single on one figure of several
         # leads toward its partner (_lead), so the partner stays in the frame's edge and the subject looks into the frame
         lead = _lead(target, s["figures"], d.get("size"), float(d.get("lens") or 35), dist) if target is not None else 0.0
         # w39-p2-previz (bench 1.2: "the back of her head"): a close single comes round toward the face, half way

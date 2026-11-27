@@ -102,7 +102,7 @@ def _music_open_sync(path: str, approved_roots: list[str], engine_error: str | N
     shown = None
     stored_engines: list[str] = []
     if not engine_error and music_analysis is not None:
-        # Lane p13b-aud item 2 (owner decision 01.11.): the shown analysis belongs to the engine named in the select.
+        # Lane p13b-aud item 2 (maintainer decision): the shown analysis belongs to the engine named in the select.
         # Without a named engine the default engine's stored result is shown, else the other stored one; a named
         # engine without a stored result opens time only (Analyse), never with the other engine's numbers.
         by_engine = {name: music_analysis.stored_engine_analysis(source, name, digest) for name in music_analysis.ENGINE_CHOICES}
